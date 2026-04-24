@@ -1,60 +1,49 @@
 # ============================================================
-# Breakthrough Season Lab — Revenue Calculator
+# Breakthrough Season Lab — Revenue Calculator (Interactive)
 # ============================================================
-# LESSON 1: Variables
-# A variable stores a value so you can use it later.
-# Think of it like a labeled box.
 
-# --- Pricing ---
-cohort_price_per_payment = 429    # dollars
+# --- Fixed pricing (change these if your prices change) ---
+cohort_price_per_payment = 429
 number_of_payments = 4
-franchise_price = 3500            # Franchise Player Intensive
-
-# --- Cohort size ---
-max_athletes = 12
-
-# --- LESSON 2: Math
-# Python does math just like a calculator.
-# * = multiply, / = divide, + = add, - = subtract
+franchise_price = 3500
 
 cohort_price_total = cohort_price_per_payment * number_of_payments
 
-# --- LESSON 3: print()
-# print() displays something on the screen.
-# The f"..." syntax lets you drop variables into text using {}.
-
 print("=" * 50)
-print("  BREAKTHROUGH SEASON LAB — REVENUE SCENARIOS")
+print("  BREAKTHROUGH SEASON LAB — REVENUE CALCULATOR")
 print("=" * 50)
 
-print(f"\nCohort price per athlete:  ${cohort_price_total}")
-print(f"Franchise Intensive price:  ${franchise_price}")
-print(f"Max cohort size:            {max_athletes} athletes")
+# --- LESSON 5: input()
+# input() pauses the program and waits for the user to type something.
+# int() converts what they typed (text) into a number so we can do math.
 
-# --- LESSON 4: Doing calculations with variables ---
-# Now we calculate revenue for different fill rates.
+cohort_athletes = int(input("\nHow many cohort athletes? (max 12): "))
+franchise_athletes = int(input("How many Franchise Intensive athletes? ($3,500 each): "))
 
-print("\n--- COHORT-ONLY SCENARIOS ---")
-
-for athletes_enrolled in [4, 6, 8, 10, 12]:
-    revenue = athletes_enrolled * cohort_price_total
-    print(f"  {athletes_enrolled:>2} athletes → ${revenue:,}")
-
-# --- Bonus: What if some buy the Franchise Intensive? ---
-print("\n--- MIXED SCENARIOS (cohort + Franchise Intensive) ---")
-
-cohort_athletes = 10
-franchise_athletes = 2
-
+# --- Calculate ---
 cohort_revenue = cohort_athletes * cohort_price_total
 franchise_revenue = franchise_athletes * franchise_price
 total_revenue = cohort_revenue + franchise_revenue
 
-print(f"  {cohort_athletes} cohort + {franchise_athletes} Franchise Intensive")
-print(f"  Cohort revenue:     ${cohort_revenue:,}")
-print(f"  Franchise revenue:  ${franchise_revenue:,}")
-print(f"  TOTAL:              ${total_revenue:,}")
+# --- LESSON 6: if / else
+# This lets the program make decisions based on conditions.
 
-print("\n" + "=" * 50)
-print("  END OF REPORT")
-print("=" * 50)
+if cohort_athletes > 12:
+    print("\n  ⚠️  Cohort max is 12 athletes — adjust your number.")
+else:
+    print("\n" + "=" * 50)
+    print("  YOUR REVENUE BREAKDOWN")
+    print("=" * 50)
+    print(f"\n  Cohort athletes:      {cohort_athletes} × ${cohort_price_total:,} = ${cohort_revenue:,}")
+    print(f"  Franchise athletes:   {franchise_athletes} × ${franchise_price:,} = ${franchise_revenue:,}")
+    print(f"\n  TOTAL REVENUE:        ${total_revenue:,}")
+
+    # Bonus: show how far from a full cohort
+    remaining_spots = 12 - cohort_athletes
+    if remaining_spots > 0:
+        potential_upside = remaining_spots * cohort_price_total
+        print(f"\n  {remaining_spots} cohort spot(s) still open → ${potential_upside:,} upside if filled")
+    else:
+        print("\n  Cohort is FULL — maximum revenue locked in!")
+
+    print("\n" + "=" * 50)
