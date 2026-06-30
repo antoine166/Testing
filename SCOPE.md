@@ -38,8 +38,8 @@ The most important feature. Available from everywhere in the app.
 - Floating action button (bottom-right) + keyboard shortcut (`C`)
 - Modal with a single required field: **title**
 - Optional: notes, due date, domain tag
-- On submit → saved as an inbox item (no project assigned)
-- Inbox items are processed later into projects/tasks
+- On submit → saved as a task with no domain assigned, which makes it an inbox item (see 3.4)
+- If a domain is set at capture time, the task is already "processed" and skips the inbox
 - Must be dismissible with `Escape`
 
 ### 3.2 Domains
@@ -64,9 +64,10 @@ The atomic unit of work.
 - Fields: title, notes, project (optional), domain (optional), priority, due date, scheduled date, status
 - Statuses: `todo` | `in_progress` | `done`
 - Priority: `none` | `low` | `medium` | `high`
-- **Inbox**: tasks with no project assigned (output of Quick Capture)
+- **Inbox** (GTD-style, after David Allen): a task is an inbox item when it has **no domain assigned** — i.e. it hasn't been clarified/processed yet. This is independent of whether it has a project.
+- **Processed task**: once a domain is assigned, the task leaves the inbox — even if it never gets a project. This supports GTD-style standalone "next actions" that live under a domain with no project at all.
 - **Scheduled date**: the date Antoine plans to work on it (drives the Today view)
-- Tasks can exist without a project (standalone / domain-only)
+- Tasks can exist without a project (standalone / domain-only) as long as a domain is set
 
 ### 3.5 Today View
 Antoine's daily dashboard.
@@ -89,11 +90,16 @@ A 10-second prompt Antoine completes each morning.
 ### 3.7 Habits & Streaks
 Simple habit tracker with streak counting.
 
-- Fields: name, color, icon, frequency (`daily` | specific days of the week)
+- Fields: name, color, icon, frequency
+- Frequency types:
+  - `daily` — every day
+  - `specific_days` — fixed days of the week (e.g. Mon/Wed/Fri)
+  - `times_per_week` — any N days per week, Antoine's choice which days (e.g. "3x per week")
 - Logging: one log per habit per day (tap to toggle on/off)
-- **Current streak**: consecutive days logged up to today
-- **Longest streak**: all-time best run
-- A missed day resets the current streak to 0
+- **Current streak**:
+  - `daily` / `specific_days`: consecutive required days logged up to today, missing a required day resets to 0
+  - `times_per_week`: consecutive weeks where the log count hit the target; a week that falls short resets to 0 (the current, still-in-progress week doesn't break the streak until it ends)
+- **Longest streak**: all-time best run, using the same logic as current streak for that habit's frequency type
 - Habits view: list of habits with today's check-off status and streak counts
 
 ### 3.8 Routines *(Phase 2)*
@@ -126,7 +132,9 @@ AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 - Has read access to Antoine's tasks, habits, check-ins, and projects
 - Antoine can ask it questions: "What should I focus on today?", "How are my habits going?"
 - Responds with context-aware coaching, not generic advice
-- Never writes to the database — read-only context
+- **Can also take action** via tool use: create tasks and log habits on Antoine's behalf when the conversation implies it (e.g. "remind me to call the dentist" → creates a task; "I did my workout" → logs the habit)
+- Allowed write actions for Phase 2: create task, log habit. No edits/deletes, no project or domain creation, no check-in writes — keep the blast radius small until this is proven out
+- Exact confirmation UX (auto-create vs. confirm-before-write) is a Phase 2 design decision, not finalized here
 
 ---
 
@@ -211,6 +219,8 @@ priority        text not null default 'none'
 due_date        date
 scheduled_date  date    -- the day Antoine plans to work on it
 completed_at    timestamptz
+-- inbox = domain_id is null (unprocessed, GTD-style). project_id may be
+-- null independently — a processed task can be domain-only, no project.
 created_at      timestamptz default now()
 updated_at      timestamptz default now()
 ```
@@ -225,8 +235,9 @@ name            text not null
 color           text not null default '#10b981'
 icon            text
 frequency       text not null default 'daily'
-                -- check: daily | weekly
-frequency_days  int[]   -- 0=Sun … 6=Sat; null means every day
+                -- check: daily | specific_days | times_per_week
+frequency_days  int[]   -- 0=Sun … 6=Sat; used when frequency = specific_days
+target_count    int     -- e.g. 3; used when frequency = times_per_week
 active          boolean not null default true
 created_at      timestamptz default now()
 ```
@@ -373,18 +384,35 @@ create policy "owner_delete" on table_name
 
 ## 9. Streak Calculation Logic
 
-Streaks are calculated at read time (not stored), based on `habit_logs`:
+Streaks are calculated at read time (not stored), based on `habit_logs`. Logic depends on the habit's `frequency`.
 
+**`daily` / `specific_days`:**
 ```
 current_streak:
-  Starting from today, count consecutive days (backwards)
+  Starting from today, count consecutive required days (backwards)
   where a log exists for that habit.
-  Stop at the first missing day.
-  If today has no log yet, start counting from yesterday.
+  Stop at the first missing required day.
+  If today is a required day with no log yet, start counting from yesterday.
 
 longest_streak:
   Scan all logs for the habit in date order.
-  Track the max consecutive-day run seen.
+  Track the max consecutive-required-day run seen.
+```
+
+**`times_per_week`:**
+```
+current_streak (in weeks):
+  Group logs by ISO week.
+  Starting from the most recently completed week, walk backwards counting
+  weeks where log count >= target_count.
+  Stop at the first week that falls short.
+  The current, still-in-progress week is excluded from this backward walk —
+  it doesn't break the streak until the week is over, and only joins the
+  streak once it closes having hit the target.
+
+longest_streak (in weeks):
+  Scan all completed weeks in order.
+  Track the max consecutive-weeks-at-target run seen.
 ```
 
 This keeps the DB simple (no streak columns to maintain) and stays correct automatically.
