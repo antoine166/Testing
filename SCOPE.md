@@ -208,7 +208,7 @@ updated_at   timestamptz default now()
 ```sql
 id              uuid primary key default gen_random_uuid()
 user_id         uuid references auth.users(id) on delete cascade
-project_id      uuid references projects(id) on delete set null   -- null = inbox
+project_id      uuid references projects(id) on delete set null
 domain_id       uuid references domains(id) on delete set null
 title           text not null
 notes           text
