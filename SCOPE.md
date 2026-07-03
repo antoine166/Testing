@@ -448,7 +448,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Supabase Auth (email + password, protected routes)
 - [x] Database migrations: domains, projects, tasks, habits, habit_logs, daily_checkins
 - [x] Domains CRUD
-- [ ] Projects CRUD (grouped by domain)
+- [x] Projects CRUD (grouped by domain)
 - [ ] Tasks CRUD (with inbox, scheduling, priority)
 - [ ] Quick Capture (modal, keyboard shortcut, always accessible)
 - [ ] Today view (check-in prompt + habits + scheduled tasks + overdue)
