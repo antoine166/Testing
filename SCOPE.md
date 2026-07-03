@@ -443,11 +443,11 @@ Supabase is called **server-side only** (via the service-role client or the user
 ## 11. Phase Roadmap
 
 ### Phase 1 — Foundation *(current)*
-- [ ] Next.js project scaffold (App Router + Tailwind)
-- [ ] Supabase project + environment variables
-- [ ] Supabase Auth (email + password, protected routes)
-- [ ] Database migrations: domains, projects, tasks, habits, habit_logs, daily_checkins
-- [ ] Domains CRUD
+- [x] Next.js project scaffold (App Router + Tailwind)
+- [x] Supabase project + environment variables
+- [x] Supabase Auth (email + password, protected routes)
+- [x] Database migrations: domains, projects, tasks, habits, habit_logs, daily_checkins
+- [x] Domains CRUD
 - [ ] Projects CRUD (grouped by domain)
 - [ ] Tasks CRUD (with inbox, scheduling, priority)
 - [ ] Quick Capture (modal, keyboard shortcut, always accessible)
@@ -455,7 +455,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [ ] Daily capacity check-in
 - [ ] Habits list + daily logging
 - [ ] Streak counter (current + longest)
-- [ ] Vercel deploy
+- [x] Vercel deploy
 
 ### Phase 2 — Routines, Library, Coach
 - [ ] Routines builder + Today view integration
