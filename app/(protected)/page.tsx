@@ -30,6 +30,12 @@ export default async function Home() {
         >
           Manage projects
         </Link>
+        <Link
+          href="/tasks"
+          className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
+        >
+          Manage tasks
+        </Link>
       </div>
       <form action={logout}>
         <button
