@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { todayLocal } from "@/lib/date";
-import {
-  computeStreak,
-  isHabitDueToday,
-  type Habit as StreakHabit,
-} from "@/lib/habits/streaks";
+import { isHabitDueToday } from "@/lib/habits/streaks";
 import LevelPicker from "@/components/level-picker";
+import HabitRow, { type Habit, type HabitLogRow } from "@/components/habit-row";
+import TaskRow, {
+  type Task,
+  type TaskDomain,
+  type TaskProject,
+  type TaskPriority,
+} from "@/components/task-row";
 
 type Checkin = {
   date: string;
@@ -16,36 +19,6 @@ type Checkin = {
   focus_level: number;
   notes: string | null;
 } | null;
-
-type HabitFrequency = "daily" | "specific_days" | "times_per_week";
-
-type Habit = {
-  id: string;
-  name: string;
-  color: string;
-  frequency: HabitFrequency;
-  frequency_days: number[] | null;
-  target_count: number | null;
-  active: boolean;
-};
-
-type HabitLogRow = {
-  id: string;
-  habit_id: string;
-  logged_date: string;
-};
-
-type TaskStatus = "todo" | "in_progress" | "done";
-type TaskPriority = "none" | "low" | "medium" | "high";
-
-type Task = {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  due_date: string | null;
-  scheduled_date: string | null;
-};
 
 const PRIORITY_RANK: Record<TaskPriority, number> = {
   high: 0,
@@ -61,6 +34,8 @@ export default function TodayDashboard() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLogRow[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [domains, setDomains] = useState<TaskDomain[]>([]);
+  const [projects, setProjects] = useState<TaskProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,19 +45,31 @@ export default function TodayDashboard() {
 
   async function loadAll() {
     try {
-      const [checkinRes, habitsRes, logsRes, tasksRes] = await Promise.all([
-        fetch(`/api/checkins?date=${today}`),
-        fetch("/api/habits"),
-        fetch("/api/habit-logs"),
-        fetch("/api/tasks"),
-      ]);
-      if (!checkinRes.ok || !habitsRes.ok || !logsRes.ok || !tasksRes.ok) {
+      const [checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes] =
+        await Promise.all([
+          fetch(`/api/checkins?date=${today}`),
+          fetch("/api/habits"),
+          fetch("/api/habit-logs"),
+          fetch("/api/tasks"),
+          fetch("/api/domains"),
+          fetch("/api/projects"),
+        ]);
+      if (
+        !checkinRes.ok ||
+        !habitsRes.ok ||
+        !logsRes.ok ||
+        !tasksRes.ok ||
+        !domainsRes.ok ||
+        !projectsRes.ok
+      ) {
         throw new Error("Failed to load today's data");
       }
       setCheckin(await checkinRes.json());
       setHabits(await habitsRes.json());
       setLogs(await logsRes.json());
       setTasks(await tasksRes.json());
+      setDomains(await domainsRes.json());
+      setProjects(await projectsRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -100,9 +87,18 @@ export default function TodayDashboard() {
       fetch("/api/habits", opts),
       fetch("/api/habit-logs", opts),
       fetch("/api/tasks", opts),
+      fetch("/api/domains", opts),
+      fetch("/api/projects", opts),
     ])
-      .then(async ([checkinRes, habitsRes, logsRes, tasksRes]) => {
-        if (!checkinRes.ok || !habitsRes.ok || !logsRes.ok || !tasksRes.ok) {
+      .then(async ([checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes]) => {
+        if (
+          !checkinRes.ok ||
+          !habitsRes.ok ||
+          !logsRes.ok ||
+          !tasksRes.ok ||
+          !domainsRes.ok ||
+          !projectsRes.ok
+        ) {
           throw new Error("Failed to load today's data");
         }
         return Promise.all([
@@ -110,13 +106,17 @@ export default function TodayDashboard() {
           habitsRes.json(),
           logsRes.json(),
           tasksRes.json(),
+          domainsRes.json(),
+          projectsRes.json(),
         ]);
       })
-      .then(([checkinData, habitsData, logsData, tasksData]) => {
+      .then(([checkinData, habitsData, logsData, tasksData, domainsData, projectsData]) => {
         setCheckin(checkinData);
         setHabits(habitsData);
         setLogs(logsData);
         setTasks(tasksData);
+        setDomains(domainsData);
+        setProjects(projectsData);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -177,16 +177,66 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
-  async function toggleTask(task: Task) {
-    const res = await fetch(`/api/tasks/${task.id}`, {
+  async function handleUpdateHabit(id: string, updates: Record<string, unknown>) {
+    const res = await fetch(`/api/habits/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: task.status === "done" ? "todo" : "done" }),
+      body: JSON.stringify(updates),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to update habit");
+      return;
+    }
+
+    await loadAll();
+  }
+
+  async function handleDeleteHabit(id: string) {
+    if (!confirm("Delete this habit? Its log history will be deleted too.")) return;
+
+    const res = await fetch(`/api/habits/${id}`, { method: "DELETE" });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to delete habit");
+      return;
+    }
+
+    await loadAll();
+  }
+
+  async function handleUpdateTask(id: string, updates: Record<string, unknown>) {
+    const res = await fetch(`/api/tasks/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
     });
 
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to update task");
+      return;
+    }
+
+    await loadAll();
+  }
+
+  async function toggleTask(task: Task) {
+    await handleUpdateTask(task.id, {
+      status: task.status === "done" ? "todo" : "done",
+    });
+  }
+
+  async function handleDeleteTask(id: string) {
+    if (!confirm("Delete this task?")) return;
+
+    const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to delete task");
       return;
     }
 
@@ -248,39 +298,17 @@ export default function TodayDashboard() {
           <p className="text-sm text-zinc-500">No habits due today.</p>
         ) : (
           <ul className="space-y-2">
-            {dueHabits.map((habit) => {
-              const habitLogs = logs.filter((l) => l.habit_id === habit.id);
-              const loggedToday = habitLogs.some((l) => l.logged_date === today);
-              const { current } = computeStreak(
-                habit as StreakHabit,
-                habitLogs,
-                today,
-              );
-
-              return (
-                <li
-                  key={habit.id}
-                  className="flex items-center gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
-                >
-                  <input
-                    type="checkbox"
-                    checked={loggedToday}
-                    onChange={() => toggleHabit(habit, loggedToday)}
-                  />
-                  <span
-                    className="h-4 w-4 shrink-0 rounded-full"
-                    style={{ backgroundColor: habit.color }}
-                  />
-                  <span className="flex-1 text-sm text-zinc-900 dark:text-zinc-100">
-                    {habit.name}
-                  </span>
-                  <span className="text-xs text-zinc-500">
-                    {current} {habit.frequency === "times_per_week" ? "wk" : "day"}
-                    {current === 1 ? "" : "s"}
-                  </span>
-                </li>
-              );
-            })}
+            {dueHabits.map((habit) => (
+              <HabitRow
+                key={habit.id}
+                habit={habit}
+                logs={logs.filter((l) => l.habit_id === habit.id)}
+                today={today}
+                onToggle={toggleHabit}
+                onUpdate={handleUpdateHabit}
+                onDelete={handleDeleteHabit}
+              />
+            ))}
           </ul>
         )}
       </div>
@@ -294,24 +322,15 @@ export default function TodayDashboard() {
         ) : (
           <ul className="space-y-2">
             {todayTasks.map((task) => (
-              <li
+              <TaskRow
                 key={task.id}
-                className="flex items-center gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
-              >
-                <input
-                  type="checkbox"
-                  checked={task.status === "done"}
-                  onChange={() => toggleTask(task)}
-                />
-                <span
-                  className={`flex-1 text-sm text-zinc-900 dark:text-zinc-100 ${
-                    task.status === "done" ? "line-through opacity-60" : ""
-                  }`}
-                >
-                  {task.title}
-                </span>
-                <span className="text-xs text-zinc-500">{task.priority}</span>
-              </li>
+                task={task}
+                domains={domains}
+                projects={projects}
+                onToggleDone={toggleTask}
+                onUpdate={handleUpdateTask}
+                onDelete={handleDeleteTask}
+              />
             ))}
           </ul>
         )}
@@ -324,22 +343,15 @@ export default function TodayDashboard() {
           </h2>
           <ul className="space-y-2">
             {overdueTasks.map((task) => (
-              <li
+              <TaskRow
                 key={task.id}
-                className="flex items-center gap-3 rounded-md border border-red-200 px-4 py-3 dark:border-red-900"
-              >
-                <input
-                  type="checkbox"
-                  checked={task.status === "done"}
-                  onChange={() => toggleTask(task)}
-                />
-                <span className="flex-1 text-sm text-zinc-900 dark:text-zinc-100">
-                  {task.title}
-                </span>
-                <span className="text-xs text-zinc-500">
-                  was scheduled {task.scheduled_date}
-                </span>
-              </li>
+                task={task}
+                domains={domains}
+                projects={projects}
+                onToggleDone={toggleTask}
+                onUpdate={handleUpdateTask}
+                onDelete={handleDeleteTask}
+              />
             ))}
           </ul>
         </div>

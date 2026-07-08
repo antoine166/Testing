@@ -2,41 +2,18 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-
-type Domain = {
-  id: string;
-  name: string;
-  color: string;
-};
-
-type Project = {
-  id: string;
-  name: string;
-  domain_id: string | null;
-};
-
-type TaskStatus = "todo" | "in_progress" | "done";
-type TaskPriority = "none" | "low" | "medium" | "high";
-
-type Task = {
-  id: string;
-  project_id: string | null;
-  domain_id: string | null;
-  title: string;
-  notes: string | null;
-  status: TaskStatus;
-  priority: TaskPriority;
-  due_date: string | null;
-  scheduled_date: string | null;
-  created_at: string;
-};
+import TaskRow, {
+  type Task,
+  type TaskDomain,
+  type TaskProject,
+  type TaskPriority,
+} from "@/components/task-row";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
-const STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
 
 export default function TasksPage() {
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [domains, setDomains] = useState<TaskDomain[]>([]);
+  const [projects, setProjects] = useState<TaskProject[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,16 +25,6 @@ export default function TasksPage() {
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editNotes, setEditNotes] = useState("");
-  const [editDomainId, setEditDomainId] = useState("");
-  const [editProjectId, setEditProjectId] = useState("");
-  const [editStatus, setEditStatus] = useState<TaskStatus>("todo");
-  const [editPriority, setEditPriority] = useState<TaskPriority>("none");
-  const [editDueDate, setEditDueDate] = useState("");
-  const [editScheduledDate, setEditScheduledDate] = useState("");
 
   async function loadAll() {
     try {
@@ -95,7 +62,7 @@ export default function TasksPage() {
         }
         return Promise.all([domainsRes.json(), projectsRes.json(), tasksRes.json()]);
       })
-      .then(([domainsData, projectsData, tasksData]: [Domain[], Project[], Task[]]) => {
+      .then(([domainsData, projectsData, tasksData]) => {
         setDomains(domainsData);
         setProjects(projectsData);
         setTasks(tasksData);
@@ -143,34 +110,11 @@ export default function TasksPage() {
     await loadAll();
   }
 
-  function startEdit(task: Task) {
-    setEditingId(task.id);
-    setEditTitle(task.title);
-    setEditNotes(task.notes ?? "");
-    setEditDomainId(task.domain_id ?? "");
-    setEditProjectId(task.project_id ?? "");
-    setEditStatus(task.status);
-    setEditPriority(task.priority);
-    setEditDueDate(task.due_date ?? "");
-    setEditScheduledDate(task.scheduled_date ?? "");
-  }
-
-  async function handleUpdate(id: string) {
-    if (!editTitle.trim()) return;
-
+  async function handleUpdate(id: string, updates: Record<string, unknown>) {
     const res = await fetch(`/api/tasks/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: editTitle,
-        notes: editNotes,
-        domain_id: editDomainId || null,
-        project_id: editProjectId || null,
-        status: editStatus,
-        priority: editPriority,
-        due_date: editDueDate || null,
-        scheduled_date: editScheduledDate || null,
-      }),
+      body: JSON.stringify(updates),
     });
 
     if (!res.ok) {
@@ -179,24 +123,11 @@ export default function TasksPage() {
       return;
     }
 
-    setEditingId(null);
     await loadAll();
   }
 
   async function toggleDone(task: Task) {
-    const res = await fetch(`/api/tasks/${task.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: task.status === "done" ? "todo" : "done" }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update task");
-      return;
-    }
-
-    await loadAll();
+    await handleUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
   }
 
   async function handleDelete(id: string) {
@@ -213,164 +144,8 @@ export default function TasksPage() {
     await loadAll();
   }
 
-  const projectsById = new Map(projects.map((p) => [p.id, p]));
   const inboxTasks = tasks.filter((t) => !t.domain_id);
   const processedTasks = tasks.filter((t) => t.domain_id);
-
-  function renderTask(task: Task) {
-    const project = task.project_id ? projectsById.get(task.project_id) : null;
-    const domain = task.domain_id ? domains.find((d) => d.id === task.domain_id) : null;
-
-    if (editingId === task.id) {
-      return (
-        <li
-          key={task.id}
-          className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
-        >
-          <div className="space-y-2">
-            <input
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <textarea
-              value={editNotes}
-              onChange={(e) => setEditNotes(e.target.value)}
-              rows={2}
-              className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={editDomainId}
-                onChange={(e) => setEditDomainId(e.target.value)}
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="">No domain</option>
-                {domains.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={editProjectId}
-                onChange={(e) => setEditProjectId(e.target.value)}
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="">No project</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value as TaskStatus)}
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={editPriority}
-                onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <label className="text-xs text-zinc-500">
-                Due
-                <input
-                  type="date"
-                  value={editDueDate}
-                  onChange={(e) => setEditDueDate(e.target.value)}
-                  className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-              </label>
-              <label className="text-xs text-zinc-500">
-                Scheduled
-                <input
-                  type="date"
-                  value={editScheduledDate}
-                  onChange={(e) => setEditScheduledDate(e.target.value)}
-                  className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-              </label>
-              <button
-                onClick={() => handleUpdate(task.id)}
-                className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setEditingId(null)}
-                className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </li>
-      );
-    }
-
-    return (
-      <li
-        key={task.id}
-        className="flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
-      >
-        <div className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            checked={task.status === "done"}
-            onChange={() => toggleDone(task)}
-            className="mt-1"
-          />
-          <div>
-            <p
-              className={`text-sm font-medium text-zinc-900 dark:text-zinc-100 ${
-                task.status === "done" ? "line-through opacity-60" : ""
-              }`}
-            >
-              {task.title}
-            </p>
-            {task.notes && (
-              <p className="mt-0.5 text-sm text-zinc-500">{task.notes}</p>
-            )}
-            <p className="mt-1 text-xs text-zinc-500">
-              {task.status} · {task.priority} priority
-              {domain ? ` · ${domain.name}` : ""}
-              {project ? ` · ${project.name}` : ""}
-              {task.due_date ? ` · due ${task.due_date}` : ""}
-              {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-3">
-          <button
-            onClick={() => startEdit(task)}
-            className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => handleDelete(task.id)}
-            className="text-sm font-medium text-red-600 hover:text-red-700"
-          >
-            Delete
-          </button>
-        </div>
-      </li>
-    );
-  }
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
@@ -542,7 +317,19 @@ export default function TasksPage() {
                 Nothing unprocessed — inbox is clear.
               </p>
             ) : (
-              <ul className="space-y-2">{inboxTasks.map(renderTask)}</ul>
+              <ul className="space-y-2">
+                {inboxTasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    domains={domains}
+                    projects={projects}
+                    onToggleDone={toggleDone}
+                    onUpdate={handleUpdate}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </ul>
             )}
           </div>
 
@@ -553,7 +340,19 @@ export default function TasksPage() {
             {processedTasks.length === 0 ? (
               <p className="text-sm text-zinc-500">No processed tasks yet.</p>
             ) : (
-              <ul className="space-y-2">{processedTasks.map(renderTask)}</ul>
+              <ul className="space-y-2">
+                {processedTasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    domains={domains}
+                    projects={projects}
+                    onToggleDone={toggleDone}
+                    onUpdate={handleUpdate}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </ul>
             )}
           </div>
         </div>

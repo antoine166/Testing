@@ -2,87 +2,15 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { computeStreak, type Habit as StreakHabit } from "@/lib/habits/streaks";
 import { todayLocal } from "@/lib/date";
 import ColorPicker from "@/components/color-picker";
-
-type HabitFrequency = "daily" | "specific_days" | "times_per_week";
-
-type HabitLogRow = {
-  id: string;
-  habit_id: string;
-  logged_date: string;
-};
-
-type Habit = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string | null;
-  frequency: HabitFrequency;
-  frequency_days: number[] | null;
-  target_count: number | null;
-  active: boolean;
-};
-
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const FREQUENCIES: HabitFrequency[] = ["daily", "specific_days", "times_per_week"];
-
-function FrequencyFields({
-  frequency,
-  frequencyDays,
-  targetCount,
-  onFrequencyDaysChange,
-  onTargetCountChange,
-}: {
-  frequency: HabitFrequency;
-  frequencyDays: number[];
-  targetCount: number;
-  onFrequencyDaysChange: (days: number[]) => void;
-  onTargetCountChange: (count: number) => void;
-}) {
-  if (frequency === "specific_days") {
-    return (
-      <div className="flex flex-wrap gap-2">
-        {DAY_LABELS.map((label, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() =>
-              onFrequencyDaysChange(
-                frequencyDays.includes(i)
-                  ? frequencyDays.filter((d) => d !== i)
-                  : [...frequencyDays, i],
-              )
-            }
-            className={`rounded-md border px-2 py-1 text-xs font-medium ${
-              frequencyDays.includes(i)
-                ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-50 dark:bg-zinc-50 dark:text-zinc-950"
-                : "border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  if (frequency === "times_per_week") {
-    return (
-      <input
-        type="number"
-        min={1}
-        max={7}
-        value={targetCount}
-        onChange={(e) => onTargetCountChange(Number(e.target.value))}
-        className="w-20 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-      />
-    );
-  }
-
-  return null;
-}
+import HabitRow, {
+  FrequencyFields,
+  FREQUENCIES,
+  type Habit,
+  type HabitLogRow,
+  type HabitFrequency,
+} from "@/components/habit-row";
 
 export default function HabitsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -95,13 +23,6 @@ export default function HabitsPage() {
   const [frequency, setFrequency] = useState<HabitFrequency>("daily");
   const [frequencyDays, setFrequencyDays] = useState<number[]>([]);
   const [targetCount, setTargetCount] = useState(3);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editColor, setEditColor] = useState("#10b981");
-  const [editFrequency, setEditFrequency] = useState<HabitFrequency>("daily");
-  const [editFrequencyDays, setEditFrequencyDays] = useState<number[]>([]);
-  const [editTargetCount, setEditTargetCount] = useState(3);
 
   const today = todayLocal();
 
@@ -178,28 +99,11 @@ export default function HabitsPage() {
     await loadAll();
   }
 
-  function startEdit(habit: Habit) {
-    setEditingId(habit.id);
-    setEditName(habit.name);
-    setEditColor(habit.color);
-    setEditFrequency(habit.frequency);
-    setEditFrequencyDays(habit.frequency_days ?? []);
-    setEditTargetCount(habit.target_count ?? 3);
-  }
-
-  async function handleUpdate(id: string) {
-    if (!editName.trim()) return;
-
+  async function handleUpdate(id: string, updates: Record<string, unknown>) {
     const res = await fetch(`/api/habits/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: editName,
-        color: editColor,
-        frequency: editFrequency,
-        frequency_days: editFrequency === "specific_days" ? editFrequencyDays : null,
-        target_count: editFrequency === "times_per_week" ? editTargetCount : null,
-      }),
+      body: JSON.stringify(updates),
     });
 
     if (!res.ok) {
@@ -208,7 +112,6 @@ export default function HabitsPage() {
       return;
     }
 
-    setEditingId(null);
     await loadAll();
   }
 
@@ -341,119 +244,17 @@ export default function HabitsPage() {
         </p>
       ) : (
         <ul className="space-y-2">
-          {habits.map((habit) => {
-            const habitLogs = logs.filter((l) => l.habit_id === habit.id);
-            const loggedToday = habitLogs.some((l) => l.logged_date === today);
-            const { current, longest } = computeStreak(
-              habit as StreakHabit,
-              habitLogs,
-              today,
-            );
-
-            if (editingId === habit.id) {
-              return (
-                <li
-                  key={habit.id}
-                  className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <ColorPicker value={editColor} onChange={setEditColor} />
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                      />
-                      <select
-                        value={editFrequency}
-                        onChange={(e) =>
-                          setEditFrequency(e.target.value as HabitFrequency)
-                        }
-                        className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                      >
-                        {FREQUENCIES.map((f) => (
-                          <option key={f} value={f}>
-                            {f.replace(/_/g, " ")}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <FrequencyFields
-                      frequency={editFrequency}
-                      frequencyDays={editFrequencyDays}
-                      targetCount={editTargetCount}
-                      onFrequencyDaysChange={setEditFrequencyDays}
-                      onTargetCountChange={setEditTargetCount}
-                    />
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => handleUpdate(habit.id)}
-                        className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              );
-            }
-
-            return (
-              <li
-                key={habit.id}
-                className="flex items-center gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
-              >
-                <input
-                  type="checkbox"
-                  checked={loggedToday}
-                  onChange={() => toggleToday(habit, loggedToday)}
-                />
-                <span
-                  className="h-4 w-4 shrink-0 rounded-full"
-                  style={{ backgroundColor: habit.color }}
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {habit.name}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    {habit.frequency.replace(/_/g, " ")}
-                    {habit.frequency === "times_per_week"
-                      ? ` (${habit.target_count}x/week)`
-                      : ""}
-                    {" · "}
-                    current streak {current}
-                    {habit.frequency === "times_per_week" ? " wk" : " day"}
-                    {current === 1 ? "" : "s"}
-                    {" · longest "}
-                    {longest}
-                    {habit.frequency === "times_per_week" ? " wk" : " day"}
-                    {longest === 1 ? "" : "s"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-3">
-                  <button
-                    onClick={() => startEdit(habit)}
-                    className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(habit.id)}
-                    className="text-sm font-medium text-red-600 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+          {habits.map((habit) => (
+            <HabitRow
+              key={habit.id}
+              habit={habit}
+              logs={logs.filter((l) => l.habit_id === habit.id)}
+              today={today}
+              onToggle={toggleToday}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          ))}
         </ul>
       )}
     </div>
