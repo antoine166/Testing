@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { computeStreak, type Habit as StreakHabit } from "@/lib/habits/streaks";
 import { todayLocal } from "@/lib/date";
+import ColorPicker from "@/components/color-picker";
 
 type HabitFrequency = "daily" | "specific_days" | "times_per_week";
 
@@ -287,19 +288,12 @@ export default function HabitsPage() {
             />
           </div>
           <div>
-            <label
-              htmlFor="color"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Color
             </label>
-            <input
-              id="color"
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="mt-1 h-9 w-12 rounded-md border border-zinc-300 dark:border-zinc-700"
-            />
+            <div className="mt-1">
+              <ColorPicker value={color} onChange={setColor} />
+            </div>
           </div>
           <div>
             <label
@@ -364,12 +358,7 @@ export default function HabitsPage() {
                 >
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={editColor}
-                        onChange={(e) => setEditColor(e.target.value)}
-                        className="h-8 w-10 rounded-md border border-zinc-300 dark:border-zinc-700"
-                      />
+                      <ColorPicker value={editColor} onChange={setEditColor} />
                       <input
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
