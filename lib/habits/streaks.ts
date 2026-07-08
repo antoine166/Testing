@@ -36,6 +36,14 @@ function isRequiredDay(habit: Habit, date: Date): boolean {
   return false;
 }
 
+// times_per_week habits don't have a fixed required day — any day can
+// count toward the week's target, so they're always "due" (available
+// to check off) rather than tied to a specific weekday.
+export function isHabitDueToday(habit: Habit, today: string): boolean {
+  if (habit.frequency === "times_per_week") return true;
+  return isRequiredDay(habit, parseLocalDate(today));
+}
+
 function computeDailyStreak(
   habit: Habit,
   loggedDates: Set<string>,
