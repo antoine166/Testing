@@ -452,7 +452,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Tasks CRUD (with inbox, scheduling, priority)
 - [x] Quick Capture (modal, keyboard shortcut, always accessible)
 - [ ] Today view (check-in prompt + habits + scheduled tasks + overdue)
-- [ ] Daily capacity check-in
+- [x] Daily capacity check-in
 - [ ] Habits list + daily logging
 - [ ] Streak counter (current + longest)
 - [x] Vercel deploy
