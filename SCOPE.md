@@ -450,7 +450,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Domains CRUD
 - [x] Projects CRUD (grouped by domain)
 - [x] Tasks CRUD (with inbox, scheduling, priority)
-- [ ] Quick Capture (modal, keyboard shortcut, always accessible)
+- [x] Quick Capture (modal, keyboard shortcut, always accessible)
 - [ ] Today view (check-in prompt + habits + scheduled tasks + overdue)
 - [ ] Daily capacity check-in
 - [ ] Habits list + daily logging
