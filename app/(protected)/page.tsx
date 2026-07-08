@@ -36,6 +36,12 @@ export default async function Home() {
         >
           Manage tasks
         </Link>
+        <Link
+          href="/checkin"
+          className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
+        >
+          Daily check-in
+        </Link>
       </div>
       <form action={logout}>
         <button
