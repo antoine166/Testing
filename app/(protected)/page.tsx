@@ -17,7 +17,7 @@ export default async function Home() {
       <p className="max-w-sm text-center text-sm text-zinc-500">
         Today view, Quick Capture, and the rest of Phase 1 land here next.
       </p>
-      <div className="flex gap-4">
+      <div className="flex flex-wrap justify-center gap-4">
         <Link
           href="/domains"
           className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
@@ -41,6 +41,12 @@ export default async function Home() {
           className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
         >
           Daily check-in
+        </Link>
+        <Link
+          href="/habits"
+          className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
+        >
+          Manage habits
         </Link>
       </div>
       <form action={logout}>

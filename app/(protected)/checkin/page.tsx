@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { todayLocal } from "@/lib/date";
 
 type Checkin = {
   date: string;
@@ -9,12 +10,6 @@ type Checkin = {
   focus_level: number;
   notes: string | null;
 } | null;
-
-function todayLocal() {
-  const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
-}
 
 function LevelPicker({
   label,
