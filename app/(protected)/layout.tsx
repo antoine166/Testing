@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import QuickCapture from "@/components/quick-capture";
 
 export default async function ProtectedLayout({
   children,
@@ -15,5 +16,10 @@ export default async function ProtectedLayout({
     redirect("/login");
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <QuickCapture />
+    </>
+  );
 }
