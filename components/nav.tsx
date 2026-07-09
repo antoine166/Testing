@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/habits", label: "Habits" },
   { href: "/analytics", label: "Analytics" },
   { href: "/routines", label: "Routines" },
+  { href: "/checklists", label: "Checklists" },
   { href: "/checkin", label: "Check-in" },
   { href: "/library", label: "Library" },
   { href: "/coach", label: "Coach" },

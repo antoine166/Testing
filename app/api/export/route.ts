@@ -17,6 +17,8 @@ export async function GET() {
     dailyCheckins,
     routines,
     routineItems,
+    checklists,
+    checklistItems,
     knowledgeItems,
   ] = await Promise.all([
     supabase.from("domains").select("*"),
@@ -27,6 +29,8 @@ export async function GET() {
     supabase.from("daily_checkins").select("*"),
     supabase.from("routines").select("*"),
     supabase.from("routine_items").select("*"),
+    supabase.from("checklists").select("*"),
+    supabase.from("checklist_items").select("*"),
     supabase.from("knowledge_items").select("*"),
   ]);
 
@@ -40,6 +44,8 @@ export async function GET() {
     daily_checkins: dailyCheckins.data,
     routines: routines.data,
     routine_items: routineItems.data,
+    checklists: checklists.data,
+    checklist_items: checklistItems.data,
     knowledge_items: knowledgeItems.data,
   };
 

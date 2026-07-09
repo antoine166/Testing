@@ -118,6 +118,14 @@ Ordered sequences of steps (tasks, habits, or notes) tied to a time of day.
 - Steps have a title and optional duration in minutes
 - Routines surface in Today view at their scheduled time of day
 
+### 3.8a Checklists *(Phase 4)*
+Reusable, resettable lists — for things you run through repeatedly rather than once (e.g. a packing list), distinct from Routines (time-of-day scheduled, surfaced on Today) and Tasks (one-shot).
+
+- A checklist has a name and an ordered list of items
+- Checking items off persists until you hit **Reset**, which unchecks every item on that checklist in one action so it's ready to reuse
+- Not tied to a time of day and does not surface on the Today view
+- Items support reordering (same up/down pattern as Routine steps)
+
 ### 3.9 Knowledge Library *(Phase 2)*
 A personal second brain for saving things Antoine wants to keep.
 
@@ -161,6 +169,7 @@ Soft delete with a 30-day recovery window, so an accidental delete is never perm
 ─────────────────────
 🔁 Habits
 📋 Routines              (Phase 2)
+☑️  Checklists            (Phase 4)
 ─────────────────────
 📚 Library               (Phase 2)
 🤖 Coach                 (Phase 2)
@@ -311,6 +320,31 @@ created_at         timestamptz default now()
 
 ---
 
+### `checklists` *(Phase 4)*
+```sql
+id          uuid primary key default gen_random_uuid()
+user_id     uuid references auth.users(id) on delete cascade
+name        text not null
+created_at  timestamptz default now()
+deleted_at  timestamptz   -- soft delete (Trash, 3.12)
+```
+
+---
+
+### `checklist_items` *(Phase 4)*
+```sql
+id            uuid primary key default gen_random_uuid()
+user_id       uuid references auth.users(id) on delete cascade
+checklist_id  uuid references checklists(id) on delete cascade
+title         text not null
+checked       boolean not null default false
+sort_order    int not null default 0
+created_at    timestamptz default now()
+-- not independently trashable — goes with its checklist on purge
+```
+
+---
+
 ### `knowledge_items` *(Phase 2)*
 ```sql
 id          uuid primary key default gen_random_uuid()
@@ -452,6 +486,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [ ] Habit analytics / weekly review view
 - [ ] Data export
 - [ ] Trash / soft delete with 30-day recovery (3.12)
+- [ ] Checklists (3.8a)
 
 ---
 
