@@ -67,6 +67,12 @@ export default async function Home() {
           >
             Coach
           </Link>
+          <Link
+            href="/contacts"
+            className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
+          >
+            Contacts
+          </Link>
           <form action={logout}>
             <button
               type="submit"
