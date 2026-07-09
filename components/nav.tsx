@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/library", label: "Library" },
   { href: "/coach", label: "Coach" },
   { href: "/contacts", label: "Contacts" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default function Nav({ userEmail }: { userEmail?: string }) {
