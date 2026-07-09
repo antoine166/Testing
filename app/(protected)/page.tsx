@@ -55,6 +55,12 @@ export default async function Home() {
           >
             Check-in
           </Link>
+          <Link
+            href="/library"
+            className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
+          >
+            Library
+          </Link>
           <form action={logout}>
             <button
               type="submit"
