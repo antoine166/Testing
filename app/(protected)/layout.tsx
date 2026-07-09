@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import QuickCapture from "@/components/quick-capture";
 import Nav from "@/components/nav";
+import SessionRefresh from "@/components/session-refresh";
 
 export default async function ProtectedLayout({
   children,
@@ -19,6 +20,7 @@ export default async function ProtectedLayout({
 
   return (
     <>
+      <SessionRefresh />
       <Nav userEmail={user.email} />
       {children}
       <QuickCapture />

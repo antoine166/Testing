@@ -18,8 +18,11 @@ export async function createClient() {
               cookieStore.set(name, value, options),
             );
           } catch {
-            // setAll called from a Server Component — safe to ignore
-            // when middleware is refreshing the session.
+            // Server Components can't set cookies, so a refresh triggered
+            // here is computed but discarded — expected and harmless.
+            // components/session-refresh.tsx periodically hits
+            // /api/auth/refresh (a Route Handler, which can set cookies)
+            // so the refresh actually persists.
           }
         },
       },
