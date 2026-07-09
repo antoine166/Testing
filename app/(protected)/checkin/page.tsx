@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { todayLocal } from "@/lib/date";
 import LevelPicker from "@/components/level-picker";
 
@@ -78,18 +77,10 @@ export default function CheckinPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md flex-1 px-4 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-          Daily check-in
-        </h1>
-        <Link
-          href="/"
-          className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-        >
-          Back home
-        </Link>
-      </div>
+    <div className="mx-auto w-full max-w-md flex-1 px-4 py-6 sm:py-10">
+      <h1 className="mb-6 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+        Daily check-in
+      </h1>
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>

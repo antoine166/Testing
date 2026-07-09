@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
 
 type Domain = {
@@ -122,18 +121,10 @@ export default function DomainsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-          Domains
-        </h1>
-        <Link
-          href="/"
-          className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-        >
-          Back home
-        </Link>
-      </div>
+    <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
+      <h1 className="mb-6 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+        Domains
+      </h1>
 
       {error && (
         <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
