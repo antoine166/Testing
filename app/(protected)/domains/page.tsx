@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
 
 type Domain = {
@@ -208,6 +209,12 @@ export default function DomainsPage() {
                   <span className="flex-1 text-sm text-zinc-900 dark:text-zinc-100">
                     {domain.name}
                   </span>
+                  <Link
+                    href={`/tasks?domain=${domain.id}`}
+                    className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                  >
+                    Tasks
+                  </Link>
                   <button
                     onClick={() => startEdit(domain)}
                     className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"

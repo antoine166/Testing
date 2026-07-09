@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import TaskRow, {
   type Task,
   type TaskDomain,
@@ -11,6 +13,10 @@ import TaskRow, {
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 export default function TasksPage() {
+  const searchParams = useSearchParams();
+  const domainFilter = searchParams.get("domain");
+  const projectFilter = searchParams.get("project");
+
   const [domains, setDomains] = useState<TaskDomain[]>([]);
   const [projects, setProjects] = useState<TaskProject[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -19,8 +25,8 @@ export default function TasksPage() {
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
-  const [domainId, setDomainId] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [domainId, setDomainId] = useState(domainFilter ?? "");
+  const [projectId, setProjectId] = useState(projectFilter ?? "");
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
@@ -146,6 +152,15 @@ export default function TasksPage() {
   const inboxTasks = tasks.filter((t) => !t.domain_id);
   const processedTasks = tasks.filter((t) => t.domain_id);
 
+  const filteredTasks = domainFilter
+    ? tasks.filter((t) => t.domain_id === domainFilter)
+    : projectFilter
+      ? tasks.filter((t) => t.project_id === projectFilter)
+      : null;
+  const filterLabel = domainFilter
+    ? (domains.find((d) => d.id === domainFilter)?.name ?? "this domain")
+    : (projects.find((p) => p.id === projectFilter)?.name ?? "this project");
+
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-10">
       <h1 className="mb-6 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
@@ -155,6 +170,17 @@ export default function TasksPage() {
       {error && (
         <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
           {error}
+        </p>
+      )}
+
+      {(domainFilter || projectFilter) && (
+        <p className="mb-4 text-sm text-zinc-500">
+          Showing tasks in{" "}
+          <strong className="text-zinc-900 dark:text-zinc-100">{filterLabel}</strong>
+          {" — "}
+          <Link href="/tasks" className="underline hover:text-zinc-950 dark:hover:text-zinc-50">
+            Clear filter
+          </Link>
         </p>
       )}
 
@@ -297,6 +323,29 @@ export default function TasksPage() {
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>
+      ) : filteredTasks ? (
+        <div>
+          <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            Tasks {filteredTasks.length > 0 && `(${filteredTasks.length})`}
+          </h2>
+          {filteredTasks.length === 0 ? (
+            <p className="text-sm text-zinc-500">No tasks here yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {filteredTasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  domains={domains}
+                  projects={projects}
+                  onToggleDone={toggleDone}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
       ) : (
         <div className="space-y-8">
           <div>

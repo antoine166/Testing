@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 
 type Domain = {
   id: string;
@@ -403,6 +404,12 @@ export default function ProjectsPage() {
                             </p>
                           </div>
                           <div className="flex shrink-0 gap-3">
+                            <Link
+                              href={`/tasks?project=${project.id}`}
+                              className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                            >
+                              Tasks
+                            </Link>
                             <button
                               onClick={() => startEdit(project)}
                               className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
