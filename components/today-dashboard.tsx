@@ -12,6 +12,7 @@ import TaskRow, {
   type TaskProject,
   type TaskPriority,
 } from "@/components/task-row";
+import { type Routine } from "@/components/routine-card";
 
 type Checkin = {
   date: string;
@@ -20,12 +21,27 @@ type Checkin = {
   notes: string | null;
 } | null;
 
+type RoutineItem = {
+  id: string;
+  routine_id: string;
+  title: string;
+  duration_minutes: number | null;
+  sort_order: number;
+};
+
 const PRIORITY_RANK: Record<TaskPriority, number> = {
   high: 0,
   medium: 1,
   low: 2,
   none: 3,
 };
+
+function currentTimeOfDay(): "morning" | "afternoon" | "evening" {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  return "evening";
+}
 
 export default function TodayDashboard() {
   const today = todayLocal();
@@ -36,6 +52,8 @@ export default function TodayDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [domains, setDomains] = useState<TaskDomain[]>([]);
   const [projects, setProjects] = useState<TaskProject[]>([]);
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  const [routineItems, setRoutineItems] = useState<Record<string, RoutineItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +63,7 @@ export default function TodayDashboard() {
 
   async function loadAll() {
     try {
-      const [checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes] =
+      const [checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes, routinesRes] =
         await Promise.all([
           fetch(`/api/checkins?date=${today}`),
           fetch("/api/habits"),
@@ -53,6 +71,7 @@ export default function TodayDashboard() {
           fetch("/api/tasks"),
           fetch("/api/domains"),
           fetch("/api/projects"),
+          fetch("/api/routines"),
         ]);
       if (
         !checkinRes.ok ||
@@ -60,7 +79,8 @@ export default function TodayDashboard() {
         !logsRes.ok ||
         !tasksRes.ok ||
         !domainsRes.ok ||
-        !projectsRes.ok
+        !projectsRes.ok ||
+        !routinesRes.ok
       ) {
         throw new Error("Failed to load today's data");
       }
@@ -70,6 +90,7 @@ export default function TodayDashboard() {
       setTasks(await tasksRes.json());
       setDomains(await domainsRes.json());
       setProjects(await projectsRes.json());
+      setRoutines(await routinesRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -89,35 +110,59 @@ export default function TodayDashboard() {
       fetch("/api/tasks", opts),
       fetch("/api/domains", opts),
       fetch("/api/projects", opts),
+      fetch("/api/routines", opts),
     ])
-      .then(async ([checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes]) => {
-        if (
-          !checkinRes.ok ||
-          !habitsRes.ok ||
-          !logsRes.ok ||
-          !tasksRes.ok ||
-          !domainsRes.ok ||
-          !projectsRes.ok
-        ) {
-          throw new Error("Failed to load today's data");
-        }
-        return Promise.all([
-          checkinRes.json(),
-          habitsRes.json(),
-          logsRes.json(),
-          tasksRes.json(),
-          domainsRes.json(),
-          projectsRes.json(),
-        ]);
-      })
-      .then(([checkinData, habitsData, logsData, tasksData, domainsData, projectsData]) => {
-        setCheckin(checkinData);
-        setHabits(habitsData);
-        setLogs(logsData);
-        setTasks(tasksData);
-        setDomains(domainsData);
-        setProjects(projectsData);
-      })
+      .then(
+        async ([
+          checkinRes,
+          habitsRes,
+          logsRes,
+          tasksRes,
+          domainsRes,
+          projectsRes,
+          routinesRes,
+        ]) => {
+          if (
+            !checkinRes.ok ||
+            !habitsRes.ok ||
+            !logsRes.ok ||
+            !tasksRes.ok ||
+            !domainsRes.ok ||
+            !projectsRes.ok ||
+            !routinesRes.ok
+          ) {
+            throw new Error("Failed to load today's data");
+          }
+          return Promise.all([
+            checkinRes.json(),
+            habitsRes.json(),
+            logsRes.json(),
+            tasksRes.json(),
+            domainsRes.json(),
+            projectsRes.json(),
+            routinesRes.json(),
+          ]);
+        },
+      )
+      .then(
+        ([
+          checkinData,
+          habitsData,
+          logsData,
+          tasksData,
+          domainsData,
+          projectsData,
+          routinesData,
+        ]) => {
+          setCheckin(checkinData);
+          setHabits(habitsData);
+          setLogs(logsData);
+          setTasks(tasksData);
+          setDomains(domainsData);
+          setProjects(projectsData);
+          setRoutines(routinesData);
+        },
+      )
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -126,6 +171,35 @@ export default function TodayDashboard() {
 
     return () => controller.abort();
   }, [today]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const relevant = routines.filter(
+      (r) => r.active && (r.time_of_day === currentTimeOfDay() || r.time_of_day === "custom"),
+    );
+
+    if (relevant.length === 0) return;
+
+    Promise.all(
+      relevant.map((r) =>
+        fetch(`/api/routines/${r.id}/items`, { signal: controller.signal }).then((res) =>
+          res.ok ? res.json() : [],
+        ),
+      ),
+    )
+      .then((results: RoutineItem[][]) => {
+        const byRoutine: Record<string, RoutineItem[]> = {};
+        relevant.forEach((r, i) => {
+          byRoutine[r.id] = results[i];
+        });
+        setRoutineItems(byRoutine);
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      });
+
+    return () => controller.abort();
+  }, [routines]);
 
   async function handleSaveCheckin() {
     if (!energyLevel || !focusLevel) {
@@ -247,6 +321,9 @@ export default function TodayDashboard() {
     return <p className="text-sm text-zinc-500">Loading...</p>;
   }
 
+  const dueRoutines = routines.filter(
+    (r) => r.active && (r.time_of_day === currentTimeOfDay() || r.time_of_day === "custom"),
+  );
   const dueHabits = habits.filter((h) => h.active && isHabitDueToday(h, today));
   const todayTasks = [...tasks]
     .filter((t) => t.scheduled_date === today)
@@ -288,6 +365,34 @@ export default function TodayDashboard() {
             Edit
           </Link>
         </p>
+      )}
+
+      {dueRoutines.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            Routines
+          </h2>
+          <div className="space-y-3">
+            {dueRoutines.map((routine) => (
+              <div
+                key={routine.id}
+                className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
+              >
+                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                  {routine.name}
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {(routineItems[routine.id] ?? []).map((item) => (
+                    <li key={item.id} className="text-xs text-zinc-500">
+                      {item.title}
+                      {item.duration_minutes ? ` (${item.duration_minutes} min)` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div>

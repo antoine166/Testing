@@ -44,6 +44,12 @@ export default async function Home() {
             Habits
           </Link>
           <Link
+            href="/routines"
+            className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
+          >
+            Routines
+          </Link>
+          <Link
             href="/checkin"
             className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
           >
