@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   computeStreak,
+  countThisWeek,
   type Habit as StreakHabit,
   type HabitFrequency,
 } from "@/lib/habits/streaks";
@@ -113,6 +114,7 @@ export default function HabitRow({
 
   const loggedToday = logs.some((l) => l.logged_date === today);
   const { current, longest } = computeStreak(habit, logs, today);
+  const weekCount = habit.frequency === "times_per_week" ? countThisWeek(logs, today) : 0;
 
   function startEdit() {
     setName(habit.name);
@@ -201,7 +203,9 @@ export default function HabitRow({
         </p>
         <p className="text-xs text-zinc-500">
           {habit.frequency.replace(/_/g, " ")}
-          {habit.frequency === "times_per_week" ? ` (${habit.target_count}x/week)` : ""}
+          {habit.frequency === "times_per_week"
+            ? ` (${weekCount}/${habit.target_count} this week)`
+            : ""}
           {" · "}
           current streak {current}
           {habit.frequency === "times_per_week" ? " wk" : " day"}

@@ -163,6 +163,12 @@ function computeWeeklyStreak(
   return { current, longest };
 }
 
+/** How many times a times_per_week habit has been logged in the current week so far. */
+export function countThisWeek(logs: HabitLog[], today: string): number {
+  const currentWeekKey = getWeekKey(parseLocalDate(today));
+  return logs.filter((l) => getWeekKey(parseLocalDate(l.logged_date)) === currentWeekKey).length;
+}
+
 export function computeStreak(
   habit: Habit,
   logs: HabitLog[],
