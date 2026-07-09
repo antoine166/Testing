@@ -12,7 +12,6 @@ A personal life operating system for Antoine. One app that handles:
 - Daily routines
 - Habit tracking with streaks
 - A knowledge library
-- A personal CRM
 
 Core value: **capture must be frictionless.** If Quick Capture ever gets more complex, flag it before shipping.
 
@@ -117,15 +116,6 @@ A personal second brain for saving things Antoine wants to keep.
 - Search across all items by keyword or tag
 - No folders — tags only
 
-### 3.10 Personal CRM *(Phase 3)*
-Lightweight relationship manager.
-
-- Contacts: name, email, phone, company, role, relationship type, notes
-- Relationship types: `personal` | `professional` | `mentor` | `client` | `other`
-- Interaction log per contact: type (call, email, meeting, message, note), notes, date
-- "Last contacted" auto-updates when an interaction is logged
-- No automations or reminders in Phase 3 — manual logging only
-
 ### 3.11 Coach *(Phase 2)*
 AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 
@@ -139,10 +129,10 @@ AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 ### 3.12 Trash *(Phase 4)*
 Soft delete with a 30-day recovery window, so an accidental delete is never permanent by mistake.
 
-- Applies to: domains, projects, tasks, habits, routines, contacts, knowledge library items
+- Applies to: domains, projects, tasks, habits, routines, knowledge library items
 - Deleting one of these sets `deleted_at` instead of removing the row; it disappears from normal views but is recoverable
 - Domains and projects cascade: deleting a domain trashes its projects and tasks together (and restoring the domain restores all of them together); deleting a project cascades to its tasks the same way
-- Child records that aren't independently trashable (habit logs, routine steps, contact interactions) aren't given their own trash entry — they simply go with their parent when it's permanently purged
+- Child records that aren't independently trashable (habit logs, routine steps) aren't given their own trash entry — they simply go with their parent when it's permanently purged
 - A **Trash** view lists everything pending deletion with days remaining, Restore, and Delete-forever actions
 - A scheduled job permanently deletes anything past 30 days — no user action required to empty the trash on schedule
 
@@ -163,7 +153,6 @@ Soft delete with a 30-day recovery window, so an accidental delete is never perm
 📋 Routines              (Phase 2)
 ─────────────────────
 📚 Library               (Phase 2)
-👥 CRM                   (Phase 3)
 🤖 Coach                 (Phase 2)
 ─────────────────────
 🗑  Trash                 (Phase 4)
@@ -329,40 +318,6 @@ deleted_at  timestamptz   -- soft delete (Trash, 3.12)
 
 ---
 
-### `contacts` *(Phase 3)*
-```sql
-id                  uuid primary key default gen_random_uuid()
-user_id             uuid references auth.users(id) on delete cascade
-name                text not null
-email               text
-phone               text
-company             text
-role                text
-relationship_type   text not null default 'personal'
-                    -- check: personal | professional | mentor | client | other
-notes               text
-last_contacted_at   timestamptz
-created_at          timestamptz default now()
-updated_at          timestamptz default now()
-deleted_at          timestamptz   -- soft delete (Trash, 3.12); its interactions go with it on purge, not independently trashable
-```
-
----
-
-### `contact_interactions` *(Phase 3)*
-```sql
-id             uuid primary key default gen_random_uuid()
-user_id        uuid references auth.users(id) on delete cascade
-contact_id     uuid references contacts(id) on delete cascade
-type           text not null
-               -- check: call | email | meeting | message | note
-notes          text
-interacted_at  timestamptz not null default now()
-created_at     timestamptz default now()
-```
-
----
-
 ## 7. Row Level Security Policy Pattern
 
 Every table gets these two policies (replace `table_name`):
@@ -480,11 +435,6 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [ ] Routines builder + Today view integration
 - [ ] Knowledge library (CRUD + search + tags)
 - [ ] Coach (Anthropic API, read-only context)
-
-### Phase 3 — CRM
-- [ ] Contacts CRUD
-- [ ] Interaction log
-- [ ] Last-contacted tracking
 
 ### Phase 4 — Polish
 - [ ] Supabase Realtime (live updates across tabs)

@@ -11,7 +11,7 @@ export default function SettingsPage() {
         </h2>
         <p className="mt-1 text-sm text-zinc-500">
           Download everything — domains, projects, tasks, habits and their logs,
-          check-ins, routines, library items, and contacts — as a single JSON file.
+          check-ins, routines, and library items — as a single JSON file.
         </p>
         <a
           href="/api/export"

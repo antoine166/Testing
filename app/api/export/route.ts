@@ -18,8 +18,6 @@ export async function GET() {
     routines,
     routineItems,
     knowledgeItems,
-    contacts,
-    contactInteractions,
   ] = await Promise.all([
     supabase.from("domains").select("*"),
     supabase.from("projects").select("*"),
@@ -30,8 +28,6 @@ export async function GET() {
     supabase.from("routines").select("*"),
     supabase.from("routine_items").select("*"),
     supabase.from("knowledge_items").select("*"),
-    supabase.from("contacts").select("*"),
-    supabase.from("contact_interactions").select("*"),
   ]);
 
   const data = {
@@ -45,8 +41,6 @@ export async function GET() {
     routines: routines.data,
     routine_items: routineItems.data,
     knowledge_items: knowledgeItems.data,
-    contacts: contacts.data,
-    contact_interactions: contactInteractions.data,
   };
 
   const filename = `life-os-export-${new Date().toISOString().slice(0, 10)}.json`;

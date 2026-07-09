@@ -15,7 +15,6 @@ const TYPE_LABELS: Record<string, string> = {
   task: "Task",
   habit: "Habit",
   routine: "Routine",
-  contact: "Contact",
   "knowledge-item": "Library item",
 };
 
