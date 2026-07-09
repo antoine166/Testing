@@ -136,6 +136,16 @@ AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 - Allowed write actions for Phase 2: create task, log habit. No edits/deletes, no project or domain creation, no check-in writes — keep the blast radius small until this is proven out
 - Exact confirmation UX (auto-create vs. confirm-before-write) is a Phase 2 design decision, not finalized here
 
+### 3.12 Trash *(Phase 4)*
+Soft delete with a 30-day recovery window, so an accidental delete is never permanent by mistake.
+
+- Applies to: domains, projects, tasks, habits, routines, contacts, knowledge library items
+- Deleting one of these sets `deleted_at` instead of removing the row; it disappears from normal views but is recoverable
+- Domains and projects cascade: deleting a domain trashes its projects and tasks together (and restoring the domain restores all of them together); deleting a project cascades to its tasks the same way
+- Child records that aren't independently trashable (habit logs, routine steps, contact interactions) aren't given their own trash entry — they simply go with their parent when it's permanently purged
+- A **Trash** view lists everything pending deletion with days remaining, Restore, and Delete-forever actions
+- A scheduled job permanently deletes anything past 30 days — no user action required to empty the trash on schedule
+
 ---
 
 ## 4. Navigation (Sidebar)
@@ -156,6 +166,7 @@ AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 👥 CRM                   (Phase 3)
 🤖 Coach                 (Phase 2)
 ─────────────────────
+🗑  Trash                 (Phase 4)
 ⚙️  Settings
 ```
 
@@ -184,6 +195,7 @@ name        text not null
 color       text not null default '#6366f1'   -- hex color
 icon        text                               -- emoji or icon name
 created_at  timestamptz default now()
+deleted_at  timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its projects/tasks
 ```
 
 ---
@@ -200,6 +212,7 @@ status       text not null default 'active'
 due_date     date
 created_at   timestamptz default now()
 updated_at   timestamptz default now()
+deleted_at   timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its tasks
 ```
 
 ---
@@ -223,6 +236,7 @@ completed_at    timestamptz
 -- null independently — a processed task can be domain-only, no project.
 created_at      timestamptz default now()
 updated_at      timestamptz default now()
+deleted_at      timestamptz   -- soft delete (Trash, 3.12)
 ```
 
 ---
@@ -240,6 +254,7 @@ frequency_days  int[]   -- 0=Sun … 6=Sat; used when frequency = specific_days
 target_count    int     -- e.g. 3; used when frequency = times_per_week
 active          boolean not null default true
 created_at      timestamptz default now()
+deleted_at      timestamptz   -- soft delete (Trash, 3.12); its logs go with it on purge, not independently trashable
 ```
 
 ---
@@ -279,6 +294,7 @@ time_of_day  text not null default 'morning'
              -- check: morning | afternoon | evening | custom
 active       boolean not null default true
 created_at   timestamptz default now()
+deleted_at   timestamptz   -- soft delete (Trash, 3.12); its steps go with it on purge, not independently trashable
 ```
 
 ---
@@ -308,6 +324,7 @@ type        text not null default 'note'
 tags        text[]
 created_at  timestamptz default now()
 updated_at  timestamptz default now()
+deleted_at  timestamptz   -- soft delete (Trash, 3.12)
 ```
 
 ---
@@ -327,6 +344,7 @@ notes               text
 last_contacted_at   timestamptz
 created_at          timestamptz default now()
 updated_at          timestamptz default now()
+deleted_at          timestamptz   -- soft delete (Trash, 3.12); its interactions go with it on purge, not independently trashable
 ```
 
 ---
@@ -473,6 +491,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [ ] Mobile UX pass
 - [ ] Habit analytics / weekly review view
 - [ ] Data export
+- [ ] Trash / soft delete with 30-day recovery (3.12)
 
 ---
 
