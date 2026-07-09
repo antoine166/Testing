@@ -98,7 +98,7 @@ export default function ContactsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this contact? Its interaction history will be deleted too.")) return;
+    if (!confirm("Move this contact to trash? You can restore it, with its interaction history, within 30 days.")) return;
 
     const res = await fetch(`/api/contacts/${id}`, { method: "DELETE" });
 

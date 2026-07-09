@@ -21,7 +21,7 @@ export const KNOWLEDGE_TYPES: KnowledgeType[] = [
   "resource",
 ];
 
-function parseTags(input: string): string[] {
+export function parseTags(input: string): string[] {
   return input
     .split(",")
     .map((t) => t.trim())

@@ -123,7 +123,10 @@ function computeWeeklyStreak(
     countsByWeek.set(week, (countsByWeek.get(week) ?? 0) + 1);
   }
 
-  let current = 0;
+  // If the in-progress current week has already hit target, credit it (like
+  // computeDailyStreak crediting today once it's logged) before walking
+  // backward through fully-elapsed weeks.
+  let current = (countsByWeek.get(currentWeekKey) ?? 0) >= target ? 1 : 0;
   let cursor = addDays(parseLocalDate(currentWeekKey), -7);
   for (let i = 0; i < 520; i++) {
     const key = getWeekKey(cursor);
@@ -142,7 +145,7 @@ function computeWeeklyStreak(
   let prevWeek: Date | null = null;
 
   for (const key of weekKeys) {
-    if (key === currentWeekKey) continue; // in-progress week doesn't count yet
+    if (key === currentWeekKey) continue; // handled via `current` above instead
     const count = countsByWeek.get(key)!;
     const weekDate = parseLocalDate(key);
 
@@ -155,6 +158,7 @@ function computeWeeklyStreak(
       prevWeek = null;
     }
   }
+  longest = Math.max(longest, current);
 
   return { current, longest };
 }

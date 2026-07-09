@@ -11,6 +11,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("routines")
     .select("*")
+    .is("deleted_at", null)
     .order("name");
 
   if (error) {

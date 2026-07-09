@@ -15,6 +15,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     .from("tasks")
     .select("*")
     .eq("id", id)
+    .is("deleted_at", null)
     .single();
 
   if (error) {
@@ -62,8 +63,16 @@ export async function PUT(request: Request, { params }: RouteParams) {
       typeof body.scheduled_date === "string" ? body.scheduled_date : null;
   }
   if (typeof body.status === "string") {
+    const { data: existing } = await supabase
+      .from("tasks")
+      .select("status")
+      .eq("id", id)
+      .maybeSingle();
+
     updates.status = body.status;
-    updates.completed_at = body.status === "done" ? new Date().toISOString() : null;
+    if (existing?.status !== body.status) {
+      updates.completed_at = body.status === "done" ? new Date().toISOString() : null;
+    }
   }
 
   const { data, error } = await supabase
@@ -88,7 +97,10 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { error } = await supabase.from("tasks").delete().eq("id", id);
+  const { error } = await supabase
+    .from("tasks")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

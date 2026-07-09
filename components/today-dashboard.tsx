@@ -43,6 +43,43 @@ function currentTimeOfDay(): "morning" | "afternoon" | "evening" {
   return "evening";
 }
 
+async function fetchDashboardData(today: string, opts?: RequestInit) {
+  const [checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes, routinesRes] =
+    await Promise.all([
+      fetch(`/api/checkins?date=${today}`, opts),
+      fetch("/api/habits", opts),
+      fetch("/api/habit-logs", opts),
+      fetch("/api/tasks", opts),
+      fetch("/api/domains", opts),
+      fetch("/api/projects", opts),
+      fetch("/api/routines", opts),
+    ]);
+
+  if (
+    !checkinRes.ok ||
+    !habitsRes.ok ||
+    !logsRes.ok ||
+    !tasksRes.ok ||
+    !domainsRes.ok ||
+    !projectsRes.ok ||
+    !routinesRes.ok
+  ) {
+    throw new Error("Failed to load today's data");
+  }
+
+  const [checkin, habits, logs, tasks, domains, projects, routines] = await Promise.all([
+    checkinRes.json(),
+    habitsRes.json(),
+    logsRes.json(),
+    tasksRes.json(),
+    domainsRes.json(),
+    projectsRes.json(),
+    routinesRes.json(),
+  ]);
+
+  return { checkin, habits, logs, tasks, domains, projects, routines };
+}
+
 export default function TodayDashboard() {
   const today = todayLocal();
 
@@ -63,34 +100,14 @@ export default function TodayDashboard() {
 
   async function loadAll() {
     try {
-      const [checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes, routinesRes] =
-        await Promise.all([
-          fetch(`/api/checkins?date=${today}`),
-          fetch("/api/habits"),
-          fetch("/api/habit-logs"),
-          fetch("/api/tasks"),
-          fetch("/api/domains"),
-          fetch("/api/projects"),
-          fetch("/api/routines"),
-        ]);
-      if (
-        !checkinRes.ok ||
-        !habitsRes.ok ||
-        !logsRes.ok ||
-        !tasksRes.ok ||
-        !domainsRes.ok ||
-        !projectsRes.ok ||
-        !routinesRes.ok
-      ) {
-        throw new Error("Failed to load today's data");
-      }
-      setCheckin(await checkinRes.json());
-      setHabits(await habitsRes.json());
-      setLogs(await logsRes.json());
-      setTasks(await tasksRes.json());
-      setDomains(await domainsRes.json());
-      setProjects(await projectsRes.json());
-      setRoutines(await routinesRes.json());
+      const data = await fetchDashboardData(today);
+      setCheckin(data.checkin);
+      setHabits(data.habits);
+      setLogs(data.logs);
+      setTasks(data.tasks);
+      setDomains(data.domains);
+      setProjects(data.projects);
+      setRoutines(data.routines);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -101,68 +118,17 @@ export default function TodayDashboard() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const opts = { signal: controller.signal };
 
-    Promise.all([
-      fetch(`/api/checkins?date=${today}`, opts),
-      fetch("/api/habits", opts),
-      fetch("/api/habit-logs", opts),
-      fetch("/api/tasks", opts),
-      fetch("/api/domains", opts),
-      fetch("/api/projects", opts),
-      fetch("/api/routines", opts),
-    ])
-      .then(
-        async ([
-          checkinRes,
-          habitsRes,
-          logsRes,
-          tasksRes,
-          domainsRes,
-          projectsRes,
-          routinesRes,
-        ]) => {
-          if (
-            !checkinRes.ok ||
-            !habitsRes.ok ||
-            !logsRes.ok ||
-            !tasksRes.ok ||
-            !domainsRes.ok ||
-            !projectsRes.ok ||
-            !routinesRes.ok
-          ) {
-            throw new Error("Failed to load today's data");
-          }
-          return Promise.all([
-            checkinRes.json(),
-            habitsRes.json(),
-            logsRes.json(),
-            tasksRes.json(),
-            domainsRes.json(),
-            projectsRes.json(),
-            routinesRes.json(),
-          ]);
-        },
-      )
-      .then(
-        ([
-          checkinData,
-          habitsData,
-          logsData,
-          tasksData,
-          domainsData,
-          projectsData,
-          routinesData,
-        ]) => {
-          setCheckin(checkinData);
-          setHabits(habitsData);
-          setLogs(logsData);
-          setTasks(tasksData);
-          setDomains(domainsData);
-          setProjects(projectsData);
-          setRoutines(routinesData);
-        },
-      )
+    fetchDashboardData(today, { signal: controller.signal })
+      .then((data) => {
+        setCheckin(data.checkin);
+        setHabits(data.habits);
+        setLogs(data.logs);
+        setTasks(data.tasks);
+        setDomains(data.domains);
+        setProjects(data.projects);
+        setRoutines(data.routines);
+      })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -268,7 +234,7 @@ export default function TodayDashboard() {
   }
 
   async function handleDeleteHabit(id: string) {
-    if (!confirm("Delete this habit? Its log history will be deleted too.")) return;
+    if (!confirm("Move this habit to trash? You can restore it, with its log history, within 30 days.")) return;
 
     const res = await fetch(`/api/habits/${id}`, { method: "DELETE" });
 
@@ -304,7 +270,7 @@ export default function TodayDashboard() {
   }
 
   async function handleDeleteTask(id: string) {
-    if (!confirm("Delete this task?")) return;
+    if (!confirm("Move this task to trash? You can restore it within 30 days.")) return;
 
     const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
 

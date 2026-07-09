@@ -103,7 +103,7 @@ export default function DomainsPage() {
   async function handleDelete(id: string) {
     if (
       !confirm(
-        "Delete this domain? Projects and tasks in it will be unassigned, not deleted.",
+        "Move this domain to trash? Its projects and tasks move with it, and you can restore them together within 30 days.",
       )
     ) {
       return;

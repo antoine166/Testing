@@ -15,6 +15,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     .from("domains")
     .select("*")
     .eq("id", id)
+    .is("deleted_at", null)
     .single();
 
   if (error) {
@@ -71,7 +72,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { error } = await supabase.from("domains").delete().eq("id", id);
+  const { error } = await supabase.rpc("trash_domain", { p_domain_id: id });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

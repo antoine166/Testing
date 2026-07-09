@@ -11,6 +11,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("habits")
     .select("*")
+    .is("deleted_at", null)
     .order("name");
 
   if (error) {
@@ -34,6 +35,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  const targetCount =
+    typeof body.target_count === "number" ? body.target_count : null;
+  if (targetCount !== null && (!Number.isInteger(targetCount) || targetCount < 1)) {
+    return NextResponse.json(
+      { error: "target_count must be a positive integer" },
+      { status: 400 },
+    );
+  }
+
   const { data, error } = await supabase
     .from("habits")
     .insert({
@@ -45,8 +55,7 @@ export async function POST(request: Request) {
       frequency_days: Array.isArray(body.frequency_days)
         ? body.frequency_days
         : null,
-      target_count:
-        typeof body.target_count === "number" ? body.target_count : null,
+      target_count: targetCount,
     })
     .select()
     .single();

@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { computeStreak, type Habit as StreakHabit } from "@/lib/habits/streaks";
+import {
+  computeStreak,
+  isHabitDueToday,
+  type Habit as StreakHabit,
+} from "@/lib/habits/streaks";
 import { todayLocal, lastNDays } from "@/lib/date";
 
 type HabitFrequency = "daily" | "specific_days" | "times_per_week";
@@ -31,14 +35,6 @@ type Checkin = {
 };
 
 const WINDOW_DAYS = 28;
-
-function isRequiredDay(habit: Habit, dateStr: string): boolean {
-  if (habit.frequency === "daily") return true;
-  if (habit.frequency === "times_per_week") return true; // approximate below
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const day = new Date(y, m - 1, d).getDay();
-  return (habit.frequency_days ?? []).includes(day);
-}
 
 export default function AnalyticsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -171,7 +167,9 @@ export default function AnalyticsPage() {
                 today,
               );
 
-              const requiredDays = days.filter((d) => isRequiredDay(habit, d));
+              const requiredDays = days.filter((d) =>
+                isHabitDueToday(habit as StreakHabit, d),
+              );
               const loggedRequiredDays = requiredDays.filter((d) => loggedDates.has(d));
               const denominator =
                 habit.frequency === "times_per_week"

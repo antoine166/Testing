@@ -130,7 +130,7 @@ export default function TasksPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this task?")) return;
+    if (!confirm("Move this task to trash? You can restore it within 30 days.")) return;
 
     const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
 

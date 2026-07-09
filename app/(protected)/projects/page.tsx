@@ -152,7 +152,11 @@ export default function ProjectsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this project? Its tasks will be unassigned, not deleted.")) {
+    if (
+      !confirm(
+        "Move this project to trash? Its tasks move with it, and you can restore them together within 30 days.",
+      )
+    ) {
       return;
     }
 

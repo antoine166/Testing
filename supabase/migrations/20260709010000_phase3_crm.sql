@@ -55,21 +55,33 @@ create table contact_interactions (
 create index contact_interactions_user_id_idx on contact_interactions(user_id);
 create index contact_interactions_contact_id_idx on contact_interactions(contact_id);
 
--- "Last contacted" auto-updates when an interaction is logged (SCOPE.md 3.10).
--- Uses GREATEST so logging a backdated past interaction doesn't regress a
--- contact's last_contacted_at if a more recent one already exists.
+-- "Last contacted" auto-updates when an interaction is logged or removed
+-- (SCOPE.md 3.10). Insert uses GREATEST so logging a backdated past
+-- interaction doesn't regress last_contacted_at if a more recent one already
+-- exists. Delete recomputes from whatever interactions remain, so removing a
+-- mistaken log entry doesn't leave a stale "last contacted" date behind.
 create or replace function update_contact_last_contacted()
 returns trigger as $$
 begin
-  update contacts
-  set last_contacted_at = greatest(coalesce(last_contacted_at, NEW.interacted_at), NEW.interacted_at)
-  where id = NEW.contact_id;
-  return NEW;
+  if TG_OP = 'INSERT' then
+    update contacts
+    set last_contacted_at = greatest(coalesce(last_contacted_at, NEW.interacted_at), NEW.interacted_at)
+    where id = NEW.contact_id;
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    update contacts
+    set last_contacted_at = (
+      select max(interacted_at) from contact_interactions where contact_id = OLD.contact_id
+    )
+    where id = OLD.contact_id;
+    return OLD;
+  end if;
+  return null;
 end;
 $$ language plpgsql;
 
 create trigger contact_interactions_update_last_contacted
-  after insert on contact_interactions
+  after insert or delete on contact_interactions
   for each row execute function update_contact_last_contacted();
 
 alter table contact_interactions enable row level security;

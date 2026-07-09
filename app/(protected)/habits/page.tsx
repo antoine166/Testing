@@ -115,7 +115,7 @@ export default function HabitsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this habit? Its log history will be deleted too.")) return;
+    if (!confirm("Move this habit to trash? You can restore it, with its log history, within 30 days.")) return;
 
     const res = await fetch(`/api/habits/${id}`, { method: "DELETE" });
 

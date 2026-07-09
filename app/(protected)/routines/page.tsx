@@ -88,7 +88,7 @@ export default function RoutinesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this routine and all its steps?")) return;
+    if (!confirm("Move this routine to trash? You can restore it, with its steps, within 30 days.")) return;
 
     const res = await fetch(`/api/routines/${id}`, { method: "DELETE" });
 

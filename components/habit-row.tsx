@@ -1,19 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { computeStreak, type Habit as StreakHabit } from "@/lib/habits/streaks";
+import {
+  computeStreak,
+  type Habit as StreakHabit,
+  type HabitFrequency,
+} from "@/lib/habits/streaks";
 import ColorPicker from "@/components/color-picker";
 
-export type HabitFrequency = "daily" | "specific_days" | "times_per_week";
+export type { HabitFrequency };
 
-export type Habit = {
+export type Habit = StreakHabit & {
   id: string;
   name: string;
   color: string;
   icon: string | null;
-  frequency: HabitFrequency;
-  frequency_days: number[] | null;
-  target_count: number | null;
   active: boolean;
 };
 
@@ -111,7 +112,7 @@ export default function HabitRow({
   const [targetCount, setTargetCount] = useState(habit.target_count ?? 3);
 
   const loggedToday = logs.some((l) => l.logged_date === today);
-  const { current, longest } = computeStreak(habit as StreakHabit, logs, today);
+  const { current, longest } = computeStreak(habit, logs, today);
 
   function startEdit() {
     setName(habit.name);

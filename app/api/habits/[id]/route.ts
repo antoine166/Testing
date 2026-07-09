@@ -15,6 +15,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     .from("habits")
     .select("*")
     .eq("id", id)
+    .is("deleted_at", null)
     .single();
 
   if (error) {
@@ -51,8 +52,15 @@ export async function PUT(request: Request, { params }: RouteParams) {
       : null;
   }
   if ("target_count" in body) {
-    updates.target_count =
+    const targetCount =
       typeof body.target_count === "number" ? body.target_count : null;
+    if (targetCount !== null && (!Number.isInteger(targetCount) || targetCount < 1)) {
+      return NextResponse.json(
+        { error: "target_count must be a positive integer" },
+        { status: 400 },
+      );
+    }
+    updates.target_count = targetCount;
   }
   if (typeof body.active === "boolean") updates.active = body.active;
 
@@ -78,7 +86,10 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { error } = await supabase.from("habits").delete().eq("id", id);
+  const { error } = await supabase
+    .from("habits")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

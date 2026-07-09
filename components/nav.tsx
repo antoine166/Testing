@@ -17,6 +17,7 @@ const LINKS = [
   { href: "/library", label: "Library" },
   { href: "/coach", label: "Coach" },
   { href: "/contacts", label: "Contacts" },
+  { href: "/trash", label: "Trash" },
   { href: "/settings", label: "Settings" },
 ];
 

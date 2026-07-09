@@ -3,16 +3,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import KnowledgeItemRow, {
   KNOWLEDGE_TYPES,
+  parseTags,
   type KnowledgeItem,
   type KnowledgeType,
 } from "@/components/knowledge-item-row";
-
-function parseTags(input: string): string[] {
-  return input
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
-}
 
 export default function LibraryPage() {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
@@ -105,7 +99,7 @@ export default function LibraryPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this item?")) return;
+    if (!confirm("Move this item to trash? You can restore it within 30 days.")) return;
 
     const res = await fetch(`/api/knowledge-items/${id}`, { method: "DELETE" });
 
