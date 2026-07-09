@@ -61,6 +61,12 @@ export default async function Home() {
           >
             Library
           </Link>
+          <Link
+            href="/coach"
+            className="text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
+          >
+            Coach
+          </Link>
           <form action={logout}>
             <button
               type="submit"
