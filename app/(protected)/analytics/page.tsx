@@ -1,0 +1,222 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { computeStreak, type Habit as StreakHabit } from "@/lib/habits/streaks";
+import { todayLocal, lastNDays } from "@/lib/date";
+
+type HabitFrequency = "daily" | "specific_days" | "times_per_week";
+
+type Habit = {
+  id: string;
+  name: string;
+  color: string;
+  frequency: HabitFrequency;
+  frequency_days: number[] | null;
+  target_count: number | null;
+  active: boolean;
+};
+
+type HabitLogRow = { id: string; habit_id: string; logged_date: string };
+
+type Task = {
+  id: string;
+  status: "todo" | "in_progress" | "done";
+  completed_at: string | null;
+};
+
+type Checkin = {
+  date: string;
+  energy_level: number;
+  focus_level: number;
+};
+
+const WINDOW_DAYS = 28;
+
+function isRequiredDay(habit: Habit, dateStr: string): boolean {
+  if (habit.frequency === "daily") return true;
+  if (habit.frequency === "times_per_week") return true; // approximate below
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const day = new Date(y, m - 1, d).getDay();
+  return (habit.frequency_days ?? []).includes(day);
+}
+
+export default function AnalyticsPage() {
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [logs, setLogs] = useState<HabitLogRow[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [checkins, setCheckins] = useState<Checkin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const today = todayLocal();
+  const days = lastNDays(WINDOW_DAYS);
+  const last7 = lastNDays(7);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const opts = { signal: controller.signal };
+
+    Promise.all([
+      fetch("/api/habits", opts),
+      fetch("/api/habit-logs", opts),
+      fetch("/api/tasks", opts),
+      fetch("/api/checkins", opts),
+    ])
+      .then(async ([habitsRes, logsRes, tasksRes, checkinsRes]) => {
+        if (!habitsRes.ok || !logsRes.ok || !tasksRes.ok || !checkinsRes.ok) {
+          throw new Error("Failed to load analytics");
+        }
+        return Promise.all([
+          habitsRes.json(),
+          logsRes.json(),
+          tasksRes.json(),
+          checkinsRes.json(),
+        ]);
+      })
+      .then(([habitsData, logsData, tasksData, checkinsData]) => {
+        setHabits(habitsData);
+        setLogs(logsData);
+        setTasks(tasksData);
+        setCheckins(checkinsData);
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      })
+      .finally(() => setLoading(false));
+
+    return () => controller.abort();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
+        <p className="text-sm text-zinc-500">Loading...</p>
+      </div>
+    );
+  }
+
+  const tasksCompletedThisWeek = tasks.filter(
+    (t) => t.completed_at && last7.includes(t.completed_at.slice(0, 10)),
+  ).length;
+
+  const checkinsThisWeek = checkins.filter((c) => last7.includes(c.date));
+  const avgEnergy = checkinsThisWeek.length
+    ? (
+        checkinsThisWeek.reduce((sum, c) => sum + c.energy_level, 0) /
+        checkinsThisWeek.length
+      ).toFixed(1)
+    : null;
+  const avgFocus = checkinsThisWeek.length
+    ? (
+        checkinsThisWeek.reduce((sum, c) => sum + c.focus_level, 0) /
+        checkinsThisWeek.length
+      ).toFixed(1)
+    : null;
+
+  return (
+    <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
+      <h1 className="mb-6 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+        Analytics
+      </h1>
+
+      {error && (
+        <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+          {error}
+        </p>
+      )}
+
+      <div className="mb-8 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          This week
+        </h2>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div>
+            <p className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+              {tasksCompletedThisWeek}
+            </p>
+            <p className="text-xs text-zinc-500">tasks done</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+              {checkinsThisWeek.length}/7
+            </p>
+            <p className="text-xs text-zinc-500">days checked in</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+              {avgEnergy ?? "—"} / {avgFocus ?? "—"}
+            </p>
+            <p className="text-xs text-zinc-500">avg energy / focus</p>
+          </div>
+        </div>
+      </div>
+
+      <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        Habit consistency (last {WINDOW_DAYS} days)
+      </h2>
+
+      {habits.filter((h) => h.active).length === 0 ? (
+        <p className="text-sm text-zinc-500">No active habits yet.</p>
+      ) : (
+        <ul className="space-y-4">
+          {habits
+            .filter((h) => h.active)
+            .map((habit) => {
+              const habitLogs = logs.filter((l) => l.habit_id === habit.id);
+              const loggedDates = new Set(habitLogs.map((l) => l.logged_date));
+              const { current, longest } = computeStreak(
+                habit as StreakHabit,
+                habitLogs,
+                today,
+              );
+
+              const requiredDays = days.filter((d) => isRequiredDay(habit, d));
+              const loggedRequiredDays = requiredDays.filter((d) => loggedDates.has(d));
+              const denominator =
+                habit.frequency === "times_per_week"
+                  ? (habit.target_count ?? 1) * (WINDOW_DAYS / 7)
+                  : requiredDays.length;
+              const rate = denominator
+                ? Math.round((loggedRequiredDays.length / denominator) * 100)
+                : 0;
+
+              return (
+                <li
+                  key={habit.id}
+                  className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+                >
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-full"
+                        style={{ backgroundColor: habit.color }}
+                      />
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {habit.name}
+                      </p>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      {rate}% · streak {current} · best {longest}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {days.map((d) => (
+                      <div
+                        key={d}
+                        title={d}
+                        className={`h-4 w-4 rounded-sm sm:h-5 sm:w-5 ${
+                          loggedDates.has(d) ? "" : "bg-zinc-100 dark:bg-zinc-900"
+                        }`}
+                        style={loggedDates.has(d) ? { backgroundColor: habit.color } : undefined}
+                      />
+                    ))}
+                  </div>
+                </li>
+              );
+            })}
+        </ul>
+      )}
+    </div>
+  );
+}

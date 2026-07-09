@@ -9,13 +9,28 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const date = searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+  const date = searchParams.get("date");
 
+  if (date) {
+    const { data, error } = await supabase
+      .from("daily_checkins")
+      .select("*")
+      .eq("date", date)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json(data);
+  }
+
+  // No date param: return recent history (used by the analytics view).
   const { data, error } = await supabase
     .from("daily_checkins")
     .select("*")
-    .eq("date", date)
-    .maybeSingle();
+    .order("date", { ascending: false })
+    .limit(60);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
