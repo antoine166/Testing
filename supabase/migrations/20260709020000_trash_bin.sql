@@ -144,10 +144,12 @@ $$ language plpgsql;
 -- ============================================================
 -- scheduled purge — requires the pg_cron extension. Enable it first from
 -- the Supabase dashboard: Database -> Extensions -> search "pg_cron" ->
--- Enable. Running this migration before enabling the extension will fail
--- on the `create extension` line below.
+-- Enable (Supabase installs it into pg_catalog; that's expected). Running
+-- this migration before enabling the extension will fail on the
+-- `create extension` line below. No schema is specified here so this
+-- matches wherever the dashboard already put it.
 -- ============================================================
-create extension if not exists pg_cron with schema extensions;
+create extension if not exists pg_cron;
 
 create or replace function purge_trash()
 returns void as $$
