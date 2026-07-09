@@ -41,6 +41,16 @@ The most important feature. Available from everywhere in the app.
 - If a domain is set at capture time, the task is already "processed" and skips the inbox
 - Must be dismissible with `Escape`
 
+### 3.1a Email Capture
+A second frictionless-capture path: forward or send an email, it becomes an inbox task, no app needed.
+
+- Emails sent to a dedicated receiving address are turned into a task: subject → title, body → notes
+- No domain assigned (lands in Inbox, same as Quick Capture with no domain set)
+- Delivered via a Resend inbound webhook (`POST /api/webhooks/resend-inbound`) — Resend parses the incoming email and calls the webhook; the route verifies the request is genuinely from Resend (svix signature) and that the sender is Antoine (`INBOUND_ALLOWED_SENDER` allowlist) before creating anything
+- Uses the Supabase service-role key to insert the task, since there's no logged-in session on an inbound webhook
+- Attachments are not processed — only subject and body text
+- Any email from a non-allowlisted sender is silently dropped (no error surfaced, nothing created)
+
 ### 3.2 Domains
 Top-level buckets for life areas (e.g., Health, Work, Business, Personal, Finance, Learning).
 
