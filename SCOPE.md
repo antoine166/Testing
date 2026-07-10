@@ -48,7 +48,7 @@ A second frictionless-capture path: forward or send an email, it becomes an inbo
 - No domain assigned (lands in Inbox, same as Quick Capture with no domain set)
 - Delivered via a Resend inbound webhook (`POST /api/webhooks/resend-inbound`) — Resend parses the incoming email and calls the webhook; the route verifies the request is genuinely from Resend (svix signature) and that the sender is on the allowlist (`INBOUND_ALLOWED_SENDER`, comma-separated — Antoine forwards from more than one address) before creating anything
 - Uses the Supabase service-role key to insert the task, since there's no logged-in session on an inbound webhook
-- Attachments are not processed — only subject and body text
+- Image attachments on the forwarded email are pulled in too and attached to the created task (see 3.4); non-image attachments are skipped. A single attachment failing to save doesn't fail the task creation — the task is the important part
 - Any email from a non-allowlisted sender is silently dropped (no error surfaced, nothing created)
 
 ### 3.2 Domains
@@ -77,6 +77,7 @@ The atomic unit of work.
 - **Processed task**: once a domain is assigned, the task leaves the inbox — even if it never gets a project. This supports GTD-style standalone "next actions" that live under a domain with no project at all.
 - **Scheduled date**: the date Antoine plans to work on it (drives the Today view)
 - Tasks can exist without a project (standalone / domain-only) as long as a domain is set
+- **Image attachments**: any task can have one or more images attached (uploaded manually, or pulled in automatically from a forwarded email's attachments — see 3.1a). Stored in Supabase Storage, viewed via short-lived signed URLs since the bucket is private
 
 ### 3.5 Today View
 Antoine's daily dashboard.
@@ -245,6 +246,23 @@ completed_at    timestamptz
 created_at      timestamptz default now()
 updated_at      timestamptz default now()
 deleted_at      timestamptz   -- soft delete (Trash, 3.12)
+```
+
+---
+
+### `task_attachments` *(Phase 4)*
+```sql
+id            uuid primary key default gen_random_uuid()
+user_id       uuid references auth.users(id) on delete cascade
+task_id       uuid references tasks(id) on delete cascade
+storage_path  text not null    -- path in the private "task-attachments" Storage bucket
+filename      text not null
+content_type  text
+size          int
+created_at    timestamptz default now()
+-- not independently trashable — goes with its task on purge. Note: this
+-- only removes the metadata row via FK cascade; the underlying Storage
+-- object isn't auto-deleted (see 20260710000000_task_attachments.sql).
 ```
 
 ---
@@ -486,6 +504,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [ ] Habit analytics / weekly review view
 - [ ] Data export
 - [ ] Trash / soft delete with 30-day recovery (3.12)
+- [ ] Task image attachments (3.4), including from forwarded emails (3.1a)
 - [ ] Checklists (3.8a)
 
 ---

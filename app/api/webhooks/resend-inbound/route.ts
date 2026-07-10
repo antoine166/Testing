@@ -85,15 +85,64 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No account exists to own this task" }, { status: 500 });
   }
 
-  const { error: insertError } = await admin.from("tasks").insert({
-    user_id: owner.id,
-    title,
-    notes,
-  });
+  const { data: task, error: insertError } = await admin
+    .from("tasks")
+    .insert({ user_id: owner.id, title, notes })
+    .select()
+    .single();
 
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
+  await attachImages(resend, admin, event.data.email_id, owner.id, task.id, email.attachments);
+
   return new NextResponse(null, { status: 200 });
+}
+
+type EmailAttachment = { id: string; filename: string | null; content_type: string };
+
+// Best-effort: image attachments failing to save shouldn't fail the whole
+// webhook, since the task itself (the important part) is already created.
+async function attachImages(
+  resend: Resend,
+  admin: ReturnType<typeof createAdminClient>,
+  emailId: string,
+  userId: string,
+  taskId: string,
+  attachments: EmailAttachment[],
+) {
+  const images = attachments.filter((a) => a.content_type?.startsWith("image/"));
+
+  for (const attachment of images) {
+    try {
+      const { data: full } = await resend.emails.receiving.attachments.get({
+        emailId,
+        id: attachment.id,
+      });
+      if (!full?.download_url) continue;
+
+      const fileRes = await fetch(full.download_url);
+      if (!fileRes.ok) continue;
+      const bytes = await fileRes.arrayBuffer();
+
+      const filename = attachment.filename || `image-${attachment.id}`;
+      const storagePath = `${userId}/${taskId}/${crypto.randomUUID()}-${filename}`;
+      const { error: uploadError } = await admin.storage
+        .from("task-attachments")
+        .upload(storagePath, bytes, { contentType: attachment.content_type });
+      if (uploadError) continue;
+
+      await admin.from("task_attachments").insert({
+        user_id: userId,
+        task_id: taskId,
+        storage_path: storagePath,
+        filename,
+        content_type: attachment.content_type,
+        size: bytes.byteLength,
+      });
+    } catch {
+      // Skip this attachment, keep processing the rest.
+    }
+  }
 }

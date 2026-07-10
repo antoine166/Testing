@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -20,8 +20,95 @@ export type Task = {
 export type TaskDomain = { id: string; name: string; color: string };
 export type TaskProject = { id: string; name: string };
 
+type Attachment = {
+  id: string;
+  filename: string;
+  content_type: string | null;
+  url: string | null;
+};
+
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 const STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
+
+function AttachmentStrip({ taskId }: { taskId: string }) {
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+
+  async function loadAttachments() {
+    const res = await fetch(`/api/tasks/${taskId}/attachments`);
+    if (res.ok) setAttachments(await res.json());
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/tasks/${taskId}/attachments`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
+      .then((data: Attachment[]) => setAttachments(data))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [taskId]);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    await fetch(`/api/tasks/${taskId}/attachments`, { method: "POST", body: formData });
+    setUploading(false);
+    await loadAttachments();
+  }
+
+  async function handleDelete(id: string) {
+    await fetch(`/api/task-attachments/${id}`, { method: "DELETE" });
+    await loadAttachments();
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      {attachments.map((a) => (
+        <div key={a.id} className="group relative h-14 w-14 shrink-0">
+          {a.url ? (
+            <a href={a.url} target="_blank" rel="noopener noreferrer">
+              <img
+                src={a.url}
+                alt={a.filename}
+                className="h-14 w-14 rounded-md object-cover"
+              />
+            </a>
+          ) : (
+            <div className="h-14 w-14 rounded-md bg-zinc-100 dark:bg-zinc-900" />
+          )}
+          <button
+            onClick={() => handleDelete(a.id)}
+            aria-label={`Remove ${a.filename}`}
+            className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950 text-xs text-white group-hover:flex dark:bg-zinc-50 dark:text-zinc-950"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <label className="flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 text-xs text-zinc-500 hover:border-zinc-400 dark:border-zinc-700">
+        {uploading ? "..." : "+ image"}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleUpload}
+          disabled={uploading}
+          className="hidden"
+        />
+      </label>
+    </div>
+  );
+}
 
 export default function TaskRow({
   task,
@@ -173,6 +260,7 @@ export default function TaskRow({
               Cancel
             </button>
           </div>
+          <AttachmentStrip taskId={task.id} />
         </div>
       </li>
     );
@@ -203,6 +291,7 @@ export default function TaskRow({
             {task.due_date ? ` · due ${task.due_date}` : ""}
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
           </p>
+          <AttachmentStrip taskId={task.id} />
         </div>
       </div>
       <div className="flex shrink-0 gap-3">
