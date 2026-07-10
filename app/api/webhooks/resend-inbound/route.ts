@@ -67,15 +67,18 @@ export async function POST(request: Request) {
   const body = email.text || (email.html ? stripHtml(email.html) : "");
   const notes = body.slice(0, MAX_NOTES_LENGTH) || undefined;
 
+  // Single-user app — the email allowed to trigger this (INBOUND_ALLOWED_SENDER)
+  // doesn't have to be the same address the account was created with, so this
+  // targets whichever account exists rather than searching for an email match.
   const admin = createAdminClient();
   const { data: users, error: usersError } = await admin.auth.admin.listUsers();
   if (usersError) {
     return NextResponse.json({ error: usersError.message }, { status: 500 });
   }
 
-  const owner = users.users.find((u) => u.email?.toLowerCase() === allowedSender);
+  const owner = users.users[0];
   if (!owner) {
-    return NextResponse.json({ error: "No matching account for sender" }, { status: 500 });
+    return NextResponse.json({ error: "No account exists to own this task" }, { status: 500 });
   }
 
   const { error: insertError } = await admin.from("tasks").insert({
