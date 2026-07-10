@@ -49,9 +49,13 @@ export async function POST(request: Request) {
     return new NextResponse(null, { status: 200 });
   }
 
-  const allowedSender = process.env.INBOUND_ALLOWED_SENDER?.toLowerCase().trim();
+  const allowedSenders = (process.env.INBOUND_ALLOWED_SENDER ?? "")
+    .toLowerCase()
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const sender = extractEmail(event.data.from);
-  if (!allowedSender || sender !== allowedSender) {
+  if (allowedSenders.length === 0 || !allowedSenders.includes(sender)) {
     // Quietly no-op rather than 403 — don't give away why it failed.
     return new NextResponse(null, { status: 200 });
   }

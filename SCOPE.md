@@ -46,7 +46,7 @@ A second frictionless-capture path: forward or send an email, it becomes an inbo
 
 - Emails sent to a dedicated receiving address are turned into a task: subject → title, body → notes
 - No domain assigned (lands in Inbox, same as Quick Capture with no domain set)
-- Delivered via a Resend inbound webhook (`POST /api/webhooks/resend-inbound`) — Resend parses the incoming email and calls the webhook; the route verifies the request is genuinely from Resend (svix signature) and that the sender is Antoine (`INBOUND_ALLOWED_SENDER` allowlist) before creating anything
+- Delivered via a Resend inbound webhook (`POST /api/webhooks/resend-inbound`) — Resend parses the incoming email and calls the webhook; the route verifies the request is genuinely from Resend (svix signature) and that the sender is on the allowlist (`INBOUND_ALLOWED_SENDER`, comma-separated — Antoine forwards from more than one address) before creating anything
 - Uses the Supabase service-role key to insert the task, since there's no logged-in session on an inbound webhook
 - Attachments are not processed — only subject and body text
 - Any email from a non-allowlisted sender is silently dropped (no error surfaced, nothing created)
