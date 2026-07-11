@@ -18,6 +18,7 @@ export default function TasksPage() {
   const searchParams = useSearchParams();
   const domainFilter = searchParams.get("domain");
   const projectFilter = searchParams.get("project");
+  const searchQuery = searchParams.get("q");
 
   const [domains, setDomains] = useState<TaskDomain[]>([]);
   const [projects, setProjects] = useState<ProjectWithDomain[]>([]);
@@ -199,14 +200,18 @@ export default function TasksPage() {
   const inboxTasks = tasks.filter((t) => !t.domain_id);
   const processedTasks = tasks.filter((t) => t.domain_id);
 
-  const filteredTasks = domainFilter
-    ? tasks.filter((t) => t.domain_id === domainFilter)
-    : projectFilter
-      ? tasks.filter((t) => t.project_id === projectFilter)
-      : null;
-  const filterLabel = domainFilter
-    ? (domains.find((d) => d.id === domainFilter)?.name ?? "this domain")
-    : (projects.find((p) => p.id === projectFilter)?.name ?? "this project");
+  const filteredTasks = searchQuery
+    ? tasks.filter((t) => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : domainFilter
+      ? tasks.filter((t) => t.domain_id === domainFilter)
+      : projectFilter
+        ? tasks.filter((t) => t.project_id === projectFilter)
+        : null;
+  const filterLabel = searchQuery
+    ? `"${searchQuery}"`
+    : domainFilter
+      ? (domains.find((d) => d.id === domainFilter)?.name ?? "this domain")
+      : (projects.find((p) => p.id === projectFilter)?.name ?? "this project");
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-10">
@@ -220,9 +225,9 @@ export default function TasksPage() {
         </p>
       )}
 
-      {(domainFilter || projectFilter) && (
+      {(searchQuery || domainFilter || projectFilter) && (
         <p className="mb-4 text-sm text-zinc-500">
-          Showing tasks in{" "}
+          {searchQuery ? "Showing tasks matching" : "Showing tasks in"}{" "}
           <strong className="text-zinc-900 dark:text-zinc-100">{filterLabel}</strong>
           {" — "}
           <Link href="/tasks" className="underline hover:text-zinc-950 dark:hover:text-zinc-50">

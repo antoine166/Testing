@@ -34,7 +34,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 
   const body = await request.json();
-  const updates: Record<string, string | null> = {};
+  const updates: Record<string, string | boolean | null> = {};
 
   if (typeof body.title === "string") {
     const title = body.title.trim();
@@ -61,6 +61,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("scheduled_date" in body) {
     updates.scheduled_date =
       typeof body.scheduled_date === "string" ? body.scheduled_date : null;
+  }
+  if (typeof body.someday === "boolean") {
+    updates.someday = body.someday;
   }
   if (typeof body.status === "string") {
     const { data: existing } = await supabase

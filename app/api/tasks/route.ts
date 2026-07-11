@@ -48,6 +48,7 @@ export async function POST(request: Request) {
       due_date: typeof body.due_date === "string" ? body.due_date : undefined,
       scheduled_date:
         typeof body.scheduled_date === "string" ? body.scheduled_date : undefined,
+      someday: typeof body.someday === "boolean" ? body.someday : undefined,
     })
     .select()
     .single();

@@ -72,15 +72,17 @@ A project belongs to one domain and contains tasks.
 ### 3.4 Tasks
 The atomic unit of work.
 
-- Fields: title, notes, project (optional), domain (optional), priority, due date, scheduled date, status
+- Fields: title, notes, project (optional), domain (optional), priority, due date, scheduled date, someday flag, status
 - Statuses: `todo` | `in_progress` | `done`
 - Priority: `none` | `low` | `medium` | `high`
 - **Inbox** (GTD-style, after David Allen): a task is an inbox item when it has **no domain assigned** — i.e. it hasn't been clarified/processed yet. This is independent of whether it has a project.
 - **Processed task**: once a domain is assigned, the task leaves the inbox — even if it never gets a project. This supports GTD-style standalone "next actions" that live under a domain with no project at all.
 - **Scheduled date**: the date Antoine plans to work on it (drives the Today view)
+- **Someday** (`tasks.someday`, boolean): Things-3-style deferred/backlog flag, set from the task's edit form. Orthogonal to domain filing — a task can be under a domain and still be Someday. A someday task is excluded from Inbox and Anytime so it doesn't clutter either
 - Tasks can exist without a project (standalone / domain-only) as long as a domain is set
 - **Image attachments**: any task can have one or more images attached (uploaded manually, or pulled in automatically from a forwarded email's attachments — see 3.1a). Stored in Supabase Storage, viewed via short-lived signed URLs since the bucket is private
 - **Bulk filing**: the Inbox section on the Tasks page has a "Select" mode — check multiple unprocessed tasks and assign them all to one domain in a single action, instead of opening each one individually
+- **Smart-list views** (Things-3-style, see §4 for the sidebar): `/inbox`, `/upcoming`, `/anytime`, `/someday`, `/logbook` each render a filtered slice of the same `tasks` table — no separate storage, just different queries over the fields above. `/tasks` remains as a full by-domain browse view and also supports `?q=` title search from the sidebar's Quick Find
 
 ### 3.5 Today View
 Antoine's daily dashboard.
@@ -172,25 +174,33 @@ Soft delete with a 30-day recovery window, so an accidental delete is never perm
 
 ## 4. Navigation (Sidebar)
 
+Things-3-inspired: a left sidebar (`components/sidebar-nav.tsx`) instead of a top nav bar, collapsible to a slide-over on mobile. Structure:
+
 ```
-⚡ Quick Capture         ← always visible / floating button
+Life OS
+🔍 Quick Find             ← searches task titles, jumps to /tasks?q=
 ─────────────────────
-📥 Inbox                 ← unprocessed captures
-📅 Today                 ← daily dashboard
+📥 Inbox        (blue)    ← unprocessed: no domain, not someday, not done
+★  Today        (yellow)  ← the daily dashboard (check-in/habits/scheduled/overdue), at "/"
+📅 Upcoming     (red)     ← scheduled_date in the future, grouped by date
+📚 Anytime      (teal)    ← has a domain, no date, not someday — actionable whenever
+📦 Someday      (amber)   ← tasks explicitly marked "Someday" from the task edit form
+✓  Logbook      (green)   ← completed tasks, grouped by month
 ─────────────────────
-🗂  Projects             ← grouped by domain
-✅ Tasks                 ← all tasks, filterable
+[Domain color] Domain name         ← one group per domain ("Areas", Things-style)
+  Project name                     ← nested, links to /tasks?project=
+  Project name
++ New List                         ← links to /domains
 ─────────────────────
-🔁 Habits
-📋 Routines              (Phase 2)
-☑️  Checklists            (Phase 4)
+Habits · Routines · Checklists · Check-in · Library · Coach · Analytics · Trash · Settings
 ─────────────────────
-📚 Library               (Phase 2)
-🤖 Coach                 (Phase 2)
-─────────────────────
-🗑  Trash                 (Phase 4)
-⚙️  Settings
+user@email · Log out
 ```
+
+- Only Inbox and Today show a count badge, matching Things
+- The Inbox/Upcoming/Anytime/Someday/Logbook views and the `someday` flag are covered in §3.4 (Tasks)
+- Quick Capture stays a floating "+" button (`components/quick-capture.tsx`), unaffected by this — frictionless capture doesn't touch navigation
+- Domains/Projects, Habits, Routines, Checklists, Library, Coach, Analytics, Check-in, Trash, and Settings all keep their existing internal page designs for now — this redesign covers the navigation shell and the Tasks views, not every page's visual style
 
 ---
 

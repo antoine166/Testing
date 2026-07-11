@@ -15,6 +15,8 @@ export type Task = {
   priority: TaskPriority;
   due_date: string | null;
   scheduled_date: string | null;
+  someday: boolean;
+  completed_at?: string | null;
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
@@ -162,6 +164,7 @@ export default function TaskRow({
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
   const [scheduledDate, setScheduledDate] = useState(task.scheduled_date ?? "");
+  const [someday, setSomeday] = useState(task.someday);
 
   function startEdit() {
     setTitle(task.title);
@@ -172,6 +175,7 @@ export default function TaskRow({
     setPriority(task.priority);
     setDueDate(task.due_date ?? "");
     setScheduledDate(task.scheduled_date ?? "");
+    setSomeday(task.someday);
     setEditing(true);
   }
 
@@ -186,6 +190,7 @@ export default function TaskRow({
       priority,
       due_date: dueDate || null,
       scheduled_date: scheduledDate || null,
+      someday,
     });
     setEditing(false);
   }
@@ -275,6 +280,14 @@ export default function TaskRow({
                 className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
             </label>
+            <label className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <input
+                type="checkbox"
+                checked={someday}
+                onChange={(e) => setSomeday(e.target.checked)}
+              />
+              Someday
+            </label>
             <button
               onClick={handleSave}
               className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
@@ -306,12 +319,31 @@ export default function TaskRow({
             className="mt-1"
           />
         )}
-        <input
-          type="checkbox"
-          checked={task.status === "done"}
-          onChange={() => onToggleDone(task)}
-          className="mt-1"
-        />
+        <button
+          type="button"
+          onClick={() => onToggleDone(task)}
+          aria-pressed={task.status === "done"}
+          aria-label={task.status === "done" ? "Mark not done" : "Mark done"}
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+            task.status === "done"
+              ? "border-blue-500 bg-blue-500 text-white"
+              : "border-zinc-300 hover:border-blue-400 dark:border-zinc-600"
+          }`}
+        >
+          {task.status === "done" && (
+            <svg
+              viewBox="0 0 12 12"
+              className="h-3 w-3"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M2 6l3 3 5-6" />
+            </svg>
+          )}
+        </button>
         <div>
           <p
             className={`text-sm font-medium text-zinc-900 dark:text-zinc-100 ${
@@ -327,6 +359,7 @@ export default function TaskRow({
             {project ? ` · ${project.name}` : ""}
             {task.due_date ? ` · due ${task.due_date}` : ""}
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
+            {task.someday ? " · someday" : ""}
           </p>
           <AttachmentStrip taskId={task.id} />
         </div>
