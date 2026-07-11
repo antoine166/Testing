@@ -12,13 +12,15 @@ import TaskRow, {
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
+type ProjectWithDomain = TaskProject & { domain_id: string | null };
+
 export default function TasksPage() {
   const searchParams = useSearchParams();
   const domainFilter = searchParams.get("domain");
   const projectFilter = searchParams.get("project");
 
   const [domains, setDomains] = useState<TaskDomain[]>([]);
-  const [projects, setProjects] = useState<TaskProject[]>([]);
+  const [projects, setProjects] = useState<ProjectWithDomain[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -469,24 +471,108 @@ export default function TasksPage() {
 
           <div>
             <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              Tasks {processedTasks.length > 0 && `(${processedTasks.length})`}
+              By domain {processedTasks.length > 0 && `(${processedTasks.length})`}
             </h2>
-            {processedTasks.length === 0 ? (
-              <p className="text-sm text-zinc-500">No processed tasks yet.</p>
+            {domains.length === 0 ? (
+              <p className="text-sm text-zinc-500">
+                No domains yet —{" "}
+                <Link href="/domains" className="underline hover:text-zinc-950 dark:hover:text-zinc-50">
+                  create one
+                </Link>{" "}
+                to start organizing tasks.
+              </p>
             ) : (
-              <ul className="space-y-2">
-                {processedTasks.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    domains={domains}
-                    projects={projects}
-                    onToggleDone={toggleDone}
-                    onUpdate={handleUpdate}
-                    onDelete={handleDelete}
-                  />
-                ))}
-              </ul>
+              <div className="space-y-6">
+                {domains.map((domain) => {
+                  const domainProjects = projects.filter((p) => p.domain_id === domain.id);
+                  const domainTasks = processedTasks.filter((t) => t.domain_id === domain.id);
+                  const unfiledDomainTasks = domainTasks.filter((t) => !t.project_id);
+
+                  return (
+                    <div key={domain.id}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span
+                          className="h-3.5 w-3.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: domain.color }}
+                        />
+                        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                          {domain.name}
+                        </h3>
+                        {domainTasks.length > 0 && (
+                          <span className="text-xs text-zinc-500">({domainTasks.length})</span>
+                        )}
+                        <Link
+                          href={`/tasks?domain=${domain.id}`}
+                          className="ml-auto text-xs font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                        >
+                          View all
+                        </Link>
+                      </div>
+
+                      {domainProjects.length === 0 && domainTasks.length === 0 ? (
+                        <p className="ml-[1.375rem] text-sm text-zinc-500">
+                          No projects or tasks yet.
+                        </p>
+                      ) : (
+                        <div className="ml-[1.375rem] space-y-4">
+                          {domainProjects.map((project) => {
+                            const projectTasks = domainTasks.filter(
+                              (t) => t.project_id === project.id,
+                            );
+                            return (
+                              <div key={project.id}>
+                                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                  {project.name}
+                                </p>
+                                {projectTasks.length === 0 ? (
+                                  <p className="text-sm text-zinc-500">No tasks yet.</p>
+                                ) : (
+                                  <ul className="space-y-2">
+                                    {projectTasks.map((task) => (
+                                      <TaskRow
+                                        key={task.id}
+                                        task={task}
+                                        domains={domains}
+                                        projects={projects}
+                                        onToggleDone={toggleDone}
+                                        onUpdate={handleUpdate}
+                                        onDelete={handleDelete}
+                                      />
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {unfiledDomainTasks.length > 0 && (
+                            <div>
+                              {domainProjects.length > 0 && (
+                                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                  No project
+                                </p>
+                              )}
+                              <ul className="space-y-2">
+                                {unfiledDomainTasks.map((task) => (
+                                  <TaskRow
+                                    key={task.id}
+                                    task={task}
+                                    domains={domains}
+                                    projects={projects}
+                                    onToggleDone={toggleDone}
+                                    onUpdate={handleUpdate}
+                                    onDelete={handleDelete}
+                                  />
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
