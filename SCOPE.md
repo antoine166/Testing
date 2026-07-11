@@ -149,8 +149,8 @@ AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claude.ai or in the Claude Desktop app — not just the in-app Coach tab — and have it read and manage his Life OS data.
 
 - Registered in claude.ai as a custom connector (Settings → Connectors → Add custom connector), URL `https://<vercel-domain>/api/mcp`
-- Single-user app, so auth is one shared bearer token (`MCP_ACCESS_TOKEN`) via the connector's "Request headers" config, not a full OAuth flow
-- No user session exists on this route (Claude calls it directly over the internet) — data access goes through the service-role admin client, same as the inbound email webhook
+- claude.ai's connector flow requires real OAuth (it auto-registers itself as a client and won't accept a plain shared token), so `/api/mcp` is its own OAuth 2.1 + PKCE authorization server (`/api/mcp/register`, `/api/mcp/authorize`, `/api/mcp/token`, discovery documents at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`) — gated by Antoine's existing Supabase Auth login, not a separate account system
+- Authorization codes and tokens are stored as SHA-256 hashes (`mcp_oauth_clients`/`mcp_oauth_codes`/`mcp_oauth_tokens`); access tokens last 1 hour, refresh tokens 6 months with rotation on use
 - Broader tool scope than the in-app Coach: full CRUD on tasks and habits (create/update/complete/delete, log/unlog), read-only on domains/projects, read/write on the daily check-in, plus a `get_today_summary` tool for "what should I focus on today" style coaching
 - Domains, projects, routines, checklists, knowledge library, and attachments are not exposed via MCP yet — manage those in the app
 

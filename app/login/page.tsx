@@ -2,12 +2,18 @@ import { redirect } from "next/navigation";
 import { login } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/server";
 
+function safeNext(next: string | undefined): string {
+  // Only allow same-app relative paths — never redirect off-site.
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
+  const destination = safeNext(next);
 
   const supabase = await createClient();
   const {
@@ -15,7 +21,7 @@ export default async function LoginPage({
   } = await supabase.auth.getUser();
 
   if (user) {
-    redirect("/");
+    redirect(destination);
   }
 
   return (
@@ -35,6 +41,7 @@ export default async function LoginPage({
         )}
 
         <form action={login} className="space-y-4">
+          <input type="hidden" name="next" value={destination} />
           <div>
             <label
               htmlFor="email"
