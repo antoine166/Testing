@@ -87,11 +87,16 @@ export async function POST(request: Request) {
 
   const { data: task, error: insertError } = await admin
     .from("tasks")
-    .insert({ user_id: owner.id, title, notes })
+    .insert({ user_id: owner.id, title, notes, source_message_id: event.data.message_id })
     .select()
     .single();
 
   if (insertError) {
+    if (insertError.code === "23505") {
+      // Same Message-ID already created a task — a redelivered webhook or a
+      // duplicate send, not a new email. Nothing more to do.
+      return new NextResponse(null, { status: 200 });
+    }
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 

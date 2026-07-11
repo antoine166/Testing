@@ -50,6 +50,7 @@ A second frictionless-capture path: forward or send an email, it becomes an inbo
 - Uses the Supabase service-role key to insert the task, since there's no logged-in session on an inbound webhook
 - Image attachments on the forwarded email are pulled in too and attached to the created task (see 3.4); non-image attachments are skipped. A single attachment failing to save doesn't fail the task creation — the task is the important part
 - Any email from a non-allowlisted sender is silently dropped (no error surfaced, nothing created)
+- **Dedup**: the task stores the email's Message-ID (`tasks.source_message_id`, unique). If Resend redelivers the same webhook, or the same email otherwise lands twice, the second insert hits the unique constraint and is treated as a no-op instead of creating a duplicate task
 
 ### 3.2 Domains
 Top-level buckets for life areas (e.g., Health, Work, Business, Personal, Finance, Learning).
@@ -78,6 +79,7 @@ The atomic unit of work.
 - **Scheduled date**: the date Antoine plans to work on it (drives the Today view)
 - Tasks can exist without a project (standalone / domain-only) as long as a domain is set
 - **Image attachments**: any task can have one or more images attached (uploaded manually, or pulled in automatically from a forwarded email's attachments — see 3.1a). Stored in Supabase Storage, viewed via short-lived signed URLs since the bucket is private
+- **Bulk filing**: the Inbox section on the Tasks page has a "Select" mode — check multiple unprocessed tasks and assign them all to one domain in a single action, instead of opening each one individually
 
 ### 3.5 Today View
 Antoine's daily dashboard.
@@ -153,6 +155,7 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claud
 - Authorization codes and tokens are stored as SHA-256 hashes (`mcp_oauth_clients`/`mcp_oauth_codes`/`mcp_oauth_tokens`); access tokens last 1 hour, refresh tokens 6 months with rotation on use
 - Broader tool scope than the in-app Coach: full CRUD on tasks and habits (create/update/complete/delete, log/unlog), read-only on domains/projects, read/write on the daily check-in, plus a `get_today_summary` tool for "what should I focus on today" style coaching
 - Domains, projects, routines, checklists, knowledge library, and attachments are not exposed via MCP yet — manage those in the app
+- **Proactive daily digest**: a scheduled Claude Routine (external to this codebase — configured on the Claude platform, not a Vercel cron) fires daily at 12:00 UTC (8am Eastern, will drift an hour across DST since the cron itself has no timezone), calls `get_today_summary` over this same connector, and pushes Antoine a short coaching nudge — habits not yet logged, anything overdue, one thing to prioritize. Reconfigured directly on the Claude platform if the time or content needs to change, not in this repo
 
 ### 3.12 Trash *(Phase 4)*
 Soft delete with a 30-day recovery window, so an accidental delete is never permanent by mistake.

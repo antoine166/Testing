@@ -31,6 +31,11 @@ export default function TasksPage() {
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
 
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDomainId, setBulkDomainId] = useState("");
+  const [bulkFiling, setBulkFiling] = useState(false);
+
   async function loadAll() {
     try {
       const [domainsRes, projectsRes, tasksRes] = await Promise.all([
@@ -146,6 +151,46 @@ export default function TasksPage() {
       return;
     }
 
+    await loadAll();
+  }
+
+  function toggleSelectMode() {
+    setSelectMode((v) => !v);
+    setSelectedIds(new Set());
+    setBulkDomainId("");
+  }
+
+  function toggleSelected(id: string, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  async function handleBulkFile() {
+    if (!bulkDomainId || selectedIds.size === 0) return;
+
+    setBulkFiling(true);
+    const results = await Promise.all(
+      [...selectedIds].map((id) =>
+        fetch(`/api/tasks/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain_id: bulkDomainId }),
+        }),
+      ),
+    );
+    setBulkFiling(false);
+
+    if (results.some((res) => !res.ok)) {
+      setError("Some tasks couldn't be filed — try again.");
+    }
+
+    setSelectedIds(new Set());
+    setBulkDomainId("");
+    setSelectMode(false);
     await loadAll();
   }
 
@@ -349,9 +394,55 @@ export default function TasksPage() {
       ) : (
         <div className="space-y-8">
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              Inbox {inboxTasks.length > 0 && `(${inboxTasks.length})`}
-            </h2>
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                Inbox {inboxTasks.length > 0 && `(${inboxTasks.length})`}
+              </h2>
+              {inboxTasks.length > 0 && (
+                <button
+                  onClick={toggleSelectMode}
+                  className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                >
+                  {selectMode ? "Cancel" : "Select"}
+                </button>
+              )}
+            </div>
+
+            {selectMode && (
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
+                <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === inboxTasks.length}
+                    onChange={(e) =>
+                      setSelectedIds(e.target.checked ? new Set(inboxTasks.map((t) => t.id)) : new Set())
+                    }
+                  />
+                  Select all
+                </label>
+                <span className="text-sm text-zinc-500">{selectedIds.size} selected</span>
+                <select
+                  value={bulkDomainId}
+                  onChange={(e) => setBulkDomainId(e.target.value)}
+                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="">File to domain...</option>
+                  {domains.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleBulkFile}
+                  disabled={!bulkDomainId || selectedIds.size === 0 || bulkFiling}
+                  className="rounded-md bg-zinc-950 px-3 py-1 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                >
+                  {bulkFiling ? "Filing..." : `File ${selectedIds.size || ""}`}
+                </button>
+              </div>
+            )}
+
             {inboxTasks.length === 0 ? (
               <p className="text-sm text-zinc-500">
                 Nothing unprocessed — inbox is clear.
@@ -367,6 +458,9 @@ export default function TasksPage() {
                     onToggleDone={toggleDone}
                     onUpdate={handleUpdate}
                     onDelete={handleDelete}
+                    selectable={selectMode}
+                    selected={selectedIds.has(task.id)}
+                    onSelectChange={(checked) => toggleSelected(task.id, checked)}
                   />
                 ))}
               </ul>

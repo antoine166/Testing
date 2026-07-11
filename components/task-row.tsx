@@ -117,6 +117,9 @@ export default function TaskRow({
   onToggleDone,
   onUpdate,
   onDelete,
+  selectable = false,
+  selected = false,
+  onSelectChange,
 }: {
   task: Task;
   domains: TaskDomain[];
@@ -124,6 +127,10 @@ export default function TaskRow({
   onToggleDone: (task: Task) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
+  /** Shows a selection checkbox for bulk actions (e.g. filing multiple Inbox tasks at once). */
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectChange?: (checked: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -269,6 +276,15 @@ export default function TaskRow({
   return (
     <li className="flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
       <div className="flex items-start gap-3">
+        {selectable && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => onSelectChange?.(e.target.checked)}
+            aria-label={`Select "${task.title}"`}
+            className="mt-1"
+          />
+        )}
         <input
           type="checkbox"
           checked={task.status === "done"}
