@@ -145,6 +145,15 @@ AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 - Allowed write actions for Phase 2: create task, log habit. No edits/deletes, no project or domain creation, no check-in writes — keep the blast radius small until this is proven out
 - Exact confirmation UX (auto-create vs. confirm-before-write) is a Phase 2 design decision, not finalized here
 
+### 3.11a Claude Connector (MCP) *(Phase 2)*
+A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claude.ai or in the Claude Desktop app — not just the in-app Coach tab — and have it read and manage his Life OS data.
+
+- Registered in claude.ai as a custom connector (Settings → Connectors → Add custom connector), URL `https://<vercel-domain>/api/mcp`
+- Single-user app, so auth is one shared bearer token (`MCP_ACCESS_TOKEN`) via the connector's "Request headers" config, not a full OAuth flow
+- No user session exists on this route (Claude calls it directly over the internet) — data access goes through the service-role admin client, same as the inbound email webhook
+- Broader tool scope than the in-app Coach: full CRUD on tasks and habits (create/update/complete/delete, log/unlog), read-only on domains/projects, read/write on the daily check-in, plus a `get_today_summary` tool for "what should I focus on today" style coaching
+- Domains, projects, routines, checklists, knowledge library, and attachments are not exposed via MCP yet — manage those in the app
+
 ### 3.12 Trash *(Phase 4)*
 Soft delete with a 30-day recovery window, so an accidental delete is never permanent by mistake.
 
@@ -487,7 +496,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Projects CRUD (grouped by domain)
 - [x] Tasks CRUD (with inbox, scheduling, priority)
 - [x] Quick Capture (modal, keyboard shortcut, always accessible)
-- [ ] Today view (check-in prompt + habits + scheduled tasks + overdue)
+- [x] Today view (check-in prompt + habits + scheduled tasks + overdue)
 - [x] Daily capacity check-in
 - [x] Habits list + daily logging
 - [x] Streak counter (current + longest)
@@ -497,6 +506,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [ ] Routines builder + Today view integration
 - [ ] Knowledge library (CRUD + search + tags)
 - [ ] Coach (Anthropic API, read-only context)
+- [ ] Claude Connector (MCP) — remote MCP server for claude.ai / Claude Desktop (3.11a)
 
 ### Phase 4 — Polish
 - [ ] Supabase Realtime (live updates across tabs)
