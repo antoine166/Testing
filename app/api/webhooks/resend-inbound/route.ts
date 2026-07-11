@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sanitizeEmailHtml } from "@/lib/email-html";
 
 const MAX_NOTES_LENGTH = 5000;
 
@@ -71,7 +70,6 @@ export async function POST(request: Request) {
   const title = (event.data.subject || "Untitled").trim().slice(0, 200);
   const body = email.text || (email.html ? stripHtml(email.html) : "");
   const notes = body.slice(0, MAX_NOTES_LENGTH) || undefined;
-  const sourceHtml = email.html ? sanitizeEmailHtml(email.html) : undefined;
 
   // Single-user app — the email allowed to trigger this (INBOUND_ALLOWED_SENDER)
   // doesn't have to be the same address the account was created with, so this
@@ -94,7 +92,6 @@ export async function POST(request: Request) {
       title,
       notes,
       source_message_id: event.data.message_id,
-      source_html: sourceHtml,
     })
     .select()
     .single();

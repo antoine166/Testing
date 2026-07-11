@@ -15,7 +15,6 @@ export type Task = {
   priority: TaskPriority;
   due_date: string | null;
   scheduled_date: string | null;
-  source_html?: string | null;
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
@@ -30,29 +29,6 @@ type Attachment = {
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 const STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
-
-// `html` is sanitized server-side before storage (see lib/email-html.ts) —
-// this renders that pre-sanitized string, never raw HTML from the email.
-function OriginalEmail({ html }: { html: string }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="mt-2">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="text-xs font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-      >
-        {open ? "Hide original email" : "View original email"}
-      </button>
-      {open && (
-        <div
-          className="email-html mt-2 max-h-96 overflow-y-auto rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      )}
-    </div>
-  );
-}
 
 const NOTES_PREVIEW_LENGTH = 200;
 
@@ -353,7 +329,6 @@ export default function TaskRow({
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
           </p>
           <AttachmentStrip taskId={task.id} />
-          {task.source_html && <OriginalEmail html={task.source_html} />}
         </div>
       </div>
       <div className="flex shrink-0 gap-3">
