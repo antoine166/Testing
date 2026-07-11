@@ -51,6 +51,7 @@ A second frictionless-capture path: forward or send an email, it becomes an inbo
 - Image attachments on the forwarded email are pulled in too and attached to the created task (see 3.4); non-image attachments are skipped. A single attachment failing to save doesn't fail the task creation — the task is the important part
 - Any email from a non-allowlisted sender is silently dropped (no error surfaced, nothing created)
 - **Dedup**: the task stores the email's Message-ID (`tasks.source_message_id`, unique). If Resend redelivers the same webhook, or the same email otherwise lands twice, the second insert hits the unique constraint and is treated as a no-op instead of creating a duplicate task
+- **Original formatting**: the email's HTML is sanitized (`lib/email-html.ts`, allowlist-based — scripts/event handlers/`javascript:` links stripped, no inline `style` support) and stored separately (`tasks.source_html`) from the plain-text `notes`. The task row shows a short plain-text preview plus a "View original email" toggle that renders the sanitized HTML, instead of dumping the whole flattened email inline
 
 ### 3.2 Domains
 Top-level buckets for life areas (e.g., Health, Work, Business, Personal, Finance, Learning).

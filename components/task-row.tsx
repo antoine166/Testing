@@ -15,6 +15,7 @@ export type Task = {
   priority: TaskPriority;
   due_date: string | null;
   scheduled_date: string | null;
+  source_html?: string | null;
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
@@ -29,6 +30,29 @@ type Attachment = {
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 const STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
+
+// `html` is sanitized server-side before storage (see lib/email-html.ts) —
+// this renders that pre-sanitized string, never raw HTML from the email.
+function OriginalEmail({ html }: { html: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+      >
+        {open ? "Hide original email" : "View original email"}
+      </button>
+      {open && (
+        <div
+          className="email-html mt-2 max-h-96 overflow-y-auto rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      )}
+    </div>
+  );
+}
 
 function AttachmentStrip({ taskId }: { taskId: string }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -174,6 +198,14 @@ export default function TaskRow({
     : null;
   const domain = task.domain_id ? domains.find((d) => d.id === task.domain_id) : null;
 
+  // Email-captured tasks carry the whole plain-text email in `notes`, which
+  // reads as a wall of text inline — keep the row preview short and let
+  // "View original email" (rendered from source_html) show the rest.
+  const notesPreview =
+    task.notes && task.source_html && task.notes.length > 200
+      ? `${task.notes.slice(0, 200)}…`
+      : task.notes;
+
   if (editing) {
     return (
       <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
@@ -299,7 +331,7 @@ export default function TaskRow({
           >
             {task.title}
           </p>
-          {task.notes && <p className="mt-0.5 text-sm text-zinc-500">{task.notes}</p>}
+          {notesPreview && <p className="mt-0.5 text-sm text-zinc-500">{notesPreview}</p>}
           <p className="mt-1 text-xs text-zinc-500">
             {task.status} · {task.priority} priority
             {domain ? ` · ${domain.name}` : ""}
@@ -308,6 +340,7 @@ export default function TaskRow({
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
           </p>
           <AttachmentStrip taskId={task.id} />
+          {task.source_html && <OriginalEmail html={task.source_html} />}
         </div>
       </div>
       <div className="flex shrink-0 gap-3">
