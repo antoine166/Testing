@@ -54,6 +54,27 @@ function OriginalEmail({ html }: { html: string }) {
   );
 }
 
+const NOTES_PREVIEW_LENGTH = 200;
+
+function NotesText({ notes }: { notes: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = notes.length > NOTES_PREVIEW_LENGTH;
+
+  return (
+    <p className="mt-0.5 text-sm text-zinc-500">
+      {expanded || !isLong ? notes : `${notes.slice(0, NOTES_PREVIEW_LENGTH)}…`}
+      {isLong && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="ml-1 font-medium text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-zinc-50"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </p>
+  );
+}
+
 function AttachmentStrip({ taskId }: { taskId: string }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,14 +219,6 @@ export default function TaskRow({
     : null;
   const domain = task.domain_id ? domains.find((d) => d.id === task.domain_id) : null;
 
-  // Email-captured tasks carry the whole plain-text email in `notes`, which
-  // reads as a wall of text inline — keep the row preview short and let
-  // "View original email" (rendered from source_html) show the rest.
-  const notesPreview =
-    task.notes && task.source_html && task.notes.length > 200
-      ? `${task.notes.slice(0, 200)}…`
-      : task.notes;
-
   if (editing) {
     return (
       <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
@@ -331,7 +344,7 @@ export default function TaskRow({
           >
             {task.title}
           </p>
-          {notesPreview && <p className="mt-0.5 text-sm text-zinc-500">{notesPreview}</p>}
+          {task.notes && <NotesText notes={task.notes} />}
           <p className="mt-1 text-xs text-zinc-500">
             {task.status} · {task.priority} priority
             {domain ? ` · ${domain.name}` : ""}
