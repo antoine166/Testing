@@ -45,6 +45,36 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
   );
 
   server.registerTool(
+    "create_domain",
+    {
+      title: "Create domain",
+      description: "Create a new top-level life domain (e.g. Health, Finance, Business) for organizing tasks and projects.",
+      inputSchema: {
+        name: z.string().min(1),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .optional()
+          .describe("Hex color, e.g. #3b82f6. Omit to use the app's default."),
+        icon: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ name, color, icon }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name is required");
+
+      const { data, error } = await admin
+        .from("domains")
+        .insert({ user_id: userId, name: trimmed, color, icon })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
     "list_projects",
     {
       title: "List projects",
