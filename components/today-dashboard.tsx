@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { todayLocal } from "@/lib/date";
-import { isHabitDueToday } from "@/lib/habits/streaks";
+import { isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
 import LevelPicker from "@/components/level-picker";
 import HabitRow, { type Habit, type HabitLogRow } from "@/components/habit-row";
 import TaskRow, {
@@ -290,7 +290,17 @@ export default function TodayDashboard() {
   const dueRoutines = routines.filter(
     (r) => r.active && (r.time_of_day === currentTimeOfDay() || r.time_of_day === "custom"),
   );
-  const dueHabits = habits.filter((h) => h.active && isHabitDueToday(h, today));
+  const dueHabits = habits
+    .filter((h) => h.active && isHabitDueToday(h, today))
+    .sort((a, b) => {
+      // At-risk habits ("don't break it twice") surface first.
+      const aRisk = isAtRisk(a, logs.filter((l) => l.habit_id === a.id), today);
+      const bRisk = isAtRisk(b, logs.filter((l) => l.habit_id === b.id), today);
+      return aRisk === bRisk ? 0 : aRisk ? -1 : 1;
+    });
+  const atRiskCount = dueHabits.filter((h) =>
+    isAtRisk(h, logs.filter((l) => l.habit_id === h.id), today),
+  ).length;
   const todayTasks = [...tasks]
     .filter((t) => t.scheduled_date === today)
     .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
@@ -365,6 +375,11 @@ export default function TodayDashboard() {
         <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
           Habits today {dueHabits.length > 0 && `(${dueHabits.length})`}
         </h2>
+        {atRiskCount > 0 && (
+          <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-500">
+            ⚠️ {atRiskCount} at risk of breaking a streak twice in a row — do these first
+          </p>
+        )}
         {dueHabits.length === 0 ? (
           <p className="text-sm text-zinc-500">No habits due today.</p>
         ) : (

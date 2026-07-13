@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   computeStreak,
   countThisWeek,
+  isAtRisk,
   type Habit as StreakHabit,
   type HabitFrequency,
 } from "@/lib/habits/streaks";
@@ -122,6 +123,7 @@ export default function HabitRow({
   const weekCount = habit.frequency === "times_per_week" ? countThisWeek(logs, today) : 0;
   const domain = habit.domain_id ? domains.find((d) => d.id === habit.domain_id) : null;
   const displayColor = domain?.color ?? "#d4d4d8";
+  const atRisk = isAtRisk(habit, logs, today);
 
   function startEdit() {
     setName(habit.name);
@@ -205,7 +207,13 @@ export default function HabitRow({
   }
 
   return (
-    <li className="flex items-center gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+    <li
+      className={`flex items-center gap-3 rounded-md border px-4 py-3 ${
+        atRisk
+          ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40"
+          : "border-zinc-200 dark:border-zinc-800"
+      }`}
+    >
       <input
         type="checkbox"
         checked={loggedToday}
@@ -217,6 +225,8 @@ export default function HabitRow({
       />
       <div className="flex-1">
         <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          {current > 0 && !atRisk && "🔥 "}
+          {atRisk && "⚠️ "}
           {habit.name}
         </p>
         <p className="text-xs text-zinc-500">
@@ -234,6 +244,11 @@ export default function HabitRow({
           {longest === 1 ? "" : "s"}
           {domain ? ` · ${domain.name}` : ""}
         </p>
+        {atRisk && (
+          <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-500">
+            Missed last time — don&rsquo;t break it twice
+          </p>
+        )}
       </div>
       <div className="shrink-0">
         <OverflowMenu

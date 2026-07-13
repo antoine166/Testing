@@ -180,3 +180,39 @@ export function computeStreak(
   const loggedDates = new Set(logs.map((l) => l.logged_date));
   return computeDailyStreak(habit, loggedDates, today);
 }
+
+/**
+ * "Don't break it twice" (James Clear): true when the habit already missed
+ * its most recent required occurrence and hasn't been logged today yet —
+ * missing today too would be a second consecutive miss, the point where a
+ * slip turns into a broken habit.
+ */
+export function isAtRisk(habit: Habit, logs: HabitLog[], today: string): boolean {
+  if (logs.some((l) => l.logged_date === today)) return false;
+
+  if (habit.frequency === "times_per_week") {
+    const target = habit.target_count ?? 1;
+    const currentWeekKey = getWeekKey(parseLocalDate(today));
+    const lastWeekKey = getWeekKey(addDays(parseLocalDate(currentWeekKey), -7));
+
+    const countsByWeek = new Map<string, number>();
+    for (const log of logs) {
+      const week = getWeekKey(parseLocalDate(log.logged_date));
+      countsByWeek.set(week, (countsByWeek.get(week) ?? 0) + 1);
+    }
+
+    const lastWeekCount = countsByWeek.get(lastWeekKey) ?? 0;
+    const thisWeekCount = countsByWeek.get(currentWeekKey) ?? 0;
+    return lastWeekCount < target && thisWeekCount < target;
+  }
+
+  const loggedDates = new Set(logs.map((l) => l.logged_date));
+  let cursor = addDays(parseLocalDate(today), -1);
+  for (let i = 0; i < 3650; i++) {
+    if (isRequiredDay(habit, cursor)) {
+      return !loggedDates.has(formatLocalDate(cursor));
+    }
+    cursor = addDays(cursor, -1);
+  }
+  return false;
+}

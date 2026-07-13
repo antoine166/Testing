@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { todayLocal } from "@/lib/date";
-import { computeStreak, isHabitDueToday } from "@/lib/habits/streaks";
+import { computeStreak, isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -331,6 +331,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           logged_today: habitLogs.some((l) => l.logged_date === today),
           current_streak: streak.current,
           longest_streak: streak.longest,
+          // "Don't break it twice" (James Clear): already missed once and not
+          // logged today — missing today too would be a second miss in a row.
+          at_risk: isAtRisk(habit, habitLogs, today),
         };
       });
       return ok(enriched);
@@ -575,10 +578,16 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
 
       const dueHabits = habits
         .filter((h) => isHabitDueToday(h, today))
-        .map((h) => ({
-          ...h,
-          logged_today: logs.some((l) => l.habit_id === h.id && l.logged_date === today),
-        }));
+        .map((h) => {
+          const habitLogs = logs.filter((l) => l.habit_id === h.id);
+          return {
+            ...h,
+            logged_today: habitLogs.some((l) => l.logged_date === today),
+            // "Don't break it twice" (James Clear) — already missed once, so
+            // missing today too would be a second miss in a row.
+            at_risk: isAtRisk(h, habitLogs, today),
+          };
+        });
 
       const tasks = tasksRes.data;
       const scheduledToday = tasks.filter((t) => t.scheduled_date === today);
