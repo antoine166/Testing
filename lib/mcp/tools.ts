@@ -75,6 +75,43 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
   );
 
   server.registerTool(
+    "update_domain",
+    {
+      title: "Update domain",
+      description: "Rename or recolor an existing domain.",
+      inputSchema: {
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .optional()
+          .describe("Hex color, e.g. #3b82f6"),
+        icon: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, name, ...rest }) => {
+      const updates: Record<string, unknown> = { ...rest };
+      if (name !== undefined) {
+        const trimmed = name.trim();
+        if (!trimmed) return fail("Name cannot be empty");
+        updates.name = trimmed;
+      }
+
+      const { data, error } = await admin
+        .from("domains")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
     "list_projects",
     {
       title: "List projects",
@@ -320,10 +357,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .describe("Times per week — only for frequency: times_per_week"),
         color: z.string().optional(),
         icon: z.string().optional(),
+        domain_id: z.string().uuid().optional(),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
-    async ({ name, frequency, frequency_days, target_count, color, icon }) => {
+    async ({ name, frequency, frequency_days, target_count, color, icon, domain_id }) => {
       const trimmed = name.trim();
       if (!trimmed) return fail("Name is required");
 
@@ -337,6 +375,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           target_count: target_count ?? null,
           color,
           icon,
+          domain_id: domain_id ?? null,
         })
         .select()
         .single();
@@ -359,6 +398,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         color: z.string().optional(),
         icon: z.string().optional(),
         active: z.boolean().optional(),
+        domain_id: z.string().uuid().nullable().optional(),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },

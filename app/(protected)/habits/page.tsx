@@ -7,6 +7,7 @@ import HabitRow, {
   FrequencyFields,
   FREQUENCIES,
   type Habit,
+  type HabitDomain,
   type HabitLogRow,
   type HabitFrequency,
 } from "@/components/habit-row";
@@ -14,6 +15,7 @@ import HabitRow, {
 export default function HabitsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLogRow[]>([]);
+  const [domains, setDomains] = useState<HabitDomain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,20 +24,23 @@ export default function HabitsPage() {
   const [frequency, setFrequency] = useState<HabitFrequency>("daily");
   const [frequencyDays, setFrequencyDays] = useState<number[]>([]);
   const [targetCount, setTargetCount] = useState(3);
+  const [domainId, setDomainId] = useState("");
 
   const today = todayLocal();
 
   async function loadAll() {
     try {
-      const [habitsRes, logsRes] = await Promise.all([
+      const [habitsRes, logsRes, domainsRes] = await Promise.all([
         fetch("/api/habits"),
         fetch("/api/habit-logs"),
+        fetch("/api/domains"),
       ]);
-      if (!habitsRes.ok || !logsRes.ok) {
+      if (!habitsRes.ok || !logsRes.ok || !domainsRes.ok) {
         throw new Error("Failed to load habits");
       }
       setHabits(await habitsRes.json());
       setLogs(await logsRes.json());
+      setDomains(await domainsRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -48,16 +53,21 @@ export default function HabitsPage() {
     const controller = new AbortController();
     const opts = { signal: controller.signal };
 
-    Promise.all([fetch("/api/habits", opts), fetch("/api/habit-logs", opts)])
-      .then(async ([habitsRes, logsRes]) => {
-        if (!habitsRes.ok || !logsRes.ok) {
+    Promise.all([
+      fetch("/api/habits", opts),
+      fetch("/api/habit-logs", opts),
+      fetch("/api/domains", opts),
+    ])
+      .then(async ([habitsRes, logsRes, domainsRes]) => {
+        if (!habitsRes.ok || !logsRes.ok || !domainsRes.ok) {
           throw new Error("Failed to load habits");
         }
-        return Promise.all([habitsRes.json(), logsRes.json()]);
+        return Promise.all([habitsRes.json(), logsRes.json(), domainsRes.json()]);
       })
-      .then(([habitsData, logsData]) => {
+      .then(([habitsData, logsData, domainsData]) => {
         setHabits(habitsData);
         setLogs(logsData);
+        setDomains(domainsData);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -81,6 +91,7 @@ export default function HabitsPage() {
         frequency,
         frequency_days: frequency === "specific_days" ? frequencyDays : null,
         target_count: frequency === "times_per_week" ? targetCount : null,
+        domain_id: domainId || null,
       }),
     });
 
@@ -95,6 +106,7 @@ export default function HabitsPage() {
     setFrequency("daily");
     setFrequencyDays([]);
     setTargetCount(3);
+    setDomainId("");
     await loadAll();
   }
 
@@ -209,6 +221,27 @@ export default function HabitsPage() {
               ))}
             </select>
           </div>
+          <div>
+            <label
+              htmlFor="domain"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Domain
+            </label>
+            <select
+              id="domain"
+              value={domainId}
+              onChange={(e) => setDomainId(e.target.value)}
+              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">No domain</option>
+              {domains.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <FrequencyFields
@@ -234,19 +267,65 @@ export default function HabitsPage() {
           No habits yet. Add your first one above.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {habits.map((habit) => (
-            <HabitRow
-              key={habit.id}
-              habit={habit}
-              logs={logs.filter((l) => l.habit_id === habit.id)}
-              today={today}
-              onToggle={toggleToday}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-            />
-          ))}
-        </ul>
+        <div className="space-y-6">
+          {(() => {
+            const unfiled = habits.filter((h) => !h.domain_id);
+            if (unfiled.length === 0) return null;
+            return (
+              <div>
+                <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  No domain
+                </h2>
+                <ul className="space-y-2">
+                  {unfiled.map((habit) => (
+                    <HabitRow
+                      key={habit.id}
+                      habit={habit}
+                      logs={logs.filter((l) => l.habit_id === habit.id)}
+                      today={today}
+                      domains={domains}
+                      onToggle={toggleToday}
+                      onUpdate={handleUpdate}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
+
+          {domains.map((domain) => {
+            const domainHabits = habits.filter((h) => h.domain_id === domain.id);
+            if (domainHabits.length === 0) return null;
+            return (
+              <div key={domain.id}>
+                <div className="mb-2 flex items-center gap-2">
+                  <span
+                    className="h-3.5 w-3.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: domain.color }}
+                  />
+                  <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                    {domain.name}
+                  </h2>
+                </div>
+                <ul className="space-y-2">
+                  {domainHabits.map((habit) => (
+                    <HabitRow
+                      key={habit.id}
+                      habit={habit}
+                      logs={logs.filter((l) => l.habit_id === habit.id)}
+                      today={today}
+                      domains={domains}
+                      onToggle={toggleToday}
+                      onUpdate={handleUpdate}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

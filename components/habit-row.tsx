@@ -8,6 +8,7 @@ import {
   type HabitFrequency,
 } from "@/lib/habits/streaks";
 import ColorPicker from "@/components/color-picker";
+import OverflowMenu from "@/components/overflow-menu";
 
 export type { HabitFrequency };
 
@@ -17,7 +18,10 @@ export type Habit = StreakHabit & {
   color: string;
   icon: string | null;
   active: boolean;
+  domain_id: string | null;
 };
+
+export type HabitDomain = { id: string; name: string; color: string };
 
 export type HabitLogRow = {
   id: string;
@@ -92,6 +96,7 @@ export default function HabitRow({
   habit,
   logs,
   today,
+  domains = [],
   onToggle,
   onUpdate,
   onDelete,
@@ -99,6 +104,7 @@ export default function HabitRow({
   habit: Habit;
   logs: HabitLogRow[];
   today: string;
+  domains?: HabitDomain[];
   onToggle: (habit: Habit, loggedToday: boolean) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
@@ -111,10 +117,12 @@ export default function HabitRow({
     habit.frequency_days ?? [],
   );
   const [targetCount, setTargetCount] = useState(habit.target_count ?? 3);
+  const [domainId, setDomainId] = useState(habit.domain_id ?? "");
 
   const loggedToday = logs.some((l) => l.logged_date === today);
   const { current, longest } = computeStreak(habit, logs, today);
   const weekCount = habit.frequency === "times_per_week" ? countThisWeek(logs, today) : 0;
+  const domain = habit.domain_id ? domains.find((d) => d.id === habit.domain_id) : null;
 
   function startEdit() {
     setName(habit.name);
@@ -122,6 +130,7 @@ export default function HabitRow({
     setFrequency(habit.frequency);
     setFrequencyDays(habit.frequency_days ?? []);
     setTargetCount(habit.target_count ?? 3);
+    setDomainId(habit.domain_id ?? "");
     setEditing(true);
   }
 
@@ -131,6 +140,7 @@ export default function HabitRow({
       name,
       color,
       frequency,
+      domain_id: domainId || null,
       frequency_days: frequency === "specific_days" ? frequencyDays : null,
       target_count: frequency === "times_per_week" ? targetCount : null,
     });
@@ -167,6 +177,18 @@ export default function HabitRow({
             onFrequencyDaysChange={setFrequencyDays}
             onTargetCountChange={setTargetCount}
           />
+          <select
+            value={domainId}
+            onChange={(e) => setDomainId(e.target.value)}
+            className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">No domain</option>
+            {domains.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
           <div className="flex gap-3">
             <button
               onClick={handleSave}
@@ -214,21 +236,16 @@ export default function HabitRow({
           {longest}
           {habit.frequency === "times_per_week" ? " wk" : " day"}
           {longest === 1 ? "" : "s"}
+          {domain ? ` · ${domain.name}` : ""}
         </p>
       </div>
-      <div className="flex shrink-0 gap-3">
-        <button
-          onClick={startEdit}
-          className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-        >
-          Edit
-        </button>
-        <button
-          onClick={() => onDelete(habit.id)}
-          className="text-sm font-medium text-red-600 hover:text-red-700"
-        >
-          Delete
-        </button>
+      <div className="shrink-0">
+        <OverflowMenu
+          items={[
+            { label: "Edit", onClick: startEdit },
+            { label: "Delete", onClick: () => onDelete(habit.id), destructive: true },
+          ]}
+        />
       </div>
     </li>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import OverflowMenu from "@/components/overflow-menu";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -364,19 +365,13 @@ export default function TaskRow({
           <AttachmentStrip taskId={task.id} />
         </div>
       </div>
-      <div className="flex shrink-0 gap-3">
-        <button
-          onClick={startEdit}
-          className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-        >
-          Edit
-        </button>
-        <button
-          onClick={() => onDelete(task.id)}
-          className="text-sm font-medium text-red-600 hover:text-red-700"
-        >
-          Delete
-        </button>
+      <div className="shrink-0">
+        <OverflowMenu
+          items={[
+            { label: "Edit", onClick: startEdit },
+            { label: "Delete", onClick: () => onDelete(task.id), destructive: true },
+          ]}
+        />
       </div>
     </li>
   );

@@ -63,6 +63,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     updates.target_count = targetCount;
   }
   if (typeof body.active === "boolean") updates.active = body.active;
+  if ("domain_id" in body) {
+    updates.domain_id = typeof body.domain_id === "string" ? body.domain_id : null;
+  }
 
   const { data, error } = await supabase
     .from("habits")

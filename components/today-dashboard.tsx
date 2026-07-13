@@ -375,6 +375,7 @@ export default function TodayDashboard() {
                 habit={habit}
                 logs={logs.filter((l) => l.habit_id === habit.id)}
                 today={today}
+                domains={domains}
                 onToggle={toggleHabit}
                 onUpdate={handleUpdateHabit}
                 onDelete={handleDeleteHabit}

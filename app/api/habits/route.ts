@@ -56,6 +56,7 @@ export async function POST(request: Request) {
         ? body.frequency_days
         : null,
       target_count: targetCount,
+      domain_id: typeof body.domain_id === "string" ? body.domain_id : null,
     })
     .select()
     .single();
