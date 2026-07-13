@@ -18,7 +18,10 @@ type Habit = {
   frequency_days: number[] | null;
   target_count: number | null;
   active: boolean;
+  domain_id: string | null;
 };
+
+type Domain = { id: string; color: string };
 
 type HabitLogRow = { id: string; habit_id: string; logged_date: string };
 
@@ -41,8 +44,13 @@ export default function AnalyticsPage() {
   const [logs, setLogs] = useState<HabitLogRow[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
+  const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  function domainColor(habit: Habit): string {
+    return domains.find((d) => d.id === habit.domain_id)?.color ?? "#d4d4d8";
+  }
 
   const today = todayLocal();
   const days = lastNDays(WINDOW_DAYS);
@@ -57,9 +65,10 @@ export default function AnalyticsPage() {
       fetch("/api/habit-logs", opts),
       fetch("/api/tasks", opts),
       fetch("/api/checkins", opts),
+      fetch("/api/domains", opts),
     ])
-      .then(async ([habitsRes, logsRes, tasksRes, checkinsRes]) => {
-        if (!habitsRes.ok || !logsRes.ok || !tasksRes.ok || !checkinsRes.ok) {
+      .then(async ([habitsRes, logsRes, tasksRes, checkinsRes, domainsRes]) => {
+        if (!habitsRes.ok || !logsRes.ok || !tasksRes.ok || !checkinsRes.ok || !domainsRes.ok) {
           throw new Error("Failed to load analytics");
         }
         return Promise.all([
@@ -67,13 +76,15 @@ export default function AnalyticsPage() {
           logsRes.json(),
           tasksRes.json(),
           checkinsRes.json(),
+          domainsRes.json(),
         ]);
       })
-      .then(([habitsData, logsData, tasksData, checkinsData]) => {
+      .then(([habitsData, logsData, tasksData, checkinsData, domainsData]) => {
         setHabits(habitsData);
         setLogs(logsData);
         setTasks(tasksData);
         setCheckins(checkinsData);
+        setDomains(domainsData);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -188,7 +199,7 @@ export default function AnalyticsPage() {
                     <div className="flex items-center gap-2">
                       <span
                         className="h-3 w-3 shrink-0 rounded-full"
-                        style={{ backgroundColor: habit.color }}
+                        style={{ backgroundColor: domainColor(habit) }}
                       />
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {habit.name}
@@ -206,7 +217,7 @@ export default function AnalyticsPage() {
                         className={`h-4 w-4 rounded-sm sm:h-5 sm:w-5 ${
                           loggedDates.has(d) ? "" : "bg-zinc-100 dark:bg-zinc-900"
                         }`}
-                        style={loggedDates.has(d) ? { backgroundColor: habit.color } : undefined}
+                        style={loggedDates.has(d) ? { backgroundColor: domainColor(habit) } : undefined}
                       />
                     ))}
                   </div>

@@ -105,8 +105,9 @@ A 10-second prompt Antoine completes each morning.
 ### 3.7 Habits & Streaks
 Simple habit tracker with streak counting.
 
-- Fields: name, color, icon, frequency, domain (optional)
+- Fields: name, icon, frequency, domain (optional)
 - Habits can optionally be filed under a domain, same as tasks — the Habits page groups by domain (color dot + name), with an "unfiled" bucket for habits with no domain. Deleting a domain un-files its habits (`on delete set null`) rather than trashing them — a habit's trash lifecycle stays independent
+- **Color comes from the domain**, not a per-habit picker — a habit with no domain shows a neutral gray dot. (`habits.color` still exists in the schema as a legacy/unused column — harmless, not surfaced anywhere.)
 - Frequency types:
   - `daily` — every day
   - `specific_days` — fixed days of the week (e.g. Mon/Wed/Fri)

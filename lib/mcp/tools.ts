@@ -355,13 +355,16 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .min(1)
           .optional()
           .describe("Times per week — only for frequency: times_per_week"),
-        color: z.string().optional(),
         icon: z.string().optional(),
-        domain_id: z.string().uuid().optional(),
+        domain_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("Habits are colored by their domain in the UI — file it under a domain rather than setting a color directly."),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
-    async ({ name, frequency, frequency_days, target_count, color, icon, domain_id }) => {
+    async ({ name, frequency, frequency_days, target_count, icon, domain_id }) => {
       const trimmed = name.trim();
       if (!trimmed) return fail("Name is required");
 
@@ -373,7 +376,6 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           frequency,
           frequency_days: frequency_days ?? null,
           target_count: target_count ?? null,
-          color,
           icon,
           domain_id: domain_id ?? null,
         })
@@ -395,10 +397,14 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         frequency: z.enum(HABIT_FREQUENCIES).optional(),
         frequency_days: z.array(z.number().int().min(0).max(6)).nullable().optional(),
         target_count: z.number().int().min(1).nullable().optional(),
-        color: z.string().optional(),
         icon: z.string().optional(),
         active: z.boolean().optional(),
-        domain_id: z.string().uuid().nullable().optional(),
+        domain_id: z
+          .string()
+          .uuid()
+          .nullable()
+          .optional()
+          .describe("Habits are colored by their domain in the UI — file it under a domain rather than setting a color directly."),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },

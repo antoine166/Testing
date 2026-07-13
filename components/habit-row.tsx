@@ -7,7 +7,6 @@ import {
   type Habit as StreakHabit,
   type HabitFrequency,
 } from "@/lib/habits/streaks";
-import ColorPicker from "@/components/color-picker";
 import OverflowMenu from "@/components/overflow-menu";
 
 export type { HabitFrequency };
@@ -111,7 +110,6 @@ export default function HabitRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(habit.name);
-  const [color, setColor] = useState(habit.color);
   const [frequency, setFrequency] = useState<HabitFrequency>(habit.frequency);
   const [frequencyDays, setFrequencyDays] = useState<number[]>(
     habit.frequency_days ?? [],
@@ -123,10 +121,10 @@ export default function HabitRow({
   const { current, longest } = computeStreak(habit, logs, today);
   const weekCount = habit.frequency === "times_per_week" ? countThisWeek(logs, today) : 0;
   const domain = habit.domain_id ? domains.find((d) => d.id === habit.domain_id) : null;
+  const displayColor = domain?.color ?? "#d4d4d8";
 
   function startEdit() {
     setName(habit.name);
-    setColor(habit.color);
     setFrequency(habit.frequency);
     setFrequencyDays(habit.frequency_days ?? []);
     setTargetCount(habit.target_count ?? 3);
@@ -138,7 +136,6 @@ export default function HabitRow({
     if (!name.trim()) return;
     onUpdate(habit.id, {
       name,
-      color,
       frequency,
       domain_id: domainId || null,
       frequency_days: frequency === "specific_days" ? frequencyDays : null,
@@ -152,7 +149,6 @@ export default function HabitRow({
       <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <ColorPicker value={color} onChange={setColor} />
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -217,7 +213,7 @@ export default function HabitRow({
       />
       <span
         className="h-4 w-4 shrink-0 rounded-full"
-        style={{ backgroundColor: habit.color }}
+        style={{ backgroundColor: displayColor }}
       />
       <div className="flex-1">
         <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">

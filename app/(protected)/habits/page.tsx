@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
-import ColorPicker from "@/components/color-picker";
 import HabitRow, {
   FrequencyFields,
   FREQUENCIES,
@@ -20,7 +19,6 @@ export default function HabitsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#10b981");
   const [frequency, setFrequency] = useState<HabitFrequency>("daily");
   const [frequencyDays, setFrequencyDays] = useState<number[]>([]);
   const [targetCount, setTargetCount] = useState(3);
@@ -87,7 +85,6 @@ export default function HabitsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name,
-        color,
         frequency,
         frequency_days: frequency === "specific_days" ? frequencyDays : null,
         target_count: frequency === "times_per_week" ? targetCount : null,
@@ -102,7 +99,6 @@ export default function HabitsPage() {
     }
 
     setName("");
-    setColor("#10b981");
     setFrequency("daily");
     setFrequencyDays([]);
     setTargetCount(3);
@@ -192,14 +188,6 @@ export default function HabitsPage() {
               required
               className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Color
-            </label>
-            <div className="mt-1">
-              <ColorPicker value={color} onChange={setColor} />
-            </div>
           </div>
           <div>
             <label
