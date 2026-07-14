@@ -47,6 +47,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("url" in body) updates.url = typeof body.url === "string" ? body.url : null;
   if (typeof body.type === "string") updates.type = body.type;
   if ("tags" in body) updates.tags = Array.isArray(body.tags) ? body.tags : null;
+  if ("folder_id" in body) {
+    updates.folder_id = typeof body.folder_id === "string" ? body.folder_id : null;
+  }
 
   const { data, error } = await supabase
     .from("knowledge_items")
