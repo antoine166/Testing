@@ -50,6 +50,14 @@ export async function POST(request: Request) {
       scheduled_date:
         typeof body.scheduled_date === "string" ? body.scheduled_date : undefined,
       someday: typeof body.someday === "boolean" ? body.someday : undefined,
+      waiting_on:
+        typeof body.waiting_on === "string" && body.waiting_on.trim()
+          ? body.waiting_on.trim()
+          : undefined,
+      waiting_since:
+        typeof body.waiting_on === "string" && body.waiting_on.trim()
+          ? new Date().toISOString().slice(0, 10)
+          : undefined,
     })
     .select()
     .single();

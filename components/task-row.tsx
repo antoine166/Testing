@@ -17,6 +17,8 @@ export type Task = {
   due_date: string | null;
   scheduled_date: string | null;
   someday: boolean;
+  waiting_on: string | null;
+  waiting_since: string | null;
   completed_at?: string | null;
 };
 
@@ -41,6 +43,11 @@ function linkLabel(url: string): string {
   } catch {
     return url;
   }
+}
+
+function daysSince(date: string): number {
+  const ms = Date.now() - new Date(`${date}T00:00:00`).getTime();
+  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
 }
 
 function NotesText({ notes }: { notes: string }) {
@@ -224,6 +231,7 @@ export default function TaskRow({
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
   const [scheduledDate, setScheduledDate] = useState(task.scheduled_date ?? "");
   const [someday, setSomeday] = useState(task.someday);
+  const [waitingOn, setWaitingOn] = useState(task.waiting_on ?? "");
 
   function startEdit() {
     setTitle(task.title);
@@ -236,6 +244,7 @@ export default function TaskRow({
     setDueDate(task.due_date ?? "");
     setScheduledDate(task.scheduled_date ?? "");
     setSomeday(task.someday);
+    setWaitingOn(task.waiting_on ?? "");
     setEditing(true);
   }
 
@@ -245,6 +254,7 @@ export default function TaskRow({
       title,
       link: link.trim() || null,
       notes,
+      waiting_on: waitingOn.trim() || null,
       domain_id: domainId || null,
       project_id: projectId || null,
       status,
@@ -356,6 +366,12 @@ export default function TaskRow({
               />
               Someday
             </label>
+            <input
+              value={waitingOn}
+              onChange={(e) => setWaitingOn(e.target.value)}
+              placeholder="Waiting on (optional) — e.g. Jane re: contract"
+              className="min-w-48 flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
             <button
               onClick={handleSave}
               className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
@@ -439,6 +455,18 @@ export default function TaskRow({
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
             {task.someday ? " · someday" : ""}
           </p>
+          {task.waiting_on && (
+            <p
+              className={`mt-0.5 text-xs font-medium ${
+                task.waiting_since && daysSince(task.waiting_since) >= 7
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-zinc-500"
+              }`}
+            >
+              ⏳ waiting on {task.waiting_on}
+              {task.waiting_since ? ` · ${daysSince(task.waiting_since)}d` : ""}
+            </p>
+          )}
           <AttachmentStrip ref={attachmentRef} taskId={task.id} hideAddButton />
         </div>
       </div>
