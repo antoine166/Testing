@@ -17,6 +17,7 @@ export type Task = {
   due_date: string | null;
   scheduled_date: string | null;
   someday: boolean;
+  context: string | null;
   waiting_on: string | null;
   waiting_since: string | null;
   completed_at?: string | null;
@@ -232,6 +233,7 @@ export default function TaskRow({
   const [scheduledDate, setScheduledDate] = useState(task.scheduled_date ?? "");
   const [someday, setSomeday] = useState(task.someday);
   const [waitingOn, setWaitingOn] = useState(task.waiting_on ?? "");
+  const [context, setContext] = useState(task.context ?? "");
 
   function startEdit() {
     setTitle(task.title);
@@ -245,6 +247,7 @@ export default function TaskRow({
     setScheduledDate(task.scheduled_date ?? "");
     setSomeday(task.someday);
     setWaitingOn(task.waiting_on ?? "");
+    setContext(task.context ?? "");
     setEditing(true);
   }
 
@@ -255,6 +258,7 @@ export default function TaskRow({
       link: link.trim() || null,
       notes,
       waiting_on: waitingOn.trim() || null,
+      context: context.trim() || null,
       domain_id: domainId || null,
       project_id: projectId || null,
       status,
@@ -367,6 +371,13 @@ export default function TaskRow({
               Someday
             </label>
             <input
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              list="task-contexts"
+              placeholder="Context (optional) — e.g. Errands, Deep Work"
+              className="min-w-40 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <input
               value={waitingOn}
               onChange={(e) => setWaitingOn(e.target.value)}
               placeholder="Waiting on (optional) — e.g. Jane re: contract"
@@ -449,6 +460,7 @@ export default function TaskRow({
           {task.notes && <NotesText notes={task.notes} />}
           <p className="mt-1 text-xs text-zinc-500">
             {task.status} · {task.priority} priority
+            {task.context ? ` · @${task.context}` : ""}
             {domain ? ` · ${domain.name}` : ""}
             {project ? ` · ${project.name}` : ""}
             {task.due_date ? ` · due ${task.due_date}` : ""}

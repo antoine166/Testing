@@ -42,6 +42,8 @@ export async function POST(request: Request) {
       title,
       notes: typeof body.notes === "string" ? body.notes : undefined,
       link: typeof body.link === "string" && body.link.trim() ? body.link.trim() : undefined,
+      context:
+        typeof body.context === "string" && body.context.trim() ? body.context.trim() : undefined,
       project_id: typeof body.project_id === "string" ? body.project_id : null,
       domain_id: typeof body.domain_id === "string" ? body.domain_id : null,
       status: typeof body.status === "string" ? body.status : undefined,
