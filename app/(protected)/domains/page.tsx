@@ -271,6 +271,12 @@ export default function DomainsPage() {
                   >
                     Tasks
                   </Link>
+                  <Link
+                    href={`/projects?domain=${domain.id}`}
+                    className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                  >
+                    + Project
+                  </Link>
                   <button
                     onClick={() => startEdit(domain)}
                     className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
