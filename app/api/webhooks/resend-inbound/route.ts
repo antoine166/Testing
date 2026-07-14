@@ -18,6 +18,11 @@ function extractEmail(from: string): string {
   return (match ? match[1] : from).trim().toLowerCase();
 }
 
+function extractFirstLink(body: string): string | undefined {
+  const match = body.match(/https?:\/\/[^\s<>"')\]]+/);
+  return match ? match[0].replace(/[.,;:]+$/, "") : undefined;
+}
+
 // No user session here — this is a public webhook Resend calls when an
 // email arrives. Auth is: (1) the svix signature proves the request really
 // came from Resend, (2) the sender allowlist proves it's actually Antoine
@@ -70,6 +75,7 @@ export async function POST(request: Request) {
   const title = (event.data.subject || "Untitled").trim().slice(0, 200);
   const body = email.text || (email.html ? stripHtml(email.html) : "");
   const notes = body.slice(0, MAX_NOTES_LENGTH) || undefined;
+  const link = extractFirstLink(body);
 
   // Single-user app — the email allowed to trigger this (INBOUND_ALLOWED_SENDER)
   // doesn't have to be the same address the account was created with, so this
@@ -91,6 +97,7 @@ export async function POST(request: Request) {
       user_id: owner.id,
       title,
       notes,
+      link,
       source_message_id: event.data.message_id,
     })
     .select()
