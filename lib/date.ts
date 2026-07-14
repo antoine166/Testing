@@ -21,3 +21,23 @@ export function lastNDays(n: number): string[] {
   }
   return dates;
 }
+
+/** The 7 dates (YYYY-MM-DD) of the Monday-Sunday week containing `today`, in order. */
+export function daysOfWeek(today: string): string[] {
+  const [year, month, day] = today.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  const mondayOffset = (date.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(date);
+  monday.setDate(monday.getDate() - mondayOffset);
+
+  const days: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    days.push(`${y}-${m}-${dd}`);
+  }
+  return days;
+}

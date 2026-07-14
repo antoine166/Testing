@@ -8,7 +8,13 @@ import {
   type Habit as StreakHabit,
   type HabitFrequency,
 } from "@/lib/habits/streaks";
+import { daysOfWeek } from "@/lib/date";
 import OverflowMenu from "@/components/overflow-menu";
+
+function weekdayOf(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).getDay();
+}
 
 export type { HabitFrequency };
 
@@ -105,7 +111,8 @@ export default function HabitRow({
   logs: HabitLogRow[];
   today: string;
   domains?: HabitDomain[];
-  onToggle: (habit: Habit, loggedToday: boolean) => void;
+  /** `date` defaults to today from callers, but any date lets the week's checkbox row log/unlog past days too. */
+  onToggle: (habit: Habit, date: string, loggedOnDate: boolean) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
 }) {
@@ -124,6 +131,13 @@ export default function HabitRow({
   const domain = habit.domain_id ? domains.find((d) => d.id === habit.domain_id) : null;
   const displayColor = domain?.color ?? "#d4d4d8";
   const atRisk = isAtRisk(habit, logs, today);
+
+  const loggedDates = new Set(logs.map((l) => l.logged_date));
+  const weekDates = daysOfWeek(today);
+  const requiredDates =
+    habit.frequency === "specific_days"
+      ? weekDates.filter((d) => (habit.frequency_days ?? []).includes(weekdayOf(d)))
+      : weekDates;
 
   function startEdit() {
     setName(habit.name);
@@ -217,7 +231,7 @@ export default function HabitRow({
       <input
         type="checkbox"
         checked={loggedToday}
-        onChange={() => onToggle(habit, loggedToday)}
+        onChange={() => onToggle(habit, today, loggedToday)}
       />
       <span
         className="h-4 w-4 shrink-0 rounded-full"
@@ -246,8 +260,54 @@ export default function HabitRow({
         </p>
         {atRisk && (
           <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-500">
-            Missed last time — don&rsquo;t break it twice
+            {habit.frequency === "times_per_week"
+              ? `Running out of days — need ${(habit.target_count ?? 1) - weekCount} more this week`
+              : "Missed last time — don’t break it twice"}
           </p>
+        )}
+
+        {habit.frequency === "times_per_week" ? (
+          <div className="mt-1.5 flex gap-1">
+            {Array.from({ length: habit.target_count ?? 1 }).map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onToggle(habit, today, loggedToday)}
+                aria-label={loggedToday ? "Unlog today" : "Log today"}
+                className={`h-5 w-5 rounded ${
+                  i < weekCount
+                    ? "bg-emerald-500"
+                    : "border border-zinc-300 hover:border-emerald-400 dark:border-zinc-700"
+                }`}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="mt-1.5 flex gap-1">
+            {requiredDates.map((date) => {
+              const isFuture = date > today;
+              const isLogged = loggedDates.has(date);
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  disabled={isFuture}
+                  onClick={() => onToggle(habit, date, isLogged)}
+                  title={date}
+                  aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
+                  className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
+                    isLogged
+                      ? "bg-emerald-500 text-white"
+                      : isFuture
+                        ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
+                        : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
+                  }`}
+                >
+                  {DAY_LABELS[weekdayOf(date)][0]}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
       <div className="shrink-0">

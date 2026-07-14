@@ -197,15 +197,15 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
-  async function toggleHabit(habit: Habit, loggedToday: boolean) {
-    const res = loggedToday
-      ? await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${today}`, {
+  async function toggleHabit(habit: Habit, date: string, loggedOnDate: boolean) {
+    const res = loggedOnDate
+      ? await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${date}`, {
           method: "DELETE",
         })
       : await fetch("/api/habit-logs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ habit_id: habit.id, date: today }),
+          body: JSON.stringify({ habit_id: habit.id, date }),
         });
 
     if (!res.ok) {

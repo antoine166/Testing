@@ -136,15 +136,15 @@ export default function HabitsPage() {
     await loadAll();
   }
 
-  async function toggleToday(habit: Habit, loggedToday: boolean) {
-    const res = loggedToday
-      ? await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${today}`, {
+  async function toggleDate(habit: Habit, date: string, loggedOnDate: boolean) {
+    const res = loggedOnDate
+      ? await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${date}`, {
           method: "DELETE",
         })
       : await fetch("/api/habit-logs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ habit_id: habit.id, date: today }),
+          body: JSON.stringify({ habit_id: habit.id, date }),
         });
 
     if (!res.ok) {
@@ -272,7 +272,7 @@ export default function HabitsPage() {
                       logs={logs.filter((l) => l.habit_id === habit.id)}
                       today={today}
                       domains={domains}
-                      onToggle={toggleToday}
+                      onToggle={toggleDate}
                       onUpdate={handleUpdate}
                       onDelete={handleDelete}
                     />
@@ -304,7 +304,7 @@ export default function HabitsPage() {
                       logs={logs.filter((l) => l.habit_id === habit.id)}
                       today={today}
                       domains={domains}
-                      onToggle={toggleToday}
+                      onToggle={toggleDate}
                       onUpdate={handleUpdate}
                       onDelete={handleDelete}
                     />

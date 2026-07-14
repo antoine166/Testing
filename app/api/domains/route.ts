@@ -12,6 +12,7 @@ export async function GET() {
     .from("domains")
     .select("*")
     .is("deleted_at", null)
+    .order("sort_order")
     .order("name");
 
   if (error) {
@@ -35,6 +36,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  const { data: maxRow } = await supabase
+    .from("domains")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSortOrder = (maxRow?.sort_order ?? -1) + 1;
+
   const { data, error } = await supabase
     .from("domains")
     .insert({
@@ -42,6 +51,7 @@ export async function POST(request: Request) {
       name,
       color: typeof body.color === "string" ? body.color : undefined,
       icon: typeof body.icon === "string" ? body.icon : undefined,
+      sort_order: nextSortOrder,
     })
     .select()
     .single();

@@ -182,28 +182,33 @@ export function computeStreak(
 }
 
 /**
- * "Don't break it twice" (James Clear): true when the habit already missed
- * its most recent required occurrence and hasn't been logged today yet —
- * missing today too would be a second consecutive miss, the point where a
- * slip turns into a broken habit.
+ * "Don't break it twice" (James Clear): true when missing today would be a
+ * second consecutive miss for daily/specific_days habits, or when a
+ * times_per_week habit is genuinely running out of days to still hit its
+ * weekly target — not just "under target so far," which fires as early as
+ * Monday and isn't useful. Never true once today is already logged.
  */
 export function isAtRisk(habit: Habit, logs: HabitLog[], today: string): boolean {
   if (logs.some((l) => l.logged_date === today)) return false;
 
   if (habit.frequency === "times_per_week") {
     const target = habit.target_count ?? 1;
-    const currentWeekKey = getWeekKey(parseLocalDate(today));
-    const lastWeekKey = getWeekKey(addDays(parseLocalDate(currentWeekKey), -7));
+    const todayDate = parseLocalDate(today);
+    const currentWeekKey = getWeekKey(todayDate);
+    const thisWeekCount = logs.filter(
+      (l) => getWeekKey(parseLocalDate(l.logged_date)) === currentWeekKey,
+    ).length;
 
-    const countsByWeek = new Map<string, number>();
-    for (const log of logs) {
-      const week = getWeekKey(parseLocalDate(log.logged_date));
-      countsByWeek.set(week, (countsByWeek.get(week) ?? 0) + 1);
-    }
+    const remainingNeeded = target - thisWeekCount;
+    if (remainingNeeded <= 0) return false;
 
-    const lastWeekCount = countsByWeek.get(lastWeekKey) ?? 0;
-    const thisWeekCount = countsByWeek.get(currentWeekKey) ?? 0;
-    return lastWeekCount < target && thisWeekCount < target;
+    // Monday-indexed weekday (0=Mon...6=Sun), same convention as getWeekKey.
+    const weekdayIndex = (todayDate.getDay() + 6) % 7;
+    const daysLeftInWeek = 7 - weekdayIndex; // includes today
+    // At risk once every remaining day (including today) is needed to still
+    // hit target — e.g. 4x/week with 0 done: safe through Wednesday (5 days
+    // left, only 4 needed), at risk starting Thursday (4 left, 4 needed).
+    return daysLeftInWeek <= remainingNeeded;
   }
 
   const loggedDates = new Set(logs.map((l) => l.logged_date));

@@ -60,6 +60,7 @@ Top-level buckets for life areas (e.g., Health, Work, Business, Personal, Financ
 - Each has a name, color, and optional icon
 - Projects live inside domains
 - Tasks can be tagged to a domain directly (without a project)
+- **Custom order** (`domains.sort_order`): drag-and-drop reorder on the Domains page. New domains append at the end; existing ones got a stable initial order matching alphabetical on migration so nothing jumped around. Every place that groups by domain (Sidebar, Tasks, Habits) uses whatever order `GET /api/domains` returns, so this one setting controls ordering everywhere
 
 ### 3.3 Projects
 A project belongs to one domain and contains tasks.
@@ -118,7 +119,8 @@ Simple habit tracker with streak counting.
   - `times_per_week`: consecutive weeks where the log count hit the target; a week that falls short resets to 0 (the current, still-in-progress week doesn't break the streak until it ends)
 - **Longest streak**: all-time best run, using the same logic as current streak for that habit's frequency type
 - Habits view: list of habits with today's check-off status and streak counts
-- **"Don't break it twice"** (James Clear, *Atomic Habits*) — a habit is **at risk** when its most recent required occurrence was missed and today isn't logged yet (`lib/habits/streaks.ts` → `isAtRisk`): one more miss would be two in a row, the point a slip turns into a broken habit. Surfaced three ways: (1) the habit row gets an amber border + "don't break it twice" note + ⚠️ (vs. 🔥 for a healthy active streak), (2) the Today view sorts at-risk habits first and calls out the count, (3) the MCP connector's `list_habits`/`get_today_summary` include an `at_risk` flag so the Coach/Claude digest can prioritize the same way
+- **"Don't break it twice"** (James Clear, *Atomic Habits*) — a habit is **at risk** when its most recent required occurrence was missed and today isn't logged yet (`lib/habits/streaks.ts` → `isAtRisk`): one more miss would be two in a row, the point a slip turns into a broken habit. For `times_per_week`, "at risk" is time-aware, not just "under target so far" — it only fires once there are no more spare days left in the week to still hit the target (e.g. 4x/week with 0 done: safe through Wednesday, at risk starting Thursday), so it doesn't false-alarm early in the week. Surfaced three ways: (1) the habit row gets an amber border + a frequency-appropriate warning note + ⚠️ (vs. 🔥 for a healthy active streak), (2) the Today view sorts at-risk habits first and calls out the count, (3) the MCP connector's `list_habits`/`get_today_summary` include an `at_risk` flag so the Coach/Claude digest can prioritize the same way
+- **Weekly checkbox row**: each habit row shows a strip of checkboxes sized to its cadence — 7 for `daily`, one per required weekday for `specific_days` (both tied to specific dates within the current Mon–Sun week, individually clickable to log/unlog that day — including past days, not just today), or `target_count` plain progress boxes for `times_per_week` (a fill-level tally, not date-specific, since any day counts)
 
 ### 3.8 Routines *(Phase 2)*
 Ordered sequences of steps (tasks, habits, or notes) tied to a time of day.

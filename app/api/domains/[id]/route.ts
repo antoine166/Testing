@@ -34,7 +34,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 
   const body = await request.json();
-  const updates: Record<string, string> = {};
+  const updates: Record<string, string | number> = {};
 
   if (typeof body.name === "string") {
     const name = body.name.trim();
@@ -48,6 +48,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
   if (typeof body.icon === "string") {
     updates.icon = body.icon;
+  }
+  if (typeof body.sort_order === "number" && Number.isInteger(body.sort_order)) {
+    updates.sort_order = body.sort_order;
   }
 
   const { data, error } = await supabase
