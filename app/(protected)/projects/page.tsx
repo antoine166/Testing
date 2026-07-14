@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 type Domain = {
   id: string;
@@ -27,6 +28,9 @@ const STATUSES: ProjectStatus[] = ["active", "someday", "completed", "archived"]
 const NO_DOMAIN_KEY = "__none__";
 
 export default function ProjectsPage() {
+  const searchParams = useSearchParams();
+  const domainFilter = searchParams.get("domain");
+
   const [domains, setDomains] = useState<Domain[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
@@ -35,7 +39,7 @@ export default function ProjectsPage() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [domainId, setDomainId] = useState("");
+  const [domainId, setDomainId] = useState(domainFilter ?? "");
   const [status, setStatus] = useState<ProjectStatus>("active");
   const [dueDate, setDueDate] = useState("");
 

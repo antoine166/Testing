@@ -20,16 +20,17 @@ const SMART_LISTS = [
 ] as const;
 
 const UTILITY_LINKS = [
-  { href: "/tasks", label: "All Tasks", icon: "📋", iconBg: "#6366f1" },
-  { href: "/habits", label: "Habits", icon: "🔁", iconBg: "#ec4899" },
-  { href: "/routines", label: "Routines", icon: "🔄", iconBg: "#8b5cf6" },
-  { href: "/checklists", label: "Checklists", icon: "☑️", iconBg: "#0ea5e9" },
-  { href: "/checkin", label: "Check-in", icon: "🌡️", iconBg: "#84cc16" },
-  { href: "/library", label: "Library", icon: "📖", iconBg: "#a855f7" },
   { href: "/agendas", label: "Agendas", icon: "🗣️", iconBg: "#0d9488" },
-  { href: "/coach", label: "Coach", icon: "🧭", iconBg: "#06b6d4" },
+  { href: "/projects", label: "All Projects", icon: "🗂️", iconBg: "#0891b2" },
+  { href: "/tasks", label: "All Tasks", icon: "📋", iconBg: "#6366f1" },
   { href: "/analytics", label: "Analytics", icon: "📈", iconBg: "#f43f5e" },
+  { href: "/checkin", label: "Check-in", icon: "🌡️", iconBg: "#84cc16" },
+  { href: "/checklists", label: "Checklists", icon: "☑️", iconBg: "#0ea5e9" },
+  { href: "/coach", label: "Coach", icon: "🧭", iconBg: "#06b6d4" },
+  { href: "/habits", label: "Habits", icon: "🔁", iconBg: "#ec4899" },
   { href: "/horizons", label: "Horizons", icon: "🔭", iconBg: "#7c3aed" },
+  { href: "/library", label: "Library", icon: "📖", iconBg: "#a855f7" },
+  { href: "/routines", label: "Routines", icon: "🔄", iconBg: "#8b5cf6" },
   { href: "/settings", label: "Settings", icon: "⚙️", iconBg: "#64748b" },
 ] as const;
 
