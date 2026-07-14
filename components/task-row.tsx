@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -53,10 +53,20 @@ function NotesText({ notes }: { notes: string }) {
   );
 }
 
-function AttachmentStrip({ taskId }: { taskId: string }) {
+export type AttachmentStripHandle = { openPicker: () => void };
+
+const AttachmentStrip = forwardRef<
+  AttachmentStripHandle,
+  { taskId: string; hideAddButton?: boolean }
+>(function AttachmentStrip({ taskId, hideAddButton = false }, ref) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    openPicker: () => inputRef.current?.click(),
+  }));
 
   async function loadAttachments() {
     const res = await fetch(`/api/tasks/${taskId}/attachments`);
@@ -93,65 +103,83 @@ function AttachmentStrip({ taskId }: { taskId: string }) {
     await loadAttachments();
   }
 
-  if (loading) return null;
+  const showStrip = !hideAddButton || (!loading && attachments.length > 0);
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      {attachments.map((a) => (
-        <div key={a.id} className="group relative h-14 w-14 shrink-0">
-          {a.url ? (
-            <a href={a.url} target="_blank" rel="noopener noreferrer">
-              <img
-                src={a.url}
-                alt={a.filename}
-                className="h-14 w-14 rounded-md object-cover"
+    <>
+      {showStrip && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {!loading &&
+            attachments.map((a) => (
+              <div key={a.id} className="group relative h-14 w-14 shrink-0">
+                {a.url ? (
+                  <a href={a.url} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={a.url}
+                      alt={a.filename}
+                      className="h-14 w-14 rounded-md object-cover"
+                    />
+                  </a>
+                ) : (
+                  <div className="h-14 w-14 rounded-md bg-zinc-100 dark:bg-zinc-900" />
+                )}
+                <button
+                  onClick={() => handleDelete(a.id)}
+                  aria-label={`Remove ${a.filename}`}
+                  className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950 text-xs text-white group-hover:flex dark:bg-zinc-50 dark:text-zinc-950"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          {!hideAddButton && (
+            <label
+              aria-label="Add image"
+              className="flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+            >
+              {uploading ? (
+                <span className="text-xs">...</span>
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <circle cx="9" cy="10.5" r="1.5" />
+                  <path d="M3 16l5-4 4 3 4-3 5 4" />
+                  <path d="M15 6h4M17 4v4" />
+                </svg>
+              )}
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleUpload}
+                disabled={uploading}
+                className="hidden"
               />
-            </a>
-          ) : (
-            <div className="h-14 w-14 rounded-md bg-zinc-100 dark:bg-zinc-900" />
+            </label>
           )}
-          <button
-            onClick={() => handleDelete(a.id)}
-            aria-label={`Remove ${a.filename}`}
-            className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950 text-xs text-white group-hover:flex dark:bg-zinc-50 dark:text-zinc-950"
-          >
-            ×
-          </button>
         </div>
-      ))}
-      <label
-        aria-label="Add image"
-        className="flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
-      >
-        {uploading ? (
-          <span className="text-xs">...</span>
-        ) : (
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <circle cx="9" cy="10.5" r="1.5" />
-            <path d="M3 16l5-4 4 3 4-3 5 4" />
-            <path d="M15 6h4M17 4v4" />
-          </svg>
-        )}
+      )}
+      {hideAddButton && (
         <input
+          ref={inputRef}
           type="file"
           accept="image/*"
           onChange={handleUpload}
           disabled={uploading}
           className="hidden"
         />
-      </label>
-    </div>
+      )}
+    </>
   );
-}
+});
 
 export default function TaskRow({
   task,
@@ -176,6 +204,7 @@ export default function TaskRow({
   onSelectChange?: (checked: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const attachmentRef = useRef<AttachmentStripHandle>(null);
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? "");
   const [domainId, setDomainId] = useState(task.domain_id ?? "");
@@ -381,10 +410,31 @@ export default function TaskRow({
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
             {task.someday ? " · someday" : ""}
           </p>
-          <AttachmentStrip taskId={task.id} />
+          <AttachmentStrip ref={attachmentRef} taskId={task.id} hideAddButton />
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => attachmentRef.current?.openPicker()}
+          aria-label="Add image"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="9" cy="10.5" r="1.5" />
+            <path d="M3 16l5-4 4 3 4-3 5 4" />
+            <path d="M15 6h4M17 4v4" />
+          </svg>
+        </button>
         <button
           type="button"
           onClick={startEdit}

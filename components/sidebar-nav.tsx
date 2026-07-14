@@ -168,7 +168,7 @@ export default function SidebarNav({
           onClick={() => setMobileOpen(false)}
           className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:bg-zinc-900"
         >
-          <span className="text-base leading-none">+</span> New List
+          <span className="text-base leading-none">+</span> New Domain
         </Link>
       </div>
 
