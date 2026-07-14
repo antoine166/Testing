@@ -11,7 +11,25 @@ export type KnowledgeItem = {
   url: string | null;
   type: KnowledgeType;
   tags: string[] | null;
+  folder_id: string | null;
 };
+
+export type KnowledgeFolder = { id: string; name: string; parent_id: string | null };
+
+/** Flattens the folder tree into an indented, depth-first list for a <select>. */
+export function flattenFolders(
+  folders: KnowledgeFolder[],
+  parentId: string | null = null,
+  depth = 0,
+): { id: string; label: string }[] {
+  return folders
+    .filter((f) => f.parent_id === parentId)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .flatMap((f) => [
+      { id: f.id, label: `${"— ".repeat(depth)}${f.name}` },
+      ...flattenFolders(folders, f.id, depth + 1),
+    ]);
+}
 
 export const KNOWLEDGE_TYPES: KnowledgeType[] = [
   "note",
@@ -30,10 +48,12 @@ export function parseTags(input: string): string[] {
 
 export default function KnowledgeItemRow({
   item,
+  folders,
   onUpdate,
   onDelete,
 }: {
   item: KnowledgeItem;
+  folders: KnowledgeFolder[];
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
 }) {
@@ -43,6 +63,7 @@ export default function KnowledgeItemRow({
   const [url, setUrl] = useState(item.url ?? "");
   const [type, setType] = useState<KnowledgeType>(item.type);
   const [tagsInput, setTagsInput] = useState((item.tags ?? []).join(", "));
+  const [folderId, setFolderId] = useState(item.folder_id ?? "");
 
   function startEdit() {
     setTitle(item.title);
@@ -50,6 +71,7 @@ export default function KnowledgeItemRow({
     setUrl(item.url ?? "");
     setType(item.type);
     setTagsInput((item.tags ?? []).join(", "));
+    setFolderId(item.folder_id ?? "");
     setEditing(true);
   }
 
@@ -61,9 +83,13 @@ export default function KnowledgeItemRow({
       url: url || null,
       type,
       tags: parseTags(tagsInput),
+      folder_id: folderId || null,
     });
     setEditing(false);
   }
+
+  const folderOptions = flattenFolders(folders);
+  const currentFolder = folders.find((f) => f.id === item.folder_id);
 
   if (editing) {
     return (
@@ -106,6 +132,18 @@ export default function KnowledgeItemRow({
             placeholder="Tags, comma-separated"
             className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
+          <select
+            value={folderId}
+            onChange={(e) => setFolderId(e.target.value)}
+            className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">Unfiled</option>
+            {folderOptions.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
           <div className="flex gap-3">
             <button
               onClick={handleSave}
@@ -136,6 +174,9 @@ export default function KnowledgeItemRow({
             <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
               {item.type}
             </span>
+            {currentFolder && (
+              <span className="text-xs text-zinc-400">📁 {currentFolder.name}</span>
+            )}
           </div>
           {item.content && (
             <p className="mt-1 line-clamp-2 text-sm text-zinc-500">{item.content}</p>

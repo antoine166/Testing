@@ -5,11 +5,13 @@ import KnowledgeItemRow, {
   KNOWLEDGE_TYPES,
   parseTags,
   type KnowledgeItem,
+  type KnowledgeFolder,
   type KnowledgeType,
 } from "@/components/knowledge-item-row";
 
 export default function LibraryPage() {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
+  const [folders, setFolders] = useState<KnowledgeFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,12 +23,18 @@ export default function LibraryPage() {
 
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
 
   async function loadAll() {
     try {
-      const res = await fetch("/api/knowledge-items");
-      if (!res.ok) throw new Error("Failed to load library");
-      setItems(await res.json());
+      const [itemsRes, foldersRes] = await Promise.all([
+        fetch("/api/knowledge-items"),
+        fetch("/api/knowledge-folders"),
+      ]);
+      if (!itemsRes.ok || !foldersRes.ok) throw new Error("Failed to load library");
+      setItems(await itemsRes.json());
+      setFolders(await foldersRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -38,11 +46,18 @@ export default function LibraryPage() {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch("/api/knowledge-items", { signal: controller.signal })
-      .then((res) =>
-        res.ok ? res.json() : Promise.reject(new Error("Failed to load library")),
-      )
-      .then((data: KnowledgeItem[]) => setItems(data))
+    Promise.all([
+      fetch("/api/knowledge-items", { signal: controller.signal }),
+      fetch("/api/knowledge-folders", { signal: controller.signal }),
+    ])
+      .then(async ([itemsRes, foldersRes]) => {
+        if (!itemsRes.ok || !foldersRes.ok) throw new Error("Failed to load library");
+        return Promise.all([itemsRes.json(), foldersRes.json()]);
+      })
+      .then(([itemsData, foldersData]: [KnowledgeItem[], KnowledgeFolder[]]) => {
+        setItems(itemsData);
+        setFolders(foldersData);
+      })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -65,6 +80,7 @@ export default function LibraryPage() {
         url: url || undefined,
         type,
         tags: parseTags(tagsInput),
+        folder_id: currentFolderId,
       }),
     });
 
@@ -79,6 +95,44 @@ export default function LibraryPage() {
     setUrl("");
     setType("note");
     setTagsInput("");
+    await loadAll();
+  }
+
+  async function handleCreateFolder(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+
+    const res = await fetch("/api/knowledge-folders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newFolderName, parent_id: currentFolderId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create folder");
+      return;
+    }
+
+    setNewFolderName("");
+    await loadAll();
+  }
+
+  async function handleDeleteFolder(id: string) {
+    if (
+      !confirm(
+        "Delete this folder? Subfolders go with it, but items inside just become unfiled.",
+      )
+    ) {
+      return;
+    }
+    const res = await fetch(`/api/knowledge-folders/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to delete folder");
+      return;
+    }
+    if (currentFolderId === id) setCurrentFolderId(null);
     await loadAll();
   }
 
@@ -113,6 +167,7 @@ export default function LibraryPage() {
   }
 
   const allTags = [...new Set(items.flatMap((item) => item.tags ?? []))].sort();
+  const isBrowsingAll = search.trim() !== "" || activeTag !== null;
 
   const filtered = items.filter((item) => {
     const matchesSearch =
@@ -120,8 +175,21 @@ export default function LibraryPage() {
       item.title.toLowerCase().includes(search.toLowerCase()) ||
       (item.content ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesTag = !activeTag || (item.tags ?? []).includes(activeTag);
-    return matchesSearch && matchesTag;
+    const matchesFolder = isBrowsingAll || (item.folder_id ?? null) === currentFolderId;
+    return matchesSearch && matchesTag && matchesFolder;
   });
+
+  const foldersById = new Map(folders.map((f) => [f.id, f]));
+  const subfolders = folders
+    .filter((f) => f.parent_id === currentFolderId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const breadcrumb: KnowledgeFolder[] = [];
+  let walk = currentFolderId ? foldersById.get(currentFolderId) : undefined;
+  while (walk) {
+    breadcrumb.unshift(walk);
+    walk = walk.parent_id ? foldersById.get(walk.parent_id) : undefined;
+  }
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
@@ -134,6 +202,73 @@ export default function LibraryPage() {
           {error}
         </p>
       )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-1 text-sm">
+        <button
+          onClick={() => setCurrentFolderId(null)}
+          className={`rounded px-1.5 py-0.5 ${
+            currentFolderId === null
+              ? "font-semibold text-zinc-950 dark:text-zinc-50"
+              : "text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+          }`}
+        >
+          📚 Library
+        </button>
+        {breadcrumb.map((f) => (
+          <span key={f.id} className="flex items-center gap-1">
+            <span className="text-zinc-400">/</span>
+            <button
+              onClick={() => setCurrentFolderId(f.id)}
+              className={`rounded px-1.5 py-0.5 ${
+                currentFolderId === f.id
+                  ? "font-semibold text-zinc-950 dark:text-zinc-50"
+                  : "text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+              }`}
+            >
+              {f.name}
+            </button>
+          </span>
+        ))}
+      </div>
+
+      {subfolders.length > 0 && (
+        <ul className="mb-4 space-y-1">
+          {subfolders.map((f) => (
+            <li
+              key={f.id}
+              className="flex items-center justify-between gap-2 rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
+            >
+              <button
+                onClick={() => setCurrentFolderId(f.id)}
+                className="flex-1 text-left text-sm font-medium text-zinc-900 dark:text-zinc-100"
+              >
+                📁 {f.name}
+              </button>
+              <button
+                onClick={() => handleDeleteFolder(f.id)}
+                className="text-xs font-medium text-red-600 hover:text-red-700"
+              >
+                Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form onSubmit={handleCreateFolder} className="mb-6 flex gap-2">
+        <input
+          value={newFolderName}
+          onChange={(e) => setNewFolderName(e.target.value)}
+          placeholder="New folder name"
+          className="flex-1 rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+        />
+        <button
+          type="submit"
+          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+        >
+          + Folder
+        </button>
+      </form>
 
       <form
         onSubmit={handleCreate}
@@ -280,6 +415,7 @@ export default function LibraryPage() {
             <KnowledgeItemRow
               key={item.id}
               item={item}
+              folders={folders}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
             />
