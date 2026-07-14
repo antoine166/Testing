@@ -21,7 +21,7 @@ export default async function ProtectedLayout({
 
   const today = todayLocal();
 
-  const [domainsRes, projectsRes, inboxRes, todayRes] = await Promise.all([
+  const [domainsRes, projectsRes, inboxRes, todayRes, waitingForRes] = await Promise.all([
     supabase.from("domains").select("id, name, color").is("deleted_at", null).order("name"),
     supabase.from("projects").select("id, name, domain_id").is("deleted_at", null).order("name"),
     supabase
@@ -38,6 +38,12 @@ export default async function ProtectedLayout({
       .not("scheduled_date", "is", null)
       .lte("scheduled_date", today)
       .neq("status", "done"),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .is("deleted_at", null)
+      .not("waiting_on", "is", null)
+      .neq("status", "done"),
   ]);
 
   return (
@@ -50,6 +56,7 @@ export default async function ProtectedLayout({
             projects={projectsRes.data ?? []}
             inboxCount={inboxRes.count ?? 0}
             todayCount={todayRes.count ?? 0}
+            waitingForCount={waitingForRes.count ?? 0}
           />
         </Suspense>
         <div className="min-w-0 flex-1">{children}</div>

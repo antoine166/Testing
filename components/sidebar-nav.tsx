@@ -15,20 +15,30 @@ const SMART_LISTS = [
   { href: "/anytime", label: "Anytime", icon: "📚", iconBg: "#14b8a6" },
   { href: "/someday", label: "Someday", icon: "📦", iconBg: "#d97706" },
   { href: "/logbook", label: "Logbook", icon: "✓", iconBg: "#22c55e" },
+  { href: "/trash", label: "Trash", icon: "🗑️", iconBg: "#71717a" },
+  { href: "/waiting-for", label: "Waiting For", icon: "⏳", iconBg: "#f97316" },
 ] as const;
 
 const UTILITY_LINKS = [
-  { href: "/tasks", label: "All Tasks" },
-  { href: "/habits", label: "Habits" },
-  { href: "/routines", label: "Routines" },
-  { href: "/checklists", label: "Checklists" },
-  { href: "/checkin", label: "Check-in" },
-  { href: "/library", label: "Library" },
-  { href: "/coach", label: "Coach" },
-  { href: "/analytics", label: "Analytics" },
-  { href: "/trash", label: "Trash" },
-  { href: "/settings", label: "Settings" },
-];
+  { href: "/tasks", label: "All Tasks", icon: "📋", iconBg: "#6366f1" },
+  { href: "/habits", label: "Habits", icon: "🔁", iconBg: "#ec4899" },
+  { href: "/routines", label: "Routines", icon: "🔄", iconBg: "#8b5cf6" },
+  { href: "/checklists", label: "Checklists", icon: "☑️", iconBg: "#0ea5e9" },
+  { href: "/checkin", label: "Check-in", icon: "🌡️", iconBg: "#84cc16" },
+  { href: "/library", label: "Library", icon: "📖", iconBg: "#a855f7" },
+  { href: "/coach", label: "Coach", icon: "🧭", iconBg: "#06b6d4" },
+  { href: "/analytics", label: "Analytics", icon: "📈", iconBg: "#f43f5e" },
+  { href: "/settings", label: "Settings", icon: "⚙️", iconBg: "#64748b" },
+] as const;
+
+const REFERENCE_LINKS = [
+  {
+    href: "/gtd-workflow-map.pdf",
+    label: "GTD Workflow Map",
+    icon: "🗺️",
+    iconBg: "#ca8a04",
+  },
+] as const;
 
 function NavIcon({ icon, bg }: { icon: string; bg: string }) {
   return (
@@ -47,12 +57,14 @@ export default function SidebarNav({
   projects,
   inboxCount,
   todayCount,
+  waitingForCount,
 }: {
   userEmail?: string;
   domains: SidebarDomain[];
   projects: SidebarProject[];
   inboxCount: number;
   todayCount: number;
+  waitingForCount: number;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -64,6 +76,7 @@ export default function SidebarNav({
   const counts: Record<string, number | undefined> = {
     "/inbox": inboxCount || undefined,
     "/": todayCount || undefined,
+    "/waiting-for": waitingForCount || undefined,
   };
 
   function handleSearch(e: React.FormEvent) {
@@ -178,14 +191,30 @@ export default function SidebarNav({
             key={link.href}
             href={link.href}
             onClick={() => setMobileOpen(false)}
-            className={`block rounded-md px-2 py-1 text-sm ${
+            className={`flex items-center gap-2.5 rounded-md px-2 py-1 text-sm ${
               pathname === link.href
                 ? "font-medium text-zinc-950 dark:text-zinc-50"
                 : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:bg-zinc-900"
             }`}
           >
+            <NavIcon icon={link.icon} bg={link.iconBg} />
             {link.label}
           </Link>
+        ))}
+      </div>
+
+      <div className="mt-3 space-y-0.5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+        {REFERENCE_LINKS.map((link) => (
+          <a
+            key={link.href}
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:bg-zinc-900"
+          >
+            <NavIcon icon={link.icon} bg={link.iconBg} />
+            {link.label}
+          </a>
         ))}
       </div>
 
