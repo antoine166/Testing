@@ -17,6 +17,9 @@ export default function QuickCapture() {
   const [domainsLoaded, setDomainsLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showMore, setShowMore] = useState(false);
+  const [link, setLink] = useState("");
+  const [image, setImage] = useState<File | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -77,21 +80,33 @@ export default function QuickCapture() {
       body: JSON.stringify({
         title,
         notes: notes || undefined,
+        link: link || undefined,
         domain_id: domainId || null,
         due_date: dueDate || undefined,
       }),
     });
 
-    setSubmitting(false);
-
     if (!res.ok) {
+      setSubmitting(false);
       const body = await res.json();
       setError(body.error ?? "Failed to save");
       return;
     }
 
+    const task = await res.json();
+
+    if (image) {
+      const formData = new FormData();
+      formData.append("file", image);
+      await fetch(`/api/tasks/${task.id}/attachments`, { method: "POST", body: formData });
+    }
+
+    setSubmitting(false);
     setTitle("");
     setNotes("");
+    setLink("");
+    setImage(null);
+    setShowMore(false);
     setDomainId("");
     setDueDate("");
     setOpen(false);
@@ -162,6 +177,38 @@ export default function QuickCapture() {
                   className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
               </div>
+
+              {showMore ? (
+                <div className="space-y-3">
+                  <input
+                    type="url"
+                    value={link}
+                    onChange={(e) => setLink(e.target.value)}
+                    placeholder="Link (optional)"
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                  <label className="flex items-center gap-2 text-sm text-zinc-500">
+                    <span className="flex h-9 cursor-pointer items-center rounded-md border border-dashed border-zinc-300 px-3 hover:border-zinc-400 dark:border-zinc-700">
+                      {image ? image.name : "+ Add image"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowMore(true)}
+                  className="text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                >
+                  + Add link or image
+                </button>
+              )}
+
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"

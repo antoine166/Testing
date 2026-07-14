@@ -10,6 +10,7 @@ export type Task = {
   project_id: string | null;
   domain_id: string | null;
   title: string;
+  link: string | null;
   notes: string | null;
   status: TaskStatus;
   priority: TaskPriority;
@@ -33,6 +34,14 @@ const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 const STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
 
 const NOTES_PREVIEW_LENGTH = 200;
+
+function linkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
 
 function NotesText({ notes }: { notes: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -206,6 +215,7 @@ export default function TaskRow({
   const [editing, setEditing] = useState(false);
   const attachmentRef = useRef<AttachmentStripHandle>(null);
   const [title, setTitle] = useState(task.title);
+  const [link, setLink] = useState(task.link ?? "");
   const [notes, setNotes] = useState(task.notes ?? "");
   const [domainId, setDomainId] = useState(task.domain_id ?? "");
   const [projectId, setProjectId] = useState(task.project_id ?? "");
@@ -217,6 +227,7 @@ export default function TaskRow({
 
   function startEdit() {
     setTitle(task.title);
+    setLink(task.link ?? "");
     setNotes(task.notes ?? "");
     setDomainId(task.domain_id ?? "");
     setProjectId(task.project_id ?? "");
@@ -232,6 +243,7 @@ export default function TaskRow({
     if (!title.trim()) return;
     onUpdate(task.id, {
       title,
+      link: link.trim() || null,
       notes,
       domain_id: domainId || null,
       project_id: projectId || null,
@@ -256,6 +268,13 @@ export default function TaskRow({
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <input
+            type="url"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="Link (optional)"
             className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
           <textarea
@@ -401,6 +420,16 @@ export default function TaskRow({
           >
             {task.title}
           </p>
+          {task.link && (
+            <a
+              href={task.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 block truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
+            >
+              {linkLabel(task.link)}
+            </a>
+          )}
           {task.notes && <NotesText notes={task.notes} />}
           <p className="mt-1 text-xs text-zinc-500">
             {task.status} · {task.priority} priority
