@@ -19,10 +19,8 @@ export async function createClient() {
             );
           } catch {
             // Server Components can't set cookies, so a refresh triggered
-            // here is computed but discarded — expected and harmless.
-            // components/session-refresh.tsx periodically hits
-            // /api/auth/refresh (a Route Handler, which can set cookies)
-            // so the refresh actually persists.
+            // here is computed but discarded — expected and harmless, since
+            // proxy.ts refreshes the session cookie on every request anyway.
           }
         },
       },

@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import QuickCapture from "@/components/quick-capture";
 import SidebarNav from "@/components/sidebar-nav";
-import SessionRefresh from "@/components/session-refresh";
 import { todayLocal } from "@/lib/date";
 
 export default async function ProtectedLayout({
@@ -43,7 +42,6 @@ export default async function ProtectedLayout({
 
   return (
     <>
-      <SessionRefresh />
       <div className="flex min-h-screen flex-col md:flex-row">
         <Suspense fallback={<div className="w-64 shrink-0" />}>
           <SidebarNav
