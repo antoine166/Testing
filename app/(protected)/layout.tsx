@@ -21,30 +21,36 @@ export default async function ProtectedLayout({
 
   const today = todayLocal();
 
-  const [domainsRes, projectsRes, inboxRes, todayRes, waitingForRes] = await Promise.all([
-    supabase.from("domains").select("id, name, color").is("deleted_at", null).order("name"),
-    supabase.from("projects").select("id, name, domain_id").is("deleted_at", null).order("name"),
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .is("deleted_at", null)
-      .is("domain_id", null)
-      .eq("someday", false)
-      .neq("status", "done"),
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .is("deleted_at", null)
-      .not("scheduled_date", "is", null)
-      .lte("scheduled_date", today)
-      .neq("status", "done"),
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .is("deleted_at", null)
-      .not("waiting_on", "is", null)
-      .neq("status", "done"),
-  ]);
+  const [domainsRes, projectsRes, inboxRes, todayRes, waitingForRes, contextsRes] =
+    await Promise.all([
+      supabase.from("domains").select("id, name, color").is("deleted_at", null).order("name"),
+      supabase.from("projects").select("id, name, domain_id").is("deleted_at", null).order("name"),
+      supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .is("domain_id", null)
+        .eq("someday", false)
+        .neq("status", "done"),
+      supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .not("scheduled_date", "is", null)
+        .lte("scheduled_date", today)
+        .neq("status", "done"),
+      supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .not("waiting_on", "is", null)
+        .neq("status", "done"),
+      supabase.from("tasks").select("context").not("context", "is", null),
+    ]);
+
+  const contexts = Array.from(
+    new Set((contextsRes.data ?? []).map((t) => t.context as string)),
+  ).sort();
 
   return (
     <>
@@ -61,6 +67,11 @@ export default async function ProtectedLayout({
         </Suspense>
         <div className="min-w-0 flex-1">{children}</div>
       </div>
+      <datalist id="task-contexts">
+        {contexts.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
       <QuickCapture />
     </>
   );

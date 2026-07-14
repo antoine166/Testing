@@ -26,8 +26,10 @@ const UTILITY_LINKS = [
   { href: "/checklists", label: "Checklists", icon: "☑️", iconBg: "#0ea5e9" },
   { href: "/checkin", label: "Check-in", icon: "🌡️", iconBg: "#84cc16" },
   { href: "/library", label: "Library", icon: "📖", iconBg: "#a855f7" },
+  { href: "/agendas", label: "Agendas", icon: "🗣️", iconBg: "#0d9488" },
   { href: "/coach", label: "Coach", icon: "🧭", iconBg: "#06b6d4" },
   { href: "/analytics", label: "Analytics", icon: "📈", iconBg: "#f43f5e" },
+  { href: "/horizons", label: "Horizons", icon: "🔭", iconBg: "#7c3aed" },
   { href: "/settings", label: "Settings", icon: "⚙️", iconBg: "#64748b" },
 ] as const;
 

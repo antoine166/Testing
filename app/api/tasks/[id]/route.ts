@@ -49,6 +49,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("link" in body) {
     updates.link = typeof body.link === "string" && body.link.trim() ? body.link.trim() : null;
   }
+  if ("context" in body) {
+    updates.context =
+      typeof body.context === "string" && body.context.trim() ? body.context.trim() : null;
+  }
   if ("project_id" in body) {
     updates.project_id = typeof body.project_id === "string" ? body.project_id : null;
   }

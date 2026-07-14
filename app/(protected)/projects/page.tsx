@@ -21,12 +21,15 @@ type Project = {
   created_at: string;
 };
 
+type ProjectTask = { project_id: string | null; status: "todo" | "in_progress" | "done" };
+
 const STATUSES: ProjectStatus[] = ["active", "someday", "completed", "archived"];
 const NO_DOMAIN_KEY = "__none__";
 
 export default function ProjectsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,15 +48,17 @@ export default function ProjectsPage() {
 
   async function loadAll() {
     try {
-      const [domainsRes, projectsRes] = await Promise.all([
+      const [domainsRes, projectsRes, tasksRes] = await Promise.all([
         fetch("/api/domains"),
         fetch("/api/projects"),
+        fetch("/api/tasks"),
       ]);
-      if (!domainsRes.ok || !projectsRes.ok) {
+      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) {
         throw new Error("Failed to load projects");
       }
       setDomains(await domainsRes.json());
       setProjects(await projectsRes.json());
+      setTasks(await tasksRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -68,16 +73,18 @@ export default function ProjectsPage() {
     Promise.all([
       fetch("/api/domains", { signal: controller.signal }),
       fetch("/api/projects", { signal: controller.signal }),
+      fetch("/api/tasks", { signal: controller.signal }),
     ])
-      .then(async ([domainsRes, projectsRes]) => {
-        if (!domainsRes.ok || !projectsRes.ok) {
+      .then(async ([domainsRes, projectsRes, tasksRes]) => {
+        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) {
           throw new Error("Failed to load projects");
         }
-        return Promise.all([domainsRes.json(), projectsRes.json()]);
+        return Promise.all([domainsRes.json(), projectsRes.json(), tasksRes.json()]);
       })
-      .then(([domainsData, projectsData]: [Domain[], Project[]]) => {
+      .then(([domainsData, projectsData, tasksData]: [Domain[], Project[], ProjectTask[]]) => {
         setDomains(domainsData);
         setProjects(projectsData);
+        setTasks(tasksData);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -170,6 +177,15 @@ export default function ProjectsPage() {
     }
 
     await loadAll();
+  }
+
+  const openTaskCountByProject = new Map<string, number>();
+  for (const t of tasks) {
+    if (!t.project_id || t.status === "done") continue;
+    openTaskCountByProject.set(t.project_id, (openTaskCountByProject.get(t.project_id) ?? 0) + 1);
+  }
+  function isStalled(project: Project) {
+    return project.status === "active" && !(openTaskCountByProject.get(project.id) ?? 0);
   }
 
   const domainsById = new Map(domains.map((d) => [d.id, d]));
@@ -402,6 +418,11 @@ export default function ProjectsPage() {
                               {project.status}
                               {project.due_date ? ` · due ${project.due_date}` : ""}
                             </p>
+                            {isStalled(project) && (
+                              <p className="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                ⚠ Stalled — no next action. Add a task to move this forward.
+                              </p>
+                            )}
                           </div>
                           <div className="flex shrink-0 gap-3">
                             <Link
