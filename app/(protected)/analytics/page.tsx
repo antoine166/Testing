@@ -107,6 +107,16 @@ export default function AnalyticsPage() {
     (t) => t.completed_at && last7.includes(t.completed_at.slice(0, 10)),
   ).length;
 
+  const tasksCompletedByDay = Array.from(
+    tasks.reduce((counts, t) => {
+      if (!t.completed_at) return counts;
+      const day = t.completed_at.slice(0, 10);
+      counts.set(day, (counts.get(day) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()),
+  ).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  const maxDailyTaskCount = Math.max(1, ...tasksCompletedByDay.map(([, count]) => count));
+
   const checkinsThisWeek = checkins.filter((c) => last7.includes(c.date));
   const avgEnergy = checkinsThisWeek.length
     ? (
@@ -159,6 +169,32 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      <div className="mb-8">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          Tasks completed per day (all time)
+        </h2>
+        {tasksCompletedByDay.length === 0 ? (
+          <p className="text-sm text-zinc-500">No completed tasks yet.</p>
+        ) : (
+          <div className="max-h-80 space-y-1.5 overflow-y-auto rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+            {tasksCompletedByDay.map(([day, count]) => (
+              <div key={day} className="flex items-center gap-2 text-sm">
+                <span className="w-24 shrink-0 text-zinc-500">{day}</span>
+                <div className="h-2 flex-1 rounded-full bg-zinc-100 dark:bg-zinc-900">
+                  <div
+                    className="h-2 rounded-full bg-blue-500"
+                    style={{ width: `${(count / maxDailyTaskCount) * 100}%` }}
+                  />
+                </div>
+                <span className="w-6 shrink-0 text-right text-zinc-700 dark:text-zinc-300">
+                  {count}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
         Habit consistency (last {WINDOW_DAYS} days)
       </h2>
@@ -206,7 +242,7 @@ export default function AnalyticsPage() {
                       </p>
                     </div>
                     <p className="text-xs text-zinc-500">
-                      {rate}% · streak {current} · best {longest}
+                      {rate}% · streak {current} · best {longest} · {habitLogs.length} all-time
                     </p>
                   </div>
                   <div className="grid grid-cols-7 gap-1">
