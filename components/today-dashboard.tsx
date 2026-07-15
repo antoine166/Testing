@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { todayLocal } from "@/lib/date";
 import { isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
+import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
 import LevelPicker from "@/components/level-picker";
 import HabitRow, { type Habit, type HabitLogRow } from "@/components/habit-row";
 import TaskRow, {
@@ -198,32 +199,20 @@ export default function TodayDashboard() {
   }
 
   async function addHabitLog(habit: Habit, date: string) {
-    const res = await fetch("/api/habit-logs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ habit_id: habit.id, date }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update habit");
+    const result = await postHabitLog(habit.id, date);
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-
     await loadAll();
   }
 
   async function removeHabitLog(habit: Habit, date: string) {
-    const res = await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${date}`, {
-      method: "DELETE",
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update habit");
+    const result = await deleteHabitLog(habit.id, date);
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-
     await loadAll();
   }
 

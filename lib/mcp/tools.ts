@@ -230,7 +230,6 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
     async ({ id }) => {
-      const ts = new Date().toISOString();
       const { data: children, error: childrenError } = await admin
         .from("projects")
         .select("id")
@@ -239,23 +238,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .is("deleted_at", null);
       if (childrenError) return fail(childrenError.message);
 
-      const projectIds = [id, ...children.map((c) => c.id)];
-
-      const { error: tasksError } = await admin
-        .from("tasks")
-        .update({ deleted_at: ts })
-        .in("project_id", projectIds)
-        .eq("user_id", userId)
-        .is("deleted_at", null);
-      if (tasksError) return fail(tasksError.message);
-
-      const { error: projectsError } = await admin
-        .from("projects")
-        .update({ deleted_at: ts })
-        .in("id", projectIds)
-        .eq("user_id", userId)
-        .is("deleted_at", null);
-      if (projectsError) return fail(projectsError.message);
+      // Same trash_project() RPC the app and Coach use — it defaults its
+      // p_user_id parameter to auth.uid(), which isn't available to this
+      // service-role client, so it's passed explicitly here.
+      const { error } = await admin.rpc("trash_project", { p_project_id: id, p_user_id: userId });
+      if (error) return fail(error.message);
 
       return ok({ deleted: id, subprojects_deleted: children.map((c) => c.id) });
     },
