@@ -117,6 +117,7 @@ export default function HabitRow({
   onDelete: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [showDayRow, setShowDayRow] = useState(false);
   const [name, setName] = useState(habit.name);
   const [frequency, setFrequency] = useState<HabitFrequency>(habit.frequency);
   const [frequencyDays, setFrequencyDays] = useState<number[]>(
@@ -266,31 +267,93 @@ export default function HabitRow({
           </p>
         )}
 
-        <div className="mt-1.5 flex gap-1">
-          {requiredDates.map((date) => {
-            const isFuture = date > today;
-            const isLogged = loggedDates.has(date);
-            return (
+        {habit.frequency === "times_per_week" ? (
+          <div className="mt-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="flex gap-1">
+                {Array.from({ length: habit.target_count ?? 1 }).map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => onToggle(habit, today, loggedToday)}
+                    aria-label={loggedToday ? "Unlog today" : "Log today"}
+                    className={`h-5 w-5 rounded ${
+                      i < weekCount
+                        ? "bg-emerald-500"
+                        : "border border-zinc-300 hover:border-emerald-400 dark:border-zinc-700"
+                    }`}
+                  />
+                ))}
+              </div>
               <button
-                key={date}
                 type="button"
-                disabled={isFuture}
-                onClick={() => onToggle(habit, date, isLogged)}
-                title={date}
-                aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
-                className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
-                  isLogged
-                    ? "bg-emerald-500 text-white"
-                    : isFuture
-                      ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
-                      : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
-                }`}
+                onClick={() => setShowDayRow((v) => !v)}
+                aria-label={showDayRow ? "Hide day picker" : "Log a different day"}
+                aria-expanded={showDayRow}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
               >
-                {DAY_LABELS[weekdayOf(date)][0]}
+                <span
+                  className={`inline-block transition-transform ${showDayRow ? "rotate-90" : ""}`}
+                >
+                  ›
+                </span>
               </button>
-            );
-          })}
-        </div>
+            </div>
+            {showDayRow && (
+              <div className="mt-1.5 flex gap-1">
+                {weekDates.map((date) => {
+                  const isFuture = date > today;
+                  const isLogged = loggedDates.has(date);
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      disabled={isFuture}
+                      onClick={() => onToggle(habit, date, isLogged)}
+                      title={date}
+                      aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
+                      className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
+                        isLogged
+                          ? "bg-emerald-500 text-white"
+                          : isFuture
+                            ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
+                            : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
+                      }`}
+                    >
+                      {DAY_LABELS[weekdayOf(date)][0]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-1.5 flex gap-1">
+            {requiredDates.map((date) => {
+              const isFuture = date > today;
+              const isLogged = loggedDates.has(date);
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  disabled={isFuture}
+                  onClick={() => onToggle(habit, date, isLogged)}
+                  title={date}
+                  aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
+                  className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
+                    isLogged
+                      ? "bg-emerald-500 text-white"
+                      : isFuture
+                        ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
+                        : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
+                  }`}
+                >
+                  {DAY_LABELS[weekdayOf(date)][0]}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       <div className="shrink-0">
         <OverflowMenu
