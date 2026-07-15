@@ -279,11 +279,27 @@ export default function TaskRow({
     return (
       <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div className="space-y-2">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <div className="flex items-start justify-between gap-2">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <div className="flex shrink-0 gap-3 pt-1">
+              <button
+                onClick={handleSave}
+                className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
           <input
             type="url"
             value={link}
@@ -385,18 +401,6 @@ export default function TaskRow({
               placeholder="Context (optional) — e.g. Errands, Deep Work"
               className="min-w-40 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
-            <button
-              onClick={handleSave}
-              className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
-            >
-              Cancel
-            </button>
           </div>
           <AttachmentStrip taskId={task.id} />
         </div>
