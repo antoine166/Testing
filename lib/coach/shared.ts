@@ -73,14 +73,22 @@ export const TOOLS: Tool[] = [
   {
     name: "update_project",
     description:
-      "Update a project's status or domain, referenced by its UUID from the context below. Use " +
-      "to archive a completed project, mark one someday, or reactivate a someday project.",
+      "Update a project's status, domain, or parent project, referenced by its UUID from the " +
+      "context below. Use to archive a completed project, mark one someday, reactivate a " +
+      "someday project, or file it as a subproject of another project (parent_project_id). " +
+      "Subprojects can only be one level deep and always take on their parent's domain.",
     input_schema: {
       type: "object",
       properties: {
         project_id: { type: "string" },
         status: { type: "string", enum: ["active", "someday", "completed", "archived"] },
         domain_id: { type: "string" },
+        parent_project_id: {
+          type: "string",
+          description:
+            "UUID of another top-level project to nest this one under. Empty string clears it, " +
+            "promoting it back to top-level.",
+        },
       },
       required: ["project_id"],
     },
@@ -89,12 +97,18 @@ export const TOOLS: Tool[] = [
     name: "create_project",
     description:
       "Create a new project when a next action implies a multi-step outcome that isn't tracked " +
-      "yet (an 'embedded project').",
+      "yet (an 'embedded project'). Set parent_project_id to create it as a subproject of an " +
+      "existing top-level project instead (e.g. 'packing' under 'Move to Atlanta') — it then " +
+      "inherits that project's domain automatically. Subprojects can only be one level deep.",
     input_schema: {
       type: "object",
       properties: {
         name: { type: "string" },
         domain_id: { type: "string" },
+        parent_project_id: {
+          type: "string",
+          description: "UUID of a top-level project to nest this new project under, if any.",
+        },
         description: { type: "string" },
       },
       required: ["name"],
@@ -142,7 +156,10 @@ export function extractText(content: ContentBlockParam[]): string {
 export async function buildContext(supabase: SupabaseClient, today: string, mode: string) {
   const [domainsRes, projectsRes, tasksRes, habitsRes, checkinRes] = await Promise.all([
     supabase.from("domains").select("id, name"),
-    supabase.from("projects").select("id, name, status").neq("status", "archived"),
+    supabase
+      .from("projects")
+      .select("id, name, status, parent_project_id")
+      .neq("status", "archived"),
     supabase
       .from("tasks")
       .select(
@@ -170,9 +187,21 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   lines.push("\nDomains:");
   lines.push(domains.length ? domains.map((d) => `- ${d.id} ${d.name}`).join("\n") : "(none yet)");
 
+  const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
   lines.push("\nActive projects:");
   lines.push(
-    projects.length ? projects.map((p) => `- ${p.id} ${p.name} (${p.status})`).join("\n") : "(none)",
+    projects.length
+      ? projects
+          .map(
+            (p) =>
+              `- ${p.id} ${p.name} (${p.status}${
+                p.parent_project_id
+                  ? `, subproject of ${projectNameById.get(p.parent_project_id) ?? p.parent_project_id}`
+                  : ""
+              })`,
+          )
+          .join("\n")
+      : "(none)",
   );
 
   lines.push("\nOpen tasks (not done):");
@@ -215,9 +244,21 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     if (!t.project_id) continue;
     openTaskCountByProject.set(t.project_id, (openTaskCountByProject.get(t.project_id) ?? 0) + 1);
   }
-  const stalledProjects = projects.filter(
-    (p) => p.status === "active" && !(openTaskCountByProject.get(p.id) ?? 0),
-  );
+  const subprojectsByParent = new Map<string, typeof projects>();
+  for (const p of projects) {
+    if (!p.parent_project_id) continue;
+    if (!subprojectsByParent.has(p.parent_project_id)) subprojectsByParent.set(p.parent_project_id, []);
+    subprojectsByParent.get(p.parent_project_id)!.push(p);
+  }
+  const stalledProjects = projects.filter((p) => {
+    if (p.status !== "active") return false;
+    const ownCount = openTaskCountByProject.get(p.id) ?? 0;
+    const childCount = (subprojectsByParent.get(p.id) ?? []).reduce(
+      (sum, child) => sum + (openTaskCountByProject.get(child.id) ?? 0),
+      0,
+    );
+    return !ownCount && !childCount;
+  });
   const waitingFor = openTasks.filter((t) => t.waiting_for);
   const somedayTasks = openTasks.filter((t) => t.someday);
 
@@ -342,6 +383,9 @@ export async function executeTool(
     const updates: Record<string, unknown> = {};
     if (typeof input.status === "string") updates.status = input.status;
     if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
+    if (typeof input.parent_project_id === "string") {
+      updates.parent_project_id = input.parent_project_id || null;
+    }
 
     const { data, error } = await supabase
       .from("projects")
@@ -364,6 +408,8 @@ export async function executeTool(
         user_id: userId,
         name: projectName,
         domain_id: typeof input.domain_id === "string" ? input.domain_id : null,
+        parent_project_id:
+          typeof input.parent_project_id === "string" ? input.parent_project_id : null,
         description: typeof input.description === "string" ? input.description : undefined,
       })
       .select()

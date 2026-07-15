@@ -69,6 +69,17 @@ A project belongs to one domain and contains tasks.
 - Statuses: `active` | `someday` | `completed` | `archived`
 - Projects view groups by domain
 - Completing all tasks in a project does NOT auto-complete the project — Antoine marks it done
+- **Subprojects** (`projects.parent_project_id`, self-referencing): a project can optionally live
+  inside one other project — "project within a project" (e.g. "Move to Atlanta" → "Packing").
+  Capped at **one level deep**: a subproject cannot itself have subprojects, and a project that
+  already has subprojects can't become one (enforced by a DB trigger, not just the UI). A
+  subproject always shares its parent's domain — there's no independent domain picker for it, and
+  the domain follows automatically if the parent's domain changes later. The Projects page and
+  Sidebar show subprojects nested directly under their parent; a project's "stalled" check (zero
+  open tasks) counts its subprojects' open tasks too, since a parent with an active subproject
+  that has a next action isn't actually stalled. Trashing/restoring/purging a project cascades to
+  its subprojects and all of their tasks together, the same way domain→project cascade already
+  works
 
 ### 3.4 Tasks
 The atomic unit of work.
@@ -239,17 +250,22 @@ deleted_at  timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its
 
 ### `projects`
 ```sql
-id           uuid primary key default gen_random_uuid()
-user_id      uuid references auth.users(id) on delete cascade
-domain_id    uuid references domains(id) on delete set null
-name         text not null
-description  text
-status       text not null default 'active'
-             -- check: active | someday | completed | archived
-due_date     date
-created_at   timestamptz default now()
-updated_at   timestamptz default now()
-deleted_at   timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its tasks
+id                 uuid primary key default gen_random_uuid()
+user_id            uuid references auth.users(id) on delete cascade
+domain_id          uuid references domains(id) on delete set null
+parent_project_id  uuid references projects(id) on delete cascade
+                   -- self-reference, one level deep only (3.3). Kept in
+                   -- sync with the parent's domain_id by a DB trigger —
+                   -- always equal to the parent's domain_id when set.
+name               text not null
+description        text
+status             text not null default 'active'
+                   -- check: active | someday | completed | archived
+due_date           date
+created_at         timestamptz default now()
+updated_at         timestamptz default now()
+deleted_at         timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its
+                   -- subprojects and tasks (and its subprojects' tasks)
 ```
 
 ---

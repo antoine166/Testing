@@ -6,7 +6,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
 
 type SidebarDomain = { id: string; name: string; color: string };
-type SidebarProject = { id: string; name: string; domain_id: string | null };
+type SidebarProject = {
+  id: string;
+  name: string;
+  domain_id: string | null;
+  parent_project_id: string | null;
+};
 
 const SMART_LISTS = [
   { href: "/inbox", label: "Inbox", icon: "📥", iconBg: "#3b82f6" },
@@ -134,7 +139,9 @@ export default function SidebarNav({
 
       <div className="mt-5 space-y-3">
         {domains.map((domain) => {
-          const domainProjects = projects.filter((p) => p.domain_id === domain.id);
+          const domainProjects = projects.filter(
+            (p) => p.domain_id === domain.id && !p.parent_project_id,
+          );
           const domainActive = activeDomainId === domain.id;
 
           return (
@@ -163,16 +170,36 @@ export default function SidebarNav({
               </summary>
               {domainProjects.length > 0 && (
                 <div className="ml-5 mt-0.5 space-y-0.5 border-l border-zinc-200 pl-3 dark:border-zinc-800">
-                  {domainProjects.map((project) => (
-                    <Link
-                      key={project.id}
-                      href={`/tasks?project=${project.id}`}
-                      onClick={() => setMobileOpen(false)}
-                      className="block truncate rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
-                    >
-                      {project.name}
-                    </Link>
-                  ))}
+                  {domainProjects.map((project) => {
+                    const subprojects = projects.filter(
+                      (p) => p.parent_project_id === project.id,
+                    );
+                    return (
+                      <div key={project.id}>
+                        <Link
+                          href={`/tasks?project=${project.id}`}
+                          onClick={() => setMobileOpen(false)}
+                          className="block truncate rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                        >
+                          {project.name}
+                        </Link>
+                        {subprojects.length > 0 && (
+                          <div className="ml-3 space-y-0.5 border-l border-zinc-200 pl-3 dark:border-zinc-800">
+                            {subprojects.map((sub) => (
+                              <Link
+                                key={sub.id}
+                                href={`/tasks?project=${sub.id}`}
+                                onClick={() => setMobileOpen(false)}
+                                className="block truncate rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:bg-zinc-900"
+                              >
+                                {sub.name}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </details>

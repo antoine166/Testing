@@ -122,7 +122,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     async ({ domain_id }) => {
       let query = admin
         .from("projects")
-        .select("id, name, description, domain_id, status, due_date")
+        .select("id, name, description, domain_id, parent_project_id, status, due_date")
         .eq("user_id", userId)
         .is("deleted_at", null);
       if (domain_id) query = query.eq("domain_id", domain_id);

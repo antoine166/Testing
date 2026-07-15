@@ -49,6 +49,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("domain_id" in body) {
     updates.domain_id = typeof body.domain_id === "string" ? body.domain_id : null;
   }
+  if ("parent_project_id" in body) {
+    updates.parent_project_id =
+      typeof body.parent_project_id === "string" ? body.parent_project_id : null;
+  }
   if (typeof body.status === "string") {
     updates.status = body.status;
   }
