@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
+import TaskRow, { type Task } from "@/components/task-row";
 
 type Domain = {
   id: string;
@@ -23,6 +24,7 @@ type Project = {
 export default function DomainsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,13 +39,15 @@ export default function DomainsPage() {
 
   async function loadDomains() {
     try {
-      const [domainsRes, projectsRes] = await Promise.all([
+      const [domainsRes, projectsRes, tasksRes] = await Promise.all([
         fetch("/api/domains"),
         fetch("/api/projects"),
+        fetch("/api/tasks"),
       ]);
-      if (!domainsRes.ok || !projectsRes.ok) throw new Error("Failed to load domains");
+      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) throw new Error("Failed to load domains");
       setDomains(await domainsRes.json());
       setProjects(await projectsRes.json());
+      setTasks(await tasksRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -58,14 +62,16 @@ export default function DomainsPage() {
     Promise.all([
       fetch("/api/domains", { signal: controller.signal }),
       fetch("/api/projects", { signal: controller.signal }),
+      fetch("/api/tasks", { signal: controller.signal }),
     ])
-      .then(async ([domainsRes, projectsRes]) => {
-        if (!domainsRes.ok || !projectsRes.ok) throw new Error("Failed to load domains");
-        return Promise.all([domainsRes.json(), projectsRes.json()]);
+      .then(async ([domainsRes, projectsRes, tasksRes]) => {
+        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) throw new Error("Failed to load domains");
+        return Promise.all([domainsRes.json(), projectsRes.json(), tasksRes.json()]);
       })
-      .then(([domainsData, projectsData]: [Domain[], Project[]]) => {
+      .then(([domainsData, projectsData, tasksData]: [Domain[], Project[], Task[]]) => {
         setDomains(domainsData);
         setProjects(projectsData);
+        setTasks(tasksData);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -177,6 +183,35 @@ export default function DomainsPage() {
 
     if (results.some((r) => !r.ok)) {
       setError("Couldn't save the new order — try again.");
+    }
+    await loadDomains();
+  }
+
+  async function handleTaskUpdate(id: string, updates: Record<string, unknown>) {
+    const res = await fetch(`/api/tasks/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to update task");
+      return;
+    }
+    await loadDomains();
+  }
+
+  async function toggleTaskDone(task: Task) {
+    await handleTaskUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
+  }
+
+  async function handleTaskDelete(id: string) {
+    if (!confirm("Move this task to trash? You can restore it within 30 days.")) return;
+    const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to delete task");
+      return;
     }
     await loadDomains();
   }
@@ -315,25 +350,75 @@ export default function DomainsPage() {
               {editingId !== domain.id &&
                 (() => {
                   const domainProjects = projects.filter((p) => p.domain_id === domain.id);
-                  if (domainProjects.length === 0) return null;
+                  const domainTasks = tasks.filter(
+                    (t) => t.domain_id === domain.id && t.status !== "done",
+                  );
+                  if (domainProjects.length === 0 && domainTasks.length === 0) return null;
+
                   return (
-                    <ul className="mt-2 ml-7 space-y-1 border-l border-zinc-200 pl-3 dark:border-zinc-800">
-                      {domainProjects.map((project) => (
-                        <li key={project.id}>
-                          <Link
-                            href={`/tasks?project=${project.id}`}
-                            className="block text-sm text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
-                          >
-                            {project.name}
-                            {project.status !== "active" && (
-                              <span className="ml-1.5 text-xs text-zinc-400">
-                                ({project.status})
+                    <div className="mt-2 ml-7 space-y-1 border-l border-zinc-200 pl-3 dark:border-zinc-800">
+                      {domainTasks.length > 0 && (
+                        <details className="group">
+                          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50">
+                            <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                              ›
+                            </span>
+                            All tasks ({domainTasks.length})
+                          </summary>
+                          <ul className="mt-1.5 space-y-1.5 pl-4">
+                            {domainTasks.map((task) => (
+                              <TaskRow
+                                key={task.id}
+                                task={task}
+                                domains={domains}
+                                projects={projects}
+                                onToggleDone={toggleTaskDone}
+                                onUpdate={handleTaskUpdate}
+                                onDelete={handleTaskDelete}
+                              />
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                      {domainProjects.map((project) => {
+                        const projectTasks = tasks.filter(
+                          (t) => t.project_id === project.id && t.status !== "done",
+                        );
+                        return (
+                          <details key={project.id} className="group">
+                            <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50">
+                              <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                                ›
                               </span>
+                              {project.name}
+                              {project.status !== "active" && (
+                                <span className="text-xs text-zinc-400">({project.status})</span>
+                              )}
+                              <span className="text-xs text-zinc-400">
+                                ({projectTasks.length})
+                              </span>
+                            </summary>
+                            {projectTasks.length === 0 ? (
+                              <p className="mt-1 pl-4 text-xs text-zinc-500">No open tasks.</p>
+                            ) : (
+                              <ul className="mt-1.5 space-y-1.5 pl-4">
+                                {projectTasks.map((task) => (
+                                  <TaskRow
+                                    key={task.id}
+                                    task={task}
+                                    domains={domains}
+                                    projects={projects}
+                                    onToggleDone={toggleTaskDone}
+                                    onUpdate={handleTaskUpdate}
+                                    onDelete={handleTaskDelete}
+                                  />
+                                ))}
+                              </ul>
                             )}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
+                          </details>
+                        );
+                      })}
+                    </div>
                   );
                 })()}
             </li>
