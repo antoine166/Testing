@@ -260,10 +260,13 @@ export default function HabitsPage() {
             const unfiled = habits.filter((h) => !h.domain_id);
             if (unfiled.length === 0) return null;
             return (
-              <div>
-                <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+              <details open className="group">
+                <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                    ›
+                  </span>
                   No domain
-                </h2>
+                </summary>
                 <ul className="space-y-2">
                   {unfiled.map((habit) => (
                     <HabitRow
@@ -278,7 +281,7 @@ export default function HabitsPage() {
                     />
                   ))}
                 </ul>
-              </div>
+              </details>
             );
           })()}
 
@@ -286,16 +289,17 @@ export default function HabitsPage() {
             const domainHabits = habits.filter((h) => h.domain_id === domain.id);
             if (domainHabits.length === 0) return null;
             return (
-              <div key={domain.id}>
-                <div className="mb-2 flex items-center gap-2">
+              <details key={domain.id} open className="group">
+                <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                    ›
+                  </span>
                   <span
                     className="h-3.5 w-3.5 shrink-0 rounded-full"
                     style={{ backgroundColor: domain.color }}
                   />
-                  <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                    {domain.name}
-                  </h2>
-                </div>
+                  {domain.name}
+                </summary>
                 <ul className="space-y-2">
                   {domainHabits.map((habit) => (
                     <HabitRow
@@ -310,7 +314,7 @@ export default function HabitsPage() {
                     />
                   ))}
                 </ul>
-              </div>
+              </details>
             );
           })}
         </div>

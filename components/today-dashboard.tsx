@@ -371,10 +371,11 @@ export default function TodayDashboard() {
         </div>
       )}
 
-      <div>
-        <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+      <details open className="group">
+        <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
           Habits today {dueHabits.length > 0 && `(${dueHabits.length})`}
-        </h2>
+        </summary>
         {atRiskCount > 0 && (
           <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-500">
             ⚠️ {atRiskCount} at risk of breaking a streak twice in a row — do these first
@@ -398,7 +399,7 @@ export default function TodayDashboard() {
             ))}
           </ul>
         )}
-      </div>
+      </details>
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
