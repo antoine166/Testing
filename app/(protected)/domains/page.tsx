@@ -13,8 +13,16 @@ type Domain = {
   sort_order: number;
 };
 
+type Project = {
+  id: string;
+  name: string;
+  domain_id: string | null;
+  status: string;
+};
+
 export default function DomainsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,9 +37,13 @@ export default function DomainsPage() {
 
   async function loadDomains() {
     try {
-      const res = await fetch("/api/domains");
-      if (!res.ok) throw new Error("Failed to load domains");
-      setDomains(await res.json());
+      const [domainsRes, projectsRes] = await Promise.all([
+        fetch("/api/domains"),
+        fetch("/api/projects"),
+      ]);
+      if (!domainsRes.ok || !projectsRes.ok) throw new Error("Failed to load domains");
+      setDomains(await domainsRes.json());
+      setProjects(await projectsRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -43,12 +55,18 @@ export default function DomainsPage() {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch("/api/domains", { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load domains");
-        return res.json();
+    Promise.all([
+      fetch("/api/domains", { signal: controller.signal }),
+      fetch("/api/projects", { signal: controller.signal }),
+    ])
+      .then(async ([domainsRes, projectsRes]) => {
+        if (!domainsRes.ok || !projectsRes.ok) throw new Error("Failed to load domains");
+        return Promise.all([domainsRes.json(), projectsRes.json()]);
       })
-      .then((data: Domain[]) => setDomains(data))
+      .then(([domainsData, projectsData]: [Domain[], Project[]]) => {
+        setDomains(domainsData);
+        setProjects(projectsData);
+      })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -226,71 +244,98 @@ export default function DomainsPage() {
               onDragOver={(e) => handleDragOver(e, domain.id)}
               onDrop={(e) => e.preventDefault()}
               onDragEnd={handleDragEnd}
-              className={`flex items-center gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800 ${
+              className={`rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800 ${
                 editingId === domain.id ? "" : "cursor-grab active:cursor-grabbing"
               } ${draggedId === domain.id ? "opacity-40" : ""}`}
             >
-              {editingId !== domain.id && (
-                <span className="select-none text-zinc-300 dark:text-zinc-600" aria-hidden>
-                  ⠿
-                </span>
-              )}
-              {editingId === domain.id ? (
-                <>
-                  <ColorPicker value={editColor} onChange={setEditColor} />
-                  <input
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <button
-                    onClick={() => handleUpdate(domain.id)}
-                    className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => setEditingId(null)}
-                    className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span
-                    className="h-4 w-4 shrink-0 rounded-full"
-                    style={{ backgroundColor: domain.color }}
-                  />
-                  <span className="flex-1 text-sm text-zinc-900 dark:text-zinc-100">
-                    {domain.name}
+              <div className="flex items-center gap-3">
+                {editingId !== domain.id && (
+                  <span className="select-none text-zinc-300 dark:text-zinc-600" aria-hidden>
+                    ⠿
                   </span>
-                  <Link
-                    href={`/tasks?domain=${domain.id}`}
-                    className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-                  >
-                    Tasks
-                  </Link>
-                  <Link
-                    href={`/projects?domain=${domain.id}`}
-                    className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-                  >
-                    + Project
-                  </Link>
-                  <button
-                    onClick={() => startEdit(domain)}
-                    className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(domain.id)}
-                    className="text-sm font-medium text-red-600 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
-                </>
-              )}
+                )}
+                {editingId === domain.id ? (
+                  <>
+                    <ColorPicker value={editColor} onChange={setEditColor} />
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <button
+                      onClick={() => handleUpdate(domain.id)}
+                      className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className="h-4 w-4 shrink-0 rounded-full"
+                      style={{ backgroundColor: domain.color }}
+                    />
+                    <span className="flex-1 text-sm text-zinc-900 dark:text-zinc-100">
+                      {domain.name}
+                    </span>
+                    <Link
+                      href={`/tasks?domain=${domain.id}`}
+                      className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                    >
+                      Tasks
+                    </Link>
+                    <Link
+                      href={`/projects?domain=${domain.id}`}
+                      className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                    >
+                      + Project
+                    </Link>
+                    <button
+                      onClick={() => startEdit(domain)}
+                      className="text-sm font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(domain.id)}
+                      className="text-sm font-medium text-red-600 hover:text-red-700"
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {editingId !== domain.id &&
+                (() => {
+                  const domainProjects = projects.filter((p) => p.domain_id === domain.id);
+                  if (domainProjects.length === 0) return null;
+                  return (
+                    <ul className="mt-2 ml-7 space-y-1 border-l border-zinc-200 pl-3 dark:border-zinc-800">
+                      {domainProjects.map((project) => (
+                        <li key={project.id}>
+                          <Link
+                            href={`/tasks?project=${project.id}`}
+                            className="block text-sm text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
+                          >
+                            {project.name}
+                            {project.status !== "active" && (
+                              <span className="ml-1.5 text-xs text-zinc-400">
+                                ({project.status})
+                              </span>
+                            )}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
             </li>
           ))}
           </ul>
