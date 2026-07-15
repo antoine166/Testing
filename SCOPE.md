@@ -159,12 +159,23 @@ A personal second brain for saving things Antoine wants to keep.
 ### 3.11 Coach *(Phase 2)*
 AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 
-- Has read access to Antoine's tasks, habits, check-ins, and projects
+- Has read access to Antoine's domains, projects (including subprojects), tasks, habits, routines,
+  checklists, knowledge library folders, and today's check-in
 - Antoine can ask it questions: "What should I focus on today?", "How are my habits going?"
 - Responds with context-aware coaching, not generic advice
-- **Can also take action** via tool use: create tasks and log habits on Antoine's behalf when the conversation implies it (e.g. "remind me to call the dentist" → creates a task; "I did my workout" → logs the habit)
-- Allowed write actions for Phase 2: create task, log habit. No edits/deletes, no project or domain creation, no check-in writes — keep the blast radius small until this is proven out
-- Exact confirmation UX (auto-create vs. confirm-before-write) is a Phase 2 design decision, not finalized here
+- **Can also take action** via tool use, broadly: create/update/delete tasks and projects
+  (including subprojects), create/update domains, log/unlog habits, create/update/delete routines
+  and append steps to them, create/update/delete/reset checklists and append items to them, and
+  create/organize knowledge library items and folders
+- **Every tool call requires Antoine's explicit approve/decline before it runs** — this is the
+  safety mechanism, not a restricted tool list. The app shows exactly what's proposed; Coach never
+  auto-executes
+- Deliberately **not** available to Coach: editing/deleting one existing routine step, checklist
+  item, or knowledge library item (Coach's context lists routines/checklists/folders by name+ID so
+  it can act on them, but not their individual child items — that granularity is app/MCP-only,
+  where a list-then-act tool loop is available). Domain deletion and permanently purging trashed
+  items (bypassing the 30-day recovery window) are excluded on both Coach and MCP — kept app-only
+  as the two genuinely irreversible actions
 
 ### 3.11a Claude Connector (MCP) *(Phase 2)*
 A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claude.ai or in the Claude Desktop app — not just the in-app Coach tab — and have it read and manage his Life OS data.
@@ -172,8 +183,19 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claud
 - Registered in claude.ai as a custom connector (Settings → Connectors → Add custom connector), URL `https://<vercel-domain>/api/mcp`
 - claude.ai's connector flow requires real OAuth (it auto-registers itself as a client and won't accept a plain shared token), so `/api/mcp` is its own OAuth 2.1 + PKCE authorization server (`/api/mcp/register`, `/api/mcp/authorize`, `/api/mcp/token`, discovery documents at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`) — gated by Antoine's existing Supabase Auth login, not a separate account system
 - Authorization codes and tokens are stored as SHA-256 hashes (`mcp_oauth_clients`/`mcp_oauth_codes`/`mcp_oauth_tokens`); access tokens last 1 hour, refresh tokens 6 months with rotation on use
-- Broader tool scope than the in-app Coach: full CRUD on tasks and habits (create/update/complete/delete, log/unlog), read-only on domains/projects, read/write on the daily check-in, plus a `get_today_summary` tool for "what should I focus on today" style coaching
-- Domains: full read/create/update (`list_domains`, `create_domain`, `update_domain`) via MCP; delete stays app-only (it cascades to projects/tasks — kept out of MCP's reach deliberately). Habit tools (`create_habit`/`update_habit`) accept an optional `domain_id`. Projects remain read-only (`list_projects`). Routines, checklists, knowledge library, and attachments are not exposed via MCP yet — manage those in the app
+- **Full CRUD across nearly the entire app**, unlike the in-app Coach: tasks and habits
+  (create/update/complete/delete, log/unlog), projects and subprojects (create/update/delete,
+  cascading to a project's subprojects and their tasks together), domains (create/update only —
+  see below), routines and their steps (create/update/delete), checklists and their items
+  (create/update/delete/reset), the knowledge library (items: create/update/delete; folders:
+  create/update), and the daily check-in (read/write). Plus `get_today_summary` for "what should I
+  focus on today" style coaching
+- **Deliberately excluded, on both MCP and Coach** — the two genuinely irreversible actions:
+  domain deletion (cascades to all of that domain's projects/tasks with no MCP-side confirmation
+  step) and permanently purging a trashed item before its 30-day recovery window ends. Both stay
+  app-only, where Antoine acts on them directly rather than through a tool call
+- Knowledge folder deletion is also excluded (app-only) — unlike knowledge items, folders hard-delete immediately with no trash/recovery step, so it carries the same one-way risk as the two exclusions above
+- No app-side "approve before it runs" step exists here the way it does for the in-app Coach — MCP tool calls execute immediately once Claude decides to call them, with only whatever confirmation habits the MCP client itself (claude.ai / Claude Desktop) provides. That's the tradeoff for the broader scope
 - **Proactive daily digest**: a scheduled Claude Routine (external to this codebase — configured on the Claude platform, not a Vercel cron) fires daily at 12:00 UTC (8am Eastern, will drift an hour across DST since the cron itself has no timezone) and pushes Antoine a short coaching nudge — habits not yet logged (and which are at-risk, see 3.7), anything overdue, one thing to prioritize. Deliberately does **not** go through the MCP connector — a routine's freshly spawned session never has the connector enabled by default (that's a per-chat toggle, not account-wide), so the routine instead calls `GET /api/digest` directly via curl, a plain endpoint gated by a shared secret (`DIGEST_ACCESS_TOKEN`) rather than OAuth. This also means the routine isn't tied to any specific Claude session. Reconfigured directly on the Claude platform if the time or content needs to change, not in this repo
 
 ### 3.12 Trash *(Phase 4)*

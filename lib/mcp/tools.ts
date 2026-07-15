@@ -10,6 +10,9 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
 const TASK_PRIORITIES = ["none", "low", "medium", "high"] as const;
 const HABIT_FREQUENCIES = ["daily", "specific_days", "times_per_week"] as const;
+const PROJECT_STATUSES = ["active", "someday", "completed", "archived"] as const;
+const TIME_OF_DAY = ["morning", "afternoon", "evening", "custom"] as const;
+const KNOWLEDGE_TYPES = ["note", "article", "book", "quote", "resource"] as const;
 
 function ok(data: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -129,6 +132,132 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       const { data, error } = await query.order("name");
       if (error) return fail(error.message);
       return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_project",
+    {
+      title: "Create project",
+      description:
+        "Create a new project. Set parent_project_id to create it as a subproject of an " +
+        "existing top-level project instead (e.g. \"Packing\" under \"Move to Atlanta\") — it " +
+        "then inherits that project's domain automatically. Subprojects can only be one level deep.",
+      inputSchema: {
+        name: z.string().min(1),
+        description: z.string().optional(),
+        domain_id: z.string().uuid().optional(),
+        parent_project_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("UUID of a top-level project to nest this new project under, if any."),
+        status: z.enum(PROJECT_STATUSES).optional(),
+        due_date: z.string().optional().describe("YYYY-MM-DD"),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ name, description, domain_id, parent_project_id, status, due_date }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name is required");
+
+      const { data, error } = await admin
+        .from("projects")
+        .insert({
+          user_id: userId,
+          name: trimmed,
+          description,
+          domain_id: domain_id ?? null,
+          parent_project_id: parent_project_id ?? null,
+          status,
+          due_date,
+        })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_project",
+    {
+      title: "Update project",
+      description:
+        "Update a project's name, description, status, domain, or parent project. Use " +
+        "parent_project_id to file it as a subproject of another top-level project; pass an " +
+        "empty string to clear it and promote it back to top-level. Subprojects always take on " +
+        "their parent's domain.",
+      inputSchema: {
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        domain_id: z.string().uuid().nullable().optional(),
+        parent_project_id: z.string().uuid().nullable().optional(),
+        status: z.enum(PROJECT_STATUSES).optional(),
+        due_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, name, ...rest }) => {
+      const updates: Record<string, unknown> = { ...rest };
+      if (name !== undefined) {
+        const trimmed = name.trim();
+        if (!trimmed) return fail("Name cannot be empty");
+        updates.name = trimmed;
+      }
+
+      const { data, error } = await admin
+        .from("projects")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_project",
+    {
+      title: "Delete project",
+      description:
+        "Move a project to trash, along with its subprojects (if any) and all of their tasks. " +
+        "Recoverable for 30 days from the app's Trash page.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const ts = new Date().toISOString();
+      const { data: children, error: childrenError } = await admin
+        .from("projects")
+        .select("id")
+        .eq("parent_project_id", id)
+        .eq("user_id", userId)
+        .is("deleted_at", null);
+      if (childrenError) return fail(childrenError.message);
+
+      const projectIds = [id, ...children.map((c) => c.id)];
+
+      const { error: tasksError } = await admin
+        .from("tasks")
+        .update({ deleted_at: ts })
+        .in("project_id", projectIds)
+        .eq("user_id", userId)
+        .is("deleted_at", null);
+      if (tasksError) return fail(tasksError.message);
+
+      const { error: projectsError } = await admin
+        .from("projects")
+        .update({ deleted_at: ts })
+        .in("id", projectIds)
+        .eq("user_id", userId)
+        .is("deleted_at", null);
+      if (projectsError) return fail(projectsError.message);
+
+      return ok({ deleted: id, subprojects_deleted: children.map((c) => c.id) });
     },
   );
 
@@ -537,6 +666,618 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           { user_id: userId, date: date ?? todayLocal(), energy_level, focus_level, notes },
           { onConflict: "user_id,date" },
         )
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  // --- Routines ---
+
+  server.registerTool(
+    "list_routines",
+    {
+      title: "List routines",
+      description: "List Antoine's routines (ordered sequences of steps tied to a time of day).",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("routines")
+        .select("*")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("name");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "list_routine_items",
+    {
+      title: "List routine steps",
+      description: "List the ordered steps of a routine.",
+      inputSchema: { routine_id: z.string().uuid() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ routine_id }) => {
+      const { data, error } = await admin
+        .from("routine_items")
+        .select("*")
+        .eq("routine_id", routine_id)
+        .eq("user_id", userId)
+        .order("sort_order");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_routine",
+    {
+      title: "Create routine",
+      description: "Create a new routine — an ordered sequence of steps tied to a time of day.",
+      inputSchema: {
+        name: z.string().min(1),
+        time_of_day: z.enum(TIME_OF_DAY).optional().describe("Defaults to morning"),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ name, time_of_day }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name is required");
+
+      const { data, error } = await admin
+        .from("routines")
+        .insert({ user_id: userId, name: trimmed, time_of_day })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_routine",
+    {
+      title: "Update routine",
+      description: "Rename a routine, change its time of day, or pause it (active: false).",
+      inputSchema: {
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        time_of_day: z.enum(TIME_OF_DAY).optional(),
+        active: z.boolean().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, name, ...rest }) => {
+      const updates: Record<string, unknown> = { ...rest };
+      if (name !== undefined) {
+        const trimmed = name.trim();
+        if (!trimmed) return fail("Name cannot be empty");
+        updates.name = trimmed;
+      }
+
+      const { data, error } = await admin
+        .from("routines")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_routine",
+    {
+      title: "Delete routine",
+      description: "Move a routine (and its steps) to trash. Recoverable for 30 days.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("routines")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  server.registerTool(
+    "add_routine_item",
+    {
+      title: "Add routine step",
+      description: "Append a new step to the end of a routine.",
+      inputSchema: {
+        routine_id: z.string().uuid(),
+        title: z.string().min(1),
+        duration_minutes: z.number().int().min(1).optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ routine_id, title, duration_minutes }) => {
+      const trimmed = title.trim();
+      if (!trimmed) return fail("Title is required");
+
+      const { data: last, error: lastError } = await admin
+        .from("routine_items")
+        .select("sort_order")
+        .eq("routine_id", routine_id)
+        .eq("user_id", userId)
+        .order("sort_order", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastError) return fail(lastError.message);
+
+      const { data, error } = await admin
+        .from("routine_items")
+        .insert({
+          user_id: userId,
+          routine_id,
+          title: trimmed,
+          duration_minutes: duration_minutes ?? null,
+          sort_order: last ? last.sort_order + 1 : 0,
+        })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_routine_item",
+    {
+      title: "Update routine step",
+      description: "Update a routine step's title, duration, or sort order.",
+      inputSchema: {
+        id: z.string().uuid(),
+        title: z.string().min(1).optional(),
+        duration_minutes: z.number().int().min(1).nullable().optional(),
+        sort_order: z.number().int().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, title, ...rest }) => {
+      const updates: Record<string, unknown> = { ...rest };
+      if (title !== undefined) {
+        const trimmed = title.trim();
+        if (!trimmed) return fail("Title cannot be empty");
+        updates.title = trimmed;
+      }
+
+      const { data, error } = await admin
+        .from("routine_items")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_routine_item",
+    {
+      title: "Delete routine step",
+      description: "Remove a single step from a routine. Not recoverable — routine steps aren't trashed individually.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin.from("routine_items").delete().eq("id", id).eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  // --- Checklists ---
+
+  server.registerTool(
+    "list_checklists",
+    {
+      title: "List checklists",
+      description: "List Antoine's reusable, resettable checklists (e.g. a packing list).",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("checklists")
+        .select("*")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("name");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "list_checklist_items",
+    {
+      title: "List checklist items",
+      description: "List the items on a checklist, in order, with their checked state.",
+      inputSchema: { checklist_id: z.string().uuid() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ checklist_id }) => {
+      const { data, error } = await admin
+        .from("checklist_items")
+        .select("*")
+        .eq("checklist_id", checklist_id)
+        .eq("user_id", userId)
+        .order("sort_order");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_checklist",
+    {
+      title: "Create checklist",
+      description: "Create a new empty checklist.",
+      inputSchema: { name: z.string().min(1) },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ name }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name is required");
+
+      const { data, error } = await admin
+        .from("checklists")
+        .insert({ user_id: userId, name: trimmed })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_checklist",
+    {
+      title: "Rename checklist",
+      description: "Rename a checklist.",
+      inputSchema: { id: z.string().uuid(), name: z.string().min(1) },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, name }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name cannot be empty");
+
+      const { data, error } = await admin
+        .from("checklists")
+        .update({ name: trimmed })
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_checklist",
+    {
+      title: "Delete checklist",
+      description: "Move a checklist (and its items) to trash. Recoverable for 30 days.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("checklists")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  server.registerTool(
+    "reset_checklist",
+    {
+      title: "Reset checklist",
+      description: "Uncheck every item on a checklist in one action, so it's ready to reuse.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("checklist_items")
+        .update({ checked: false })
+        .eq("checklist_id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ reset: id });
+    },
+  );
+
+  server.registerTool(
+    "add_checklist_item",
+    {
+      title: "Add checklist item",
+      description: "Append a new item to the end of a checklist.",
+      inputSchema: { checklist_id: z.string().uuid(), title: z.string().min(1) },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ checklist_id, title }) => {
+      const trimmed = title.trim();
+      if (!trimmed) return fail("Title is required");
+
+      const { data: last, error: lastError } = await admin
+        .from("checklist_items")
+        .select("sort_order")
+        .eq("checklist_id", checklist_id)
+        .eq("user_id", userId)
+        .order("sort_order", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastError) return fail(lastError.message);
+
+      const { data, error } = await admin
+        .from("checklist_items")
+        .insert({
+          user_id: userId,
+          checklist_id,
+          title: trimmed,
+          sort_order: last ? last.sort_order + 1 : 0,
+        })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_checklist_item",
+    {
+      title: "Update checklist item",
+      description: "Check/uncheck a checklist item, rename it, or change its order.",
+      inputSchema: {
+        id: z.string().uuid(),
+        title: z.string().min(1).optional(),
+        checked: z.boolean().optional(),
+        sort_order: z.number().int().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, title, ...rest }) => {
+      const updates: Record<string, unknown> = { ...rest };
+      if (title !== undefined) {
+        const trimmed = title.trim();
+        if (!trimmed) return fail("Title cannot be empty");
+        updates.title = trimmed;
+      }
+
+      const { data, error } = await admin
+        .from("checklist_items")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_checklist_item",
+    {
+      title: "Delete checklist item",
+      description: "Remove a single item from a checklist. Not recoverable — items aren't trashed individually.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin.from("checklist_items").delete().eq("id", id).eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  // --- Knowledge library ---
+
+  server.registerTool(
+    "list_knowledge_items",
+    {
+      title: "List knowledge library items",
+      description: "List Antoine's saved notes, articles, books, quotes, and resources.",
+      inputSchema: {
+        type: z.enum(KNOWLEDGE_TYPES).optional(),
+        folder_id: z.string().uuid().optional(),
+        tag: z.string().optional().describe("Only return items with this tag"),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ type, folder_id, tag }) => {
+      let query = admin.from("knowledge_items").select("*").eq("user_id", userId).is("deleted_at", null);
+      if (type) query = query.eq("type", type);
+      if (folder_id) query = query.eq("folder_id", folder_id);
+      if (tag) query = query.contains("tags", [tag]);
+      const { data, error } = await query.order("created_at", { ascending: false });
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_knowledge_item",
+    {
+      title: "Create knowledge library item",
+      description: "Save a new note, article, book, quote, or resource to Antoine's knowledge library.",
+      inputSchema: {
+        title: z.string().min(1),
+        content: z.string().optional(),
+        url: z.string().optional(),
+        type: z.enum(KNOWLEDGE_TYPES).optional().describe("Defaults to note"),
+        tags: z.array(z.string()).optional(),
+        folder_id: z.string().uuid().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ title, content, url, type, tags, folder_id }) => {
+      const trimmed = title.trim();
+      if (!trimmed) return fail("Title is required");
+
+      const { data, error } = await admin
+        .from("knowledge_items")
+        .insert({
+          user_id: userId,
+          title: trimmed,
+          content,
+          url,
+          type,
+          tags: tags ?? null,
+          folder_id: folder_id ?? null,
+        })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_knowledge_item",
+    {
+      title: "Update knowledge library item",
+      description: "Update an existing knowledge library item.",
+      inputSchema: {
+        id: z.string().uuid(),
+        title: z.string().min(1).optional(),
+        content: z.string().optional(),
+        url: z.string().nullable().optional(),
+        type: z.enum(KNOWLEDGE_TYPES).optional(),
+        tags: z.array(z.string()).nullable().optional(),
+        folder_id: z.string().uuid().nullable().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, title, ...rest }) => {
+      const updates: Record<string, unknown> = { ...rest };
+      if (title !== undefined) {
+        const trimmed = title.trim();
+        if (!trimmed) return fail("Title cannot be empty");
+        updates.title = trimmed;
+      }
+
+      const { data, error } = await admin
+        .from("knowledge_items")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_knowledge_item",
+    {
+      title: "Delete knowledge library item",
+      description: "Move a knowledge library item to trash. Recoverable for 30 days.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("knowledge_items")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  server.registerTool(
+    "list_knowledge_folders",
+    {
+      title: "List knowledge library folders",
+      description: "List Antoine's knowledge library folders (nested, like folders on a computer).",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("knowledge_folders")
+        .select("*")
+        .eq("user_id", userId)
+        .order("name");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_knowledge_folder",
+    {
+      title: "Create knowledge library folder",
+      description: "Create a new knowledge library folder, optionally nested inside another.",
+      inputSchema: {
+        name: z.string().min(1),
+        parent_id: z.string().uuid().optional().describe("UUID of a parent folder, for nesting"),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ name, parent_id }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name is required");
+
+      const { data, error } = await admin
+        .from("knowledge_folders")
+        .insert({ user_id: userId, name: trimmed, parent_id: parent_id ?? null })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_knowledge_folder",
+    {
+      title: "Rename or move knowledge library folder",
+      description:
+        "Rename a knowledge library folder or move it under a different parent. Folder deletion " +
+        "isn't exposed here — it's a permanent, non-recoverable action, so that stays app-only.",
+      inputSchema: {
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        parent_id: z.string().uuid().nullable().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, name, ...rest }) => {
+      const updates: Record<string, unknown> = { ...rest };
+      if (name !== undefined) {
+        const trimmed = name.trim();
+        if (!trimmed) return fail("Name cannot be empty");
+        updates.name = trimmed;
+      }
+
+      const { data, error } = await admin
+        .from("knowledge_folders")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
         .select()
         .single();
       if (error) return fail(error.message);
