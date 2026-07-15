@@ -28,7 +28,23 @@ export const TOOLS: Tool[] = [
     name: "log_habit",
     description:
       "Log that Antoine completed a habit today. Use this when he mentions doing a habit " +
-      "(e.g. 'I meditated this morning', 'did my workout'). Match against the habit list below.",
+      "(e.g. 'I meditated this morning', 'did my workout'). Match against the habit list below. " +
+      "Can be called again for the same habit for 'extra credit' if he says he did it more than " +
+      "once today (e.g. two workouts) — capped at 7 times a day.",
+    input_schema: {
+      type: "object",
+      properties: {
+        habit_id: { type: "string", description: "The habit's UUID from the context below" },
+      },
+      required: ["habit_id"],
+    },
+  },
+  {
+    name: "unlog_habit",
+    description:
+      "Undo today's habit log, e.g. if Antoine says he didn't actually do it or logged it by " +
+      "mistake. If it was logged more than once today (extra credit), this removes just the " +
+      "most recently added one, not all of them.",
     input_schema: {
       type: "object",
       properties: {
@@ -73,14 +89,22 @@ export const TOOLS: Tool[] = [
   {
     name: "update_project",
     description:
-      "Update a project's status or domain, referenced by its UUID from the context below. Use " +
-      "to archive a completed project, mark one someday, or reactivate a someday project.",
+      "Update a project's status, domain, or parent project, referenced by its UUID from the " +
+      "context below. Use to archive a completed project, mark one someday, reactivate a " +
+      "someday project, or file it as a subproject of another project (parent_project_id). " +
+      "Subprojects can only be one level deep and always take on their parent's domain.",
     input_schema: {
       type: "object",
       properties: {
         project_id: { type: "string" },
         status: { type: "string", enum: ["active", "someday", "completed", "archived"] },
         domain_id: { type: "string" },
+        parent_project_id: {
+          type: "string",
+          description:
+            "UUID of another top-level project to nest this one under. Empty string clears it, " +
+            "promoting it back to top-level.",
+        },
       },
       required: ["project_id"],
     },
@@ -89,29 +113,231 @@ export const TOOLS: Tool[] = [
     name: "create_project",
     description:
       "Create a new project when a next action implies a multi-step outcome that isn't tracked " +
-      "yet (an 'embedded project').",
+      "yet (an 'embedded project'). Set parent_project_id to create it as a subproject of an " +
+      "existing top-level project instead (e.g. 'packing' under 'Move to Atlanta') — it then " +
+      "inherits that project's domain automatically. Subprojects can only be one level deep.",
     input_schema: {
       type: "object",
       properties: {
         name: { type: "string" },
         domain_id: { type: "string" },
+        parent_project_id: {
+          type: "string",
+          description: "UUID of a top-level project to nest this new project under, if any.",
+        },
         description: { type: "string" },
       },
       required: ["name"],
+    },
+  },
+  {
+    name: "delete_project",
+    description:
+      "Move a project to Trash, referenced by its UUID from the context below — its subprojects " +
+      "(if any) and all of their tasks go with it. Recoverable for 30 days from the app's Trash " +
+      "page.",
+    input_schema: {
+      type: "object",
+      properties: { project_id: { type: "string" } },
+      required: ["project_id"],
+    },
+  },
+  {
+    name: "create_domain",
+    description: "Create a new top-level life domain (e.g. Health, Finance, Business).",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        color: { type: "string", description: "Optional hex color, e.g. #3b82f6" },
+        icon: { type: "string", description: "Optional emoji or icon name" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_domain",
+    description: "Rename or recolor an existing domain, referenced by its UUID from the context below.",
+    input_schema: {
+      type: "object",
+      properties: {
+        domain_id: { type: "string" },
+        name: { type: "string" },
+        color: { type: "string", description: "Hex color, e.g. #3b82f6" },
+        icon: { type: "string" },
+      },
+      required: ["domain_id"],
+    },
+  },
+  {
+    name: "create_routine",
+    description:
+      "Create a new routine — an ordered sequence of steps tied to a time of day, surfaced on " +
+      "the Today view.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        time_of_day: { type: "string", enum: ["morning", "afternoon", "evening", "custom"] },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_routine",
+    description:
+      "Rename a routine, change its time of day, or pause it, referenced by its UUID from the " +
+      "context below.",
+    input_schema: {
+      type: "object",
+      properties: {
+        routine_id: { type: "string" },
+        name: { type: "string" },
+        time_of_day: { type: "string", enum: ["morning", "afternoon", "evening", "custom"] },
+        active: { type: "boolean", description: "Set false to pause it" },
+      },
+      required: ["routine_id"],
+    },
+  },
+  {
+    name: "delete_routine",
+    description:
+      "Move a routine (and its steps) to Trash, referenced by its UUID from the context below. " +
+      "Recoverable for 30 days.",
+    input_schema: {
+      type: "object",
+      properties: { routine_id: { type: "string" } },
+      required: ["routine_id"],
+    },
+  },
+  {
+    name: "add_routine_item",
+    description: "Append a new step to the end of an existing routine.",
+    input_schema: {
+      type: "object",
+      properties: {
+        routine_id: { type: "string", description: "The routine's UUID from the context below" },
+        title: { type: "string" },
+        duration_minutes: { type: "number" },
+      },
+      required: ["routine_id", "title"],
+    },
+  },
+  {
+    name: "create_checklist",
+    description: "Create a new empty checklist (a reusable, resettable list — e.g. a packing list).",
+    input_schema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_checklist",
+    description: "Rename a checklist, referenced by its UUID from the context below.",
+    input_schema: {
+      type: "object",
+      properties: { checklist_id: { type: "string" }, name: { type: "string" } },
+      required: ["checklist_id", "name"],
+    },
+  },
+  {
+    name: "delete_checklist",
+    description:
+      "Move a checklist (and its items) to Trash, referenced by its UUID from the context below. " +
+      "Recoverable for 30 days.",
+    input_schema: {
+      type: "object",
+      properties: { checklist_id: { type: "string" } },
+      required: ["checklist_id"],
+    },
+  },
+  {
+    name: "reset_checklist",
+    description: "Uncheck every item on a checklist in one action, so it's ready to reuse.",
+    input_schema: {
+      type: "object",
+      properties: { checklist_id: { type: "string" } },
+      required: ["checklist_id"],
+    },
+  },
+  {
+    name: "add_checklist_item",
+    description: "Append a new item to the end of an existing checklist.",
+    input_schema: {
+      type: "object",
+      properties: {
+        checklist_id: { type: "string", description: "The checklist's UUID from the context below" },
+        title: { type: "string" },
+      },
+      required: ["checklist_id", "title"],
+    },
+  },
+  {
+    name: "create_knowledge_item",
+    description:
+      "Save a new note, article, book, quote, or resource to Antoine's knowledge library. Use " +
+      "this when he mentions something worth keeping (e.g. a book recommendation, a link).",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        content: { type: "string" },
+        url: { type: "string" },
+        type: { type: "string", enum: ["note", "article", "book", "quote", "resource"] },
+        tags: { type: "array", items: { type: "string" } },
+        folder_id: { type: "string", description: "Optional folder UUID from the context below" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "create_knowledge_folder",
+    description: "Create a new knowledge library folder, optionally nested inside another.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        parent_id: { type: "string", description: "Optional parent folder UUID from the context below" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_knowledge_folder",
+    description:
+      "Rename a knowledge library folder or move it under a different parent, referenced by its " +
+      "UUID from the context below.",
+    input_schema: {
+      type: "object",
+      properties: {
+        folder_id: { type: "string" },
+        name: { type: "string" },
+        parent_id: { type: "string", description: "Empty string clears it (moves to top level)" },
+      },
+      required: ["folder_id"],
     },
   },
 ];
 
 const BASE_SYSTEM =
   "You are Antoine's personal life coach inside his Life OS app, using the GTD (Getting Things " +
-  "Done) methodology. You have read access to his tasks, projects, habits, and today's check-in, " +
-  "given below. Give specific, context-aware coaching grounded in this data — never generic " +
-  "advice. Keep replies conversational and brief.\n\n" +
-  "You can take actions via tools: create/update/delete tasks, create/update projects, and log " +
-  "habits. Every tool call requires the user's explicit confirmation before it runs — the app " +
-  "shows him exactly what you're proposing and he approves or declines each one. So don't ask for " +
-  "confirmation in your own text, just call the tool when it's clearly implied and let the app " +
-  "handle confirmation.";
+  "Done) methodology. You have read access to his domains, projects, tasks, habits, routines, " +
+  "checklists, knowledge library folders, and today's check-in, given below. Give specific, " +
+  "context-aware coaching grounded in this data — never generic advice. Keep replies " +
+  "conversational and brief.\n\n" +
+  "You can take actions via tools: create/update/delete tasks and projects (including " +
+  "subprojects), create/update domains, log/track habits, create/update/delete routines and add " +
+  "steps to them, create/update/delete/reset checklists and add items to them, and save/organize " +
+  "knowledge library items and folders. Every tool call requires the user's explicit confirmation " +
+  "before it runs — the app shows him exactly what you're proposing and he approves or declines " +
+  "each one. So don't ask for confirmation in your own text, just call the tool when it's clearly " +
+  "implied and let the app handle confirmation.\n\n" +
+  "Some finer-grained actions (editing or deleting one routine step, one checklist item, or one " +
+  "saved knowledge item) aren't available here — those go through the app directly or the Claude " +
+  "connector (claude.ai / Claude Desktop), which can list existing items before acting on them. " +
+  "Domain deletion and permanently purging trashed items (bypassing the 30-day recovery window) " +
+  "are also app-only, deliberately kept out of your reach.";
 
 const WEEKLY_REVIEW_SYSTEM =
   BASE_SYSTEM +
@@ -140,28 +366,38 @@ export function extractText(content: ContentBlockParam[]): string {
 }
 
 export async function buildContext(supabase: SupabaseClient, today: string, mode: string) {
-  const [domainsRes, projectsRes, tasksRes, habitsRes, checkinRes] = await Promise.all([
-    supabase.from("domains").select("id, name"),
-    supabase.from("projects").select("id, name, status").neq("status", "archived"),
-    supabase
-      .from("tasks")
-      .select(
-        "id, title, status, priority, due_date, scheduled_date, someday, waiting_for, waiting_since, domain_id, project_id",
-      )
-      .is("deleted_at", null),
-    supabase.from("habits").select("id, name, frequency, active").eq("active", true),
-    supabase
-      .from("daily_checkins")
-      .select("energy_level, focus_level, notes")
-      .eq("date", today)
-      .maybeSingle(),
-  ]);
+  const [domainsRes, projectsRes, tasksRes, habitsRes, checkinRes, routinesRes, checklistsRes, foldersRes] =
+    await Promise.all([
+      supabase.from("domains").select("id, name"),
+      supabase
+        .from("projects")
+        .select("id, name, status, parent_project_id")
+        .neq("status", "archived"),
+      supabase
+        .from("tasks")
+        .select(
+          "id, title, status, priority, due_date, scheduled_date, someday, waiting_for, waiting_since, domain_id, project_id",
+        )
+        .is("deleted_at", null),
+      supabase.from("habits").select("id, name, frequency, active").eq("active", true),
+      supabase
+        .from("daily_checkins")
+        .select("energy_level, focus_level, notes")
+        .eq("date", today)
+        .maybeSingle(),
+      supabase.from("routines").select("id, name, time_of_day, active").is("deleted_at", null),
+      supabase.from("checklists").select("id, name").is("deleted_at", null),
+      supabase.from("knowledge_folders").select("id, name"),
+    ]);
 
   const domains = domainsRes.data ?? [];
   const projects = projectsRes.data ?? [];
   const tasks = tasksRes.data ?? [];
   const habits = habitsRes.data ?? [];
   const checkin = checkinRes.data;
+  const routines = routinesRes.data ?? [];
+  const checklists = checklistsRes.data ?? [];
+  const knowledgeFolders = foldersRes.data ?? [];
   const openTasks = tasks.filter((t) => t.status !== "done");
 
   const lines: string[] = [];
@@ -170,9 +406,21 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   lines.push("\nDomains:");
   lines.push(domains.length ? domains.map((d) => `- ${d.id} ${d.name}`).join("\n") : "(none yet)");
 
+  const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
   lines.push("\nActive projects:");
   lines.push(
-    projects.length ? projects.map((p) => `- ${p.id} ${p.name} (${p.status})`).join("\n") : "(none)",
+    projects.length
+      ? projects
+          .map(
+            (p) =>
+              `- ${p.id} ${p.name} (${p.status}${
+                p.parent_project_id
+                  ? `, subproject of ${projectNameById.get(p.parent_project_id) ?? p.parent_project_id}`
+                  : ""
+              })`,
+          )
+          .join("\n")
+      : "(none)",
   );
 
   lines.push("\nOpen tasks (not done):");
@@ -196,6 +444,27 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     habits.length ? habits.map((h) => `- ${h.id} ${h.name} (${h.frequency})`).join("\n") : "(none)",
   );
 
+  lines.push("\nRoutines:");
+  lines.push(
+    routines.length
+      ? routines
+          .map((r) => `- ${r.id} ${r.name} (${r.time_of_day}${r.active ? "" : ", paused"})`)
+          .join("\n")
+      : "(none)",
+  );
+
+  lines.push("\nChecklists:");
+  lines.push(
+    checklists.length ? checklists.map((c) => `- ${c.id} ${c.name}`).join("\n") : "(none)",
+  );
+
+  lines.push("\nKnowledge library folders:");
+  lines.push(
+    knowledgeFolders.length
+      ? knowledgeFolders.map((f) => `- ${f.id} ${f.name}`).join("\n")
+      : "(none)",
+  );
+
   lines.push("\nToday's check-in:");
   lines.push(
     checkin
@@ -215,9 +484,21 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     if (!t.project_id) continue;
     openTaskCountByProject.set(t.project_id, (openTaskCountByProject.get(t.project_id) ?? 0) + 1);
   }
-  const stalledProjects = projects.filter(
-    (p) => p.status === "active" && !(openTaskCountByProject.get(p.id) ?? 0),
-  );
+  const subprojectsByParent = new Map<string, typeof projects>();
+  for (const p of projects) {
+    if (!p.parent_project_id) continue;
+    if (!subprojectsByParent.has(p.parent_project_id)) subprojectsByParent.set(p.parent_project_id, []);
+    subprojectsByParent.get(p.parent_project_id)!.push(p);
+  }
+  const stalledProjects = projects.filter((p) => {
+    if (p.status !== "active") return false;
+    const ownCount = openTaskCountByProject.get(p.id) ?? 0;
+    const childCount = (subprojectsByParent.get(p.id) ?? []).reduce(
+      (sum, child) => sum + (openTaskCountByProject.get(child.id) ?? 0),
+      0,
+    );
+    return !ownCount && !childCount;
+  });
   const waitingFor = openTasks.filter((t) => t.waiting_for);
   const somedayTasks = openTasks.filter((t) => t.someday);
 
@@ -280,15 +561,35 @@ export async function executeTool(
     const habitId = typeof input.habit_id === "string" ? input.habit_id : "";
     if (!habitId) return "Error: habit_id is required";
 
+    // The daily cap (7/day) is enforced by a DB trigger
+    // (20260715060000_habit_log_daily_cap.sql), whose message is already
+    // fit to surface as-is.
     const { error } = await supabase
       .from("habit_logs")
       .insert({ user_id: userId, habit_id: habitId, logged_date: today });
 
-    if (error) {
-      if (error.code === "23505") return "That habit is already logged for today.";
-      return `Error: ${error.message}`;
-    }
+    if (error) return `Error: ${error.message}`;
     return "Logged.";
+  }
+
+  if (name === "unlog_habit") {
+    const habitId = typeof input.habit_id === "string" ? input.habit_id : "";
+    if (!habitId) return "Error: habit_id is required";
+
+    const { data: mostRecent } = await supabase
+      .from("habit_logs")
+      .select("id")
+      .eq("habit_id", habitId)
+      .eq("logged_date", today)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!mostRecent) return "Wasn't logged today — nothing to undo.";
+
+    const { error } = await supabase.from("habit_logs").delete().eq("id", mostRecent.id);
+    if (error) return `Error: ${error.message}`;
+    return "Undone. If it was logged more than once today (extra credit), that removed the most recent one.";
   }
 
   if (name === "update_task") {
@@ -342,6 +643,9 @@ export async function executeTool(
     const updates: Record<string, unknown> = {};
     if (typeof input.status === "string") updates.status = input.status;
     if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
+    if (typeof input.parent_project_id === "string") {
+      updates.parent_project_id = input.parent_project_id || null;
+    }
 
     const { data, error } = await supabase
       .from("projects")
@@ -364,6 +668,8 @@ export async function executeTool(
         user_id: userId,
         name: projectName,
         domain_id: typeof input.domain_id === "string" ? input.domain_id : null,
+        parent_project_id:
+          typeof input.parent_project_id === "string" ? input.parent_project_id : null,
         description: typeof input.description === "string" ? input.description : undefined,
       })
       .select()
@@ -371,6 +677,282 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return `Created project "${data.name}".`;
+  }
+
+  if (name === "delete_project") {
+    const projectId = typeof input.project_id === "string" ? input.project_id : "";
+    if (!projectId) return "Error: project_id is required";
+
+    const { error } = await supabase.rpc("trash_project", { p_project_id: projectId });
+
+    if (error) return `Error: ${error.message}`;
+    return "Moved to Trash (subprojects and their tasks went with it, if any).";
+  }
+
+  if (name === "create_domain") {
+    const domainName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!domainName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("domains")
+      .insert({
+        user_id: userId,
+        name: domainName,
+        color: typeof input.color === "string" ? input.color : undefined,
+        icon: typeof input.icon === "string" ? input.icon : undefined,
+      })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Created domain "${data.name}".`;
+  }
+
+  if (name === "update_domain") {
+    const domainId = typeof input.domain_id === "string" ? input.domain_id : "";
+    if (!domainId) return "Error: domain_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.name === "string") updates.name = input.name.trim();
+    if (typeof input.color === "string") updates.color = input.color;
+    if (typeof input.icon === "string") updates.icon = input.icon;
+
+    const { data, error } = await supabase
+      .from("domains")
+      .update(updates)
+      .eq("id", domainId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated domain "${data.name}".`;
+  }
+
+  if (name === "create_routine") {
+    const routineName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!routineName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("routines")
+      .insert({
+        user_id: userId,
+        name: routineName,
+        time_of_day: typeof input.time_of_day === "string" ? input.time_of_day : undefined,
+      })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Created routine "${data.name}".`;
+  }
+
+  if (name === "update_routine") {
+    const routineId = typeof input.routine_id === "string" ? input.routine_id : "";
+    if (!routineId) return "Error: routine_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.name === "string") updates.name = input.name.trim();
+    if (typeof input.time_of_day === "string") updates.time_of_day = input.time_of_day;
+    if (typeof input.active === "boolean") updates.active = input.active;
+
+    const { data, error } = await supabase
+      .from("routines")
+      .update(updates)
+      .eq("id", routineId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated routine "${data.name}".`;
+  }
+
+  if (name === "delete_routine") {
+    const routineId = typeof input.routine_id === "string" ? input.routine_id : "";
+    if (!routineId) return "Error: routine_id is required";
+
+    const { error } = await supabase
+      .from("routines")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", routineId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Moved to Trash.";
+  }
+
+  if (name === "add_routine_item") {
+    const routineId = typeof input.routine_id === "string" ? input.routine_id : "";
+    const title = typeof input.title === "string" ? input.title.trim() : "";
+    if (!routineId) return "Error: routine_id is required";
+    if (!title) return "Error: title is required";
+
+    const { data: last } = await supabase
+      .from("routine_items")
+      .select("sort_order")
+      .eq("routine_id", routineId)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data, error } = await supabase
+      .from("routine_items")
+      .insert({
+        user_id: userId,
+        routine_id: routineId,
+        title,
+        duration_minutes:
+          typeof input.duration_minutes === "number" ? input.duration_minutes : null,
+        sort_order: last ? last.sort_order + 1 : 0,
+      })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Added "${data.title}" to the routine.`;
+  }
+
+  if (name === "create_checklist") {
+    const checklistName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!checklistName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("checklists")
+      .insert({ user_id: userId, name: checklistName })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Created checklist "${data.name}".`;
+  }
+
+  if (name === "update_checklist") {
+    const checklistId = typeof input.checklist_id === "string" ? input.checklist_id : "";
+    const checklistName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!checklistId) return "Error: checklist_id is required";
+    if (!checklistName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("checklists")
+      .update({ name: checklistName })
+      .eq("id", checklistId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Renamed checklist to "${data.name}".`;
+  }
+
+  if (name === "delete_checklist") {
+    const checklistId = typeof input.checklist_id === "string" ? input.checklist_id : "";
+    if (!checklistId) return "Error: checklist_id is required";
+
+    const { error } = await supabase
+      .from("checklists")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", checklistId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Moved to Trash.";
+  }
+
+  if (name === "reset_checklist") {
+    const checklistId = typeof input.checklist_id === "string" ? input.checklist_id : "";
+    if (!checklistId) return "Error: checklist_id is required";
+
+    const { error } = await supabase
+      .from("checklist_items")
+      .update({ checked: false })
+      .eq("checklist_id", checklistId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Checklist reset.";
+  }
+
+  if (name === "add_checklist_item") {
+    const checklistId = typeof input.checklist_id === "string" ? input.checklist_id : "";
+    const title = typeof input.title === "string" ? input.title.trim() : "";
+    if (!checklistId) return "Error: checklist_id is required";
+    if (!title) return "Error: title is required";
+
+    const { data: last } = await supabase
+      .from("checklist_items")
+      .select("sort_order")
+      .eq("checklist_id", checklistId)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data, error } = await supabase
+      .from("checklist_items")
+      .insert({
+        user_id: userId,
+        checklist_id: checklistId,
+        title,
+        sort_order: last ? last.sort_order + 1 : 0,
+      })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Added "${data.title}" to the checklist.`;
+  }
+
+  if (name === "create_knowledge_item") {
+    const title = typeof input.title === "string" ? input.title.trim() : "";
+    if (!title) return "Error: title is required";
+
+    const { data, error } = await supabase
+      .from("knowledge_items")
+      .insert({
+        user_id: userId,
+        title,
+        content: typeof input.content === "string" ? input.content : undefined,
+        url: typeof input.url === "string" ? input.url : undefined,
+        type: typeof input.type === "string" ? input.type : undefined,
+        tags: Array.isArray(input.tags) ? input.tags : null,
+        folder_id: typeof input.folder_id === "string" ? input.folder_id : null,
+      })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Saved "${data.title}" to the knowledge library.`;
+  }
+
+  if (name === "create_knowledge_folder") {
+    const folderName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!folderName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("knowledge_folders")
+      .insert({
+        user_id: userId,
+        name: folderName,
+        parent_id: typeof input.parent_id === "string" ? input.parent_id : null,
+      })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Created folder "${data.name}".`;
+  }
+
+  if (name === "update_knowledge_folder") {
+    const folderId = typeof input.folder_id === "string" ? input.folder_id : "";
+    if (!folderId) return "Error: folder_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.name === "string") updates.name = input.name.trim();
+    if (typeof input.parent_id === "string") updates.parent_id = input.parent_id || null;
+
+    const { data, error } = await supabase
+      .from("knowledge_folders")
+      .update(updates)
+      .eq("id", folderId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated folder "${data.name}".`;
   }
 
   return `Error: unknown tool ${name}`;

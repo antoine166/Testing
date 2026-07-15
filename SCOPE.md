@@ -52,6 +52,7 @@ A second frictionless-capture path: forward or send an email, it becomes an inbo
 - Any email from a non-allowlisted sender is silently dropped (no error surfaced, nothing created)
 - **Dedup**: the task stores the email's Message-ID (`tasks.source_message_id`, unique). If Resend redelivers the same webhook, or the same email otherwise lands twice, the second insert hits the unique constraint and is treated as a no-op instead of creating a duplicate task
 - Body is captured as plain text only (no rendered HTML view) — tried once, but marketing/newsletter email templates rely on inline CSS for layout that isn't safe to render as-is, and stripping it produced broken-looking output (e.g. background images overlapping text)
+- **Gmail auto-link** (optional — everything above works without it): the created task's `link` field is normally filled by regex-parsing the forward body for a URL (preferring one that looks like a Gmail permalink, if any was pasted in), which is a best-effort heuristic since Gmail's own "Forward" doesn't reliably include one. If Antoine has connected his Gmail account (Settings page → `lib/gmail/client.ts`, OAuth via `/api/gmail/connect` → `/api/gmail/callback`), the webhook instead looks the forwarded email up by its RFC822 Message-ID (`rfc822msgid:` search, already captured as `tasks.source_message_id` for dedup) via the Gmail API and builds an authoritative `https://mail.google.com/mail/u/0/#all/<id>` link from the real Gmail-internal message ID — falling back to the regex heuristic if no connection exists or the lookup fails for any reason. Uses the minimal `gmail.metadata` scope (message existence + ID only, never message content). Requires `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (Google Cloud Console — see `.env.local.example` for setup steps); tokens live in `gmail_connections` (one row per user, RLS owner-only, never returned to the client — read only by the inbound webhook via the service-role client, or by the connect/callback/disconnect routes via the owner's own session)
 
 ### 3.2 Domains
 Top-level buckets for life areas (e.g., Health, Work, Business, Personal, Finance, Learning).
@@ -69,6 +70,17 @@ A project belongs to one domain and contains tasks.
 - Statuses: `active` | `someday` | `completed` | `archived`
 - Projects view groups by domain
 - Completing all tasks in a project does NOT auto-complete the project — Antoine marks it done
+- **Subprojects** (`projects.parent_project_id`, self-referencing): a project can optionally live
+  inside one other project — "project within a project" (e.g. "Move to Atlanta" → "Packing").
+  Capped at **one level deep**: a subproject cannot itself have subprojects, and a project that
+  already has subprojects can't become one (enforced by a DB trigger, not just the UI). A
+  subproject always shares its parent's domain — there's no independent domain picker for it, and
+  the domain follows automatically if the parent's domain changes later. The Projects page and
+  Sidebar show subprojects nested directly under their parent; a project's "stalled" check (zero
+  open tasks) counts its subprojects' open tasks too, since a parent with an active subproject
+  that has a next action isn't actually stalled. Trashing/restoring/purging a project cascades to
+  its subprojects and all of their tasks together, the same way domain→project cascade already
+  works
 
 ### 3.4 Tasks
 The atomic unit of work.
@@ -113,7 +125,7 @@ Simple habit tracker with streak counting.
   - `daily` — every day
   - `specific_days` — fixed days of the week (e.g. Mon/Wed/Fri)
   - `times_per_week` — any N days per week, Antoine's choice which days (e.g. "3x per week")
-- Logging: one log per habit per day (tap to toggle on/off)
+- Logging: tap a day's square to log/unlog it. **Extra credit**: a habit can be logged more than once on the same day (e.g. two workouts), capped at 7/day — the day's square gets a small "+" once logged, which appends another, darker-green square right next to it; clicking any of a day's squares removes the most recently added one first. The 7/day cap is enforced by a DB trigger (`habit_logs_daily_cap`), not app-level checks, so it applies uniformly regardless of which surface (app, Coach, MCP) creates the log. For `daily`/`specific_days` streaks this is purely cosmetic (streak math dedupes by date via a `Set`, unaffected by count); for `times_per_week`, extra same-day logs *do* count toward that week's target and streak, since that math already counts raw log rows rather than distinct days — two workouts on Monday count as 2 of a 3x/week goal. The `times_per_week` tally row (the `target_count` progress boxes) is unaffected/uncapped-display — it still shows at most `target_count` boxes, all filled once the target's hit; it doesn't grow extra boxes past target the way a single day's square does
 - **Current streak**:
   - `daily` / `specific_days`: consecutive required days logged up to today, missing a required day resets to 0
   - `times_per_week`: consecutive weeks where the log count hit the target; a week that falls short resets to 0 (the current, still-in-progress week doesn't break the streak until it ends)
@@ -141,19 +153,30 @@ Reusable, resettable lists — for things you run through repeatedly rather than
 A personal second brain for saving things Antoine wants to keep.
 
 - Types: `note` | `article` | `book` | `quote` | `resource`
-- Fields: title, content/body, URL (optional), tags, type
+- Fields: title, content/body, URL (optional), tags, type, optional folder
 - Search across all items by keyword or tag
-- No folders — tags only
+- **Folders** (`knowledge_folders`): nested, arbitrary depth via a self-referencing `parent_id` (like folders on a computer — see §6). A DB trigger (`knowledge_folders_no_cycle`) rejects any insert/update that would make a folder its own ancestor, since the Library page's breadcrumb walks up `parent_id` and would hang on a cycle. Deleting a folder cascades to its subfolders; items inside just become unfiled (`folder_id` null) rather than being deleted
 
 ### 3.11 Coach *(Phase 2)*
 AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 
-- Has read access to Antoine's tasks, habits, check-ins, and projects
+- Has read access to Antoine's domains, projects (including subprojects), tasks, habits, routines,
+  checklists, knowledge library folders, and today's check-in
 - Antoine can ask it questions: "What should I focus on today?", "How are my habits going?"
 - Responds with context-aware coaching, not generic advice
-- **Can also take action** via tool use: create tasks and log habits on Antoine's behalf when the conversation implies it (e.g. "remind me to call the dentist" → creates a task; "I did my workout" → logs the habit)
-- Allowed write actions for Phase 2: create task, log habit. No edits/deletes, no project or domain creation, no check-in writes — keep the blast radius small until this is proven out
-- Exact confirmation UX (auto-create vs. confirm-before-write) is a Phase 2 design decision, not finalized here
+- **Can also take action** via tool use, broadly: create/update/delete tasks and projects
+  (including subprojects), create/update domains, log/unlog habits, create/update/delete routines
+  and append steps to them, create/update/delete/reset checklists and append items to them, and
+  create/organize knowledge library items and folders
+- **Every tool call requires Antoine's explicit approve/decline before it runs** — this is the
+  safety mechanism, not a restricted tool list. The app shows exactly what's proposed; Coach never
+  auto-executes
+- Deliberately **not** available to Coach: editing/deleting one existing routine step, checklist
+  item, or knowledge library item (Coach's context lists routines/checklists/folders by name+ID so
+  it can act on them, but not their individual child items — that granularity is app/MCP-only,
+  where a list-then-act tool loop is available). Domain deletion and permanently purging trashed
+  items (bypassing the 30-day recovery window) are excluded on both Coach and MCP — kept app-only
+  as the two genuinely irreversible actions
 
 ### 3.11a Claude Connector (MCP) *(Phase 2)*
 A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claude.ai or in the Claude Desktop app — not just the in-app Coach tab — and have it read and manage his Life OS data.
@@ -161,8 +184,19 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claud
 - Registered in claude.ai as a custom connector (Settings → Connectors → Add custom connector), URL `https://<vercel-domain>/api/mcp`
 - claude.ai's connector flow requires real OAuth (it auto-registers itself as a client and won't accept a plain shared token), so `/api/mcp` is its own OAuth 2.1 + PKCE authorization server (`/api/mcp/register`, `/api/mcp/authorize`, `/api/mcp/token`, discovery documents at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`) — gated by Antoine's existing Supabase Auth login, not a separate account system
 - Authorization codes and tokens are stored as SHA-256 hashes (`mcp_oauth_clients`/`mcp_oauth_codes`/`mcp_oauth_tokens`); access tokens last 1 hour, refresh tokens 6 months with rotation on use
-- Broader tool scope than the in-app Coach: full CRUD on tasks and habits (create/update/complete/delete, log/unlog), read-only on domains/projects, read/write on the daily check-in, plus a `get_today_summary` tool for "what should I focus on today" style coaching
-- Domains: full read/create/update (`list_domains`, `create_domain`, `update_domain`) via MCP; delete stays app-only (it cascades to projects/tasks — kept out of MCP's reach deliberately). Habit tools (`create_habit`/`update_habit`) accept an optional `domain_id`. Projects remain read-only (`list_projects`). Routines, checklists, knowledge library, and attachments are not exposed via MCP yet — manage those in the app
+- **Full CRUD across nearly the entire app**, unlike the in-app Coach: tasks and habits
+  (create/update/complete/delete, log/unlog), projects and subprojects (create/update/delete,
+  cascading to a project's subprojects and their tasks together), domains (create/update only —
+  see below), routines and their steps (create/update/delete), checklists and their items
+  (create/update/delete/reset), the knowledge library (items: create/update/delete; folders:
+  create/update), and the daily check-in (read/write). Plus `get_today_summary` for "what should I
+  focus on today" style coaching
+- **Deliberately excluded, on both MCP and Coach** — the two genuinely irreversible actions:
+  domain deletion (cascades to all of that domain's projects/tasks with no MCP-side confirmation
+  step) and permanently purging a trashed item before its 30-day recovery window ends. Both stay
+  app-only, where Antoine acts on them directly rather than through a tool call
+- Knowledge folder deletion is also excluded (app-only) — unlike knowledge items, folders hard-delete immediately with no trash/recovery step, so it carries the same one-way risk as the two exclusions above
+- No app-side "approve before it runs" step exists here the way it does for the in-app Coach — MCP tool calls execute immediately once Claude decides to call them, with only whatever confirmation habits the MCP client itself (claude.ai / Claude Desktop) provides. That's the tradeoff for the broader scope
 - **Proactive daily digest**: a scheduled Claude Routine (external to this codebase — configured on the Claude platform, not a Vercel cron) fires daily at 12:00 UTC (8am Eastern, will drift an hour across DST since the cron itself has no timezone) and pushes Antoine a short coaching nudge — habits not yet logged (and which are at-risk, see 3.7), anything overdue, one thing to prioritize. Deliberately does **not** go through the MCP connector — a routine's freshly spawned session never has the connector enabled by default (that's a per-chat toggle, not account-wide), so the routine instead calls `GET /api/digest` directly via curl, a plain endpoint gated by a shared secret (`DIGEST_ACCESS_TOKEN`) rather than OAuth. This also means the routine isn't tied to any specific Claude session. Reconfigured directly on the Claude platform if the time or content needs to change, not in this repo
 
 ### 3.12 Trash *(Phase 4)*
@@ -239,17 +273,22 @@ deleted_at  timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its
 
 ### `projects`
 ```sql
-id           uuid primary key default gen_random_uuid()
-user_id      uuid references auth.users(id) on delete cascade
-domain_id    uuid references domains(id) on delete set null
-name         text not null
-description  text
-status       text not null default 'active'
-             -- check: active | someday | completed | archived
-due_date     date
-created_at   timestamptz default now()
-updated_at   timestamptz default now()
-deleted_at   timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its tasks
+id                 uuid primary key default gen_random_uuid()
+user_id            uuid references auth.users(id) on delete cascade
+domain_id          uuid references domains(id) on delete set null
+parent_project_id  uuid references projects(id) on delete cascade
+                   -- self-reference, one level deep only (3.3). Kept in
+                   -- sync with the parent's domain_id by a DB trigger —
+                   -- always equal to the parent's domain_id when set.
+name               text not null
+description        text
+status             text not null default 'active'
+                   -- check: active | someday | completed | archived
+due_date           date
+created_at         timestamptz default now()
+updated_at         timestamptz default now()
+deleted_at         timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its
+                   -- subprojects and tasks (and its subprojects' tasks)
 ```
 
 ---
@@ -408,6 +447,25 @@ deleted_at  timestamptz   -- soft delete (Trash, 3.12)
 
 ---
 
+### `gmail_connections` *(Phase 2)*
+```sql
+id            uuid primary key default gen_random_uuid()
+user_id       uuid references auth.users(id) on delete cascade not null
+access_token  text not null
+refresh_token text not null
+expires_at    timestamptz not null
+scope         text
+created_at    timestamptz not null default now()
+updated_at    timestamptz not null default now()
+unique (user_id)
+-- One row per user (3.1a Gmail auto-link). Tokens are never returned to
+-- the client — read only by the inbound email webhook (service-role
+-- client) or by /api/gmail/{connect,callback,disconnect} (the owner's
+-- own session).
+```
+
+---
+
 ## 7. Row Level Security Policy Pattern
 
 Every table gets these two policies (replace `table_name`):
@@ -522,19 +580,19 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Vercel deploy
 
 ### Phase 2 — Routines, Library, Coach
-- [ ] Routines builder + Today view integration
-- [ ] Knowledge library (CRUD + search + tags)
-- [ ] Coach (Anthropic API, read-only context)
-- [ ] Claude Connector (MCP) — remote MCP server for claude.ai / Claude Desktop (3.11a)
+- [x] Routines builder + Today view integration (due-today routines with their steps surface on `/`, via `components/today-dashboard.tsx`)
+- [x] Knowledge library (CRUD + search + tags, plus nested folders — 3.9)
+- [x] Coach (Anthropic API) — now full read/write per 3.11, not read-only as originally scoped; see 3.11 for current tool scope
+- [x] Claude Connector (MCP) — remote MCP server for claude.ai / Claude Desktop (3.11a), also expanded to full read/write per 3.11a
 
 ### Phase 4 — Polish
 - [ ] Supabase Realtime (live updates across tabs)
-- [ ] Mobile UX pass
-- [ ] Habit analytics / weekly review view
-- [ ] Data export
-- [ ] Trash / soft delete with 30-day recovery (3.12)
-- [ ] Task image attachments (3.4), including from forwarded emails (3.1a)
-- [ ] Checklists (3.8a)
+- [ ] Mobile UX pass (sidebar/nav and most pages are responsive already; no dedicated audit pass has been done)
+- [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window); weekly review is covered conversationally by Coach's Weekly Review mode (3.11) rather than a separate static view
+- [x] Data export (`GET /api/export` — full JSON export of all content types)
+- [x] Trash / soft delete with 30-day recovery (3.12)
+- [x] Task image attachments (3.4), including from forwarded emails (3.1a)
+- [x] Checklists (3.8a)
 
 ---
 

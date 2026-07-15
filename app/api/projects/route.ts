@@ -43,6 +43,8 @@ export async function POST(request: Request) {
       description:
         typeof body.description === "string" ? body.description : undefined,
       domain_id: typeof body.domain_id === "string" ? body.domain_id : null,
+      parent_project_id:
+        typeof body.parent_project_id === "string" ? body.parent_project_id : null,
       status: typeof body.status === "string" ? body.status : undefined,
       due_date: typeof body.due_date === "string" ? body.due_date : undefined,
     })

@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("habit_logs")
-    .select("id, habit_id, logged_date")
+    .select("id, habit_id, logged_date, created_at")
     .order("logged_date");
 
   if (error) {
@@ -45,7 +45,12 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // The daily cap (7/day) is enforced by a DB trigger (see
+    // 20260715060000_habit_log_daily_cap.sql, sqlstate P0001 for a plain
+    // "raise exception"), which raises a friendly error message that's
+    // already fit to surface as-is.
+    const status = error.code === "P0001" ? 400 : 500;
+    return NextResponse.json({ error: error.message }, { status });
   }
 
   return NextResponse.json(data, { status: 201 });
@@ -69,11 +74,25 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const { error } = await supabase
+  // Multiple logs can now exist for the same day (extra credit) — removing
+  // pops the most recently added one rather than wiping the whole day.
+  const { data: mostRecent, error: findError } = await supabase
     .from("habit_logs")
-    .delete()
+    .select("id")
     .eq("habit_id", habitId)
-    .eq("logged_date", date);
+    .eq("logged_date", date)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (findError) {
+    return NextResponse.json({ error: findError.message }, { status: 500 });
+  }
+  if (!mostRecent) {
+    return new NextResponse(null, { status: 204 });
+  }
+
+  const { error } = await supabase.from("habit_logs").delete().eq("id", mostRecent.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

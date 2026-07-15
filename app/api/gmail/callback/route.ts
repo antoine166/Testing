@@ -1,0 +1,65 @@
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { requireUser } from "@/lib/supabase/require-user";
+import { exchangeCodeForTokens } from "@/lib/gmail/client";
+
+const STATE_COOKIE = "gmail_oauth_state";
+
+export async function GET(request: Request) {
+  const { supabase, user } = await requireUser();
+  if (!user) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const oauthError = url.searchParams.get("error");
+
+  const cookieStore = await cookies();
+  const expectedState = cookieStore.get(STATE_COOKIE)?.value;
+  cookieStore.delete(STATE_COOKIE);
+
+  const settingsUrl = (status: string) => new URL(`/settings?gmail=${status}`, request.url);
+
+  if (oauthError) {
+    return NextResponse.redirect(settingsUrl("denied"));
+  }
+  if (!code || !state || !expectedState || state !== expectedState) {
+    return NextResponse.redirect(settingsUrl("error"));
+  }
+
+  try {
+    const redirectUri = new URL("/api/gmail/callback", request.url).toString();
+    const tokens = await exchangeCodeForTokens(code, redirectUri);
+
+    if (!tokens.refresh_token) {
+      // Shouldn't happen with prompt=consent (see buildAuthorizeUrl), but
+      // without a refresh token the connection can't outlive the ~1hr
+      // access token, so treat it as a failure rather than storing
+      // something that'll silently stop working within the hour.
+      return NextResponse.redirect(settingsUrl("error"));
+    }
+
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+    const { error: dbError } = await supabase.from("gmail_connections").upsert(
+      {
+        user_id: user.id,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: expiresAt,
+        scope: tokens.scope,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
+    if (dbError) {
+      return NextResponse.redirect(settingsUrl("error"));
+    }
+
+    return NextResponse.redirect(settingsUrl("connected"));
+  } catch {
+    return NextResponse.redirect(settingsUrl("error"));
+  }
+}

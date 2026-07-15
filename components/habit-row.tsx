@@ -33,9 +33,14 @@ export type HabitLogRow = {
   id: string;
   habit_id: string;
   logged_date: string;
+  created_at: string;
 };
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// "Extra credit" — a habit can be logged more than once in a day (e.g. two
+// workouts), shown as extra squares next to the day's original one. Capped
+// to keep the row from growing unbounded; enforced server-side too.
+const MAX_LOGS_PER_DAY = 7;
 export const FREQUENCIES: HabitFrequency[] = [
   "daily",
   "specific_days",
@@ -104,6 +109,8 @@ export default function HabitRow({
   today,
   domains = [],
   onToggle,
+  onAddLog,
+  onRemoveLog,
   onUpdate,
   onDelete,
 }: {
@@ -113,6 +120,10 @@ export default function HabitRow({
   domains?: HabitDomain[];
   /** `date` defaults to today from callers, but any date lets the week's checkbox row log/unlog past days too. */
   onToggle: (habit: Habit, date: string, loggedOnDate: boolean) => void;
+  /** Adds one more log for a day that's already logged (extra credit), instead of toggling it off. */
+  onAddLog: (habit: Habit, date: string) => void;
+  /** Removes the most recently added log for a day, leaving any earlier ones (extra credit) in place. */
+  onRemoveLog: (habit: Habit, date: string) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
 }) {
@@ -133,12 +144,77 @@ export default function HabitRow({
   const displayColor = domain?.color ?? "#d4d4d8";
   const atRisk = isAtRisk(habit, logs, today);
 
-  const loggedDates = new Set(logs.map((l) => l.logged_date));
   const weekDates = daysOfWeek(today);
   const requiredDates =
     habit.frequency === "specific_days"
       ? weekDates.filter((d) => (habit.frequency_days ?? []).includes(weekdayOf(d)))
       : weekDates;
+
+  const logsByDate = new Map<string, HabitLogRow[]>();
+  for (const log of logs) {
+    if (!logsByDate.has(log.logged_date)) logsByDate.set(log.logged_date, []);
+    logsByDate.get(log.logged_date)!.push(log);
+  }
+  for (const dateLogs of logsByDate.values()) {
+    dateLogs.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  /** One day's cell: a square per log that day (first light, rest darker
+   * green for "extra credit"), plus a "+" to add another if under the cap. */
+  function renderDaySquares(date: string) {
+    const isFuture = date > today;
+    const dateLogs = logsByDate.get(date) ?? [];
+    const label = DAY_LABELS[weekdayOf(date)][0];
+
+    if (dateLogs.length === 0) {
+      return (
+        <button
+          type="button"
+          disabled={isFuture}
+          onClick={() => onToggle(habit, date, false)}
+          title={date}
+          aria-label={`Log ${date}`}
+          className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
+            isFuture
+              ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
+              : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
+          }`}
+        >
+          {label}
+        </button>
+      );
+    }
+
+    return (
+      <div className="flex gap-0.5">
+        {dateLogs.map((log, i) => (
+          <button
+            key={log.id}
+            type="button"
+            onClick={() => onRemoveLog(habit, date)}
+            title={i === 0 ? date : `${date} — extra credit`}
+            aria-label={i === 0 ? `Unlog ${date}` : `Remove extra credit for ${date}`}
+            className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium text-white ${
+              i === 0 ? "bg-emerald-500" : "bg-emerald-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        {dateLogs.length < MAX_LOGS_PER_DAY && (
+          <button
+            type="button"
+            onClick={() => onAddLog(habit, date)}
+            title={`Add extra credit for ${date}`}
+            aria-label={`Add extra credit for ${date}`}
+            className="flex h-5 w-5 items-center justify-center rounded border border-dashed border-zinc-300 text-[10px] text-zinc-400 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-700 dark:hover:text-emerald-400"
+          >
+            +
+          </button>
+        )}
+      </div>
+    );
+  }
 
   function startEdit() {
     setName(habit.name);
@@ -301,57 +377,17 @@ export default function HabitRow({
             </div>
             {showDayRow && (
               <div className="mt-1.5 flex gap-1">
-                {weekDates.map((date) => {
-                  const isFuture = date > today;
-                  const isLogged = loggedDates.has(date);
-                  return (
-                    <button
-                      key={date}
-                      type="button"
-                      disabled={isFuture}
-                      onClick={() => onToggle(habit, date, isLogged)}
-                      title={date}
-                      aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
-                      className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
-                        isLogged
-                          ? "bg-emerald-500 text-white"
-                          : isFuture
-                            ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
-                            : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
-                      }`}
-                    >
-                      {DAY_LABELS[weekdayOf(date)][0]}
-                    </button>
-                  );
-                })}
+                {weekDates.map((date) => (
+                  <div key={date}>{renderDaySquares(date)}</div>
+                ))}
               </div>
             )}
           </div>
         ) : (
           <div className="mt-1.5 flex gap-1">
-            {requiredDates.map((date) => {
-              const isFuture = date > today;
-              const isLogged = loggedDates.has(date);
-              return (
-                <button
-                  key={date}
-                  type="button"
-                  disabled={isFuture}
-                  onClick={() => onToggle(habit, date, isLogged)}
-                  title={date}
-                  aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
-                  className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
-                    isLogged
-                      ? "bg-emerald-500 text-white"
-                      : isFuture
-                        ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
-                        : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
-                  }`}
-                >
-                  {DAY_LABELS[weekdayOf(date)][0]}
-                </button>
-              );
-            })}
+            {requiredDates.map((date) => (
+              <div key={date}>{renderDaySquares(date)}</div>
+            ))}
           </div>
         )}
       </div>

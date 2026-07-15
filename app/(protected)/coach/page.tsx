@@ -20,7 +20,23 @@ const TOOL_LABELS: Record<string, string> = {
   delete_task: "Delete task",
   create_project: "Create project",
   update_project: "Update project",
+  delete_project: "Delete project",
   log_habit: "Log habit",
+  unlog_habit: "Undo habit log",
+  create_domain: "Create domain",
+  update_domain: "Update domain",
+  create_routine: "Create routine",
+  update_routine: "Update routine",
+  delete_routine: "Delete routine",
+  add_routine_item: "Add routine step",
+  create_checklist: "Create checklist",
+  update_checklist: "Rename checklist",
+  delete_checklist: "Delete checklist",
+  reset_checklist: "Reset checklist",
+  add_checklist_item: "Add checklist item",
+  create_knowledge_item: "Save to knowledge library",
+  create_knowledge_folder: "Create library folder",
+  update_knowledge_folder: "Update library folder",
 };
 
 function summarizeInput(input: Record<string, unknown>): string {

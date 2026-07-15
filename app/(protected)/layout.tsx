@@ -24,7 +24,11 @@ export default async function ProtectedLayout({
   const [domainsRes, projectsRes, inboxRes, todayRes, waitingForRes, contextsRes] =
     await Promise.all([
       supabase.from("domains").select("id, name, color").is("deleted_at", null).order("name"),
-      supabase.from("projects").select("id, name, domain_id").is("deleted_at", null).order("name"),
+      supabase
+        .from("projects")
+        .select("id, name, domain_id, parent_project_id")
+        .is("deleted_at", null)
+        .order("name"),
       supabase
         .from("tasks")
         .select("id", { count: "exact", head: true })
