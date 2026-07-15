@@ -28,7 +28,23 @@ export const TOOLS: Tool[] = [
     name: "log_habit",
     description:
       "Log that Antoine completed a habit today. Use this when he mentions doing a habit " +
-      "(e.g. 'I meditated this morning', 'did my workout'). Match against the habit list below.",
+      "(e.g. 'I meditated this morning', 'did my workout'). Match against the habit list below. " +
+      "Can be called again for the same habit for 'extra credit' if he says he did it more than " +
+      "once today (e.g. two workouts) — capped at 7 times a day.",
+    input_schema: {
+      type: "object",
+      properties: {
+        habit_id: { type: "string", description: "The habit's UUID from the context below" },
+      },
+      required: ["habit_id"],
+    },
+  },
+  {
+    name: "unlog_habit",
+    description:
+      "Undo today's habit log, e.g. if Antoine says he didn't actually do it or logged it by " +
+      "mistake. If it was logged more than once today (extra credit), this removes just the " +
+      "most recently added one, not all of them.",
     input_schema: {
       type: "object",
       properties: {
@@ -545,19 +561,35 @@ export async function executeTool(
     const habitId = typeof input.habit_id === "string" ? input.habit_id : "";
     if (!habitId) return "Error: habit_id is required";
 
-    const { count } = await supabase
-      .from("habit_logs")
-      .select("id", { count: "exact", head: true })
-      .eq("habit_id", habitId)
-      .eq("logged_date", today);
-    if ((count ?? 0) >= 7) return "Already logged 7 times today — that's the max.";
-
+    // The daily cap (7/day) is enforced by a DB trigger
+    // (20260715060000_habit_log_daily_cap.sql), whose message is already
+    // fit to surface as-is.
     const { error } = await supabase
       .from("habit_logs")
       .insert({ user_id: userId, habit_id: habitId, logged_date: today });
 
     if (error) return `Error: ${error.message}`;
     return "Logged.";
+  }
+
+  if (name === "unlog_habit") {
+    const habitId = typeof input.habit_id === "string" ? input.habit_id : "";
+    if (!habitId) return "Error: habit_id is required";
+
+    const { data: mostRecent } = await supabase
+      .from("habit_logs")
+      .select("id")
+      .eq("habit_id", habitId)
+      .eq("logged_date", today)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!mostRecent) return "Wasn't logged today — nothing to undo.";
+
+    const { error } = await supabase.from("habit_logs").delete().eq("id", mostRecent.id);
+    if (error) return `Error: ${error.message}`;
+    return "Undone. If it was logged more than once today (extra credit), that removed the most recent one.";
   }
 
   if (name === "update_task") {

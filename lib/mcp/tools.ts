@@ -185,9 +185,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       title: "Update project",
       description:
         "Update a project's name, description, status, domain, or parent project. Use " +
-        "parent_project_id to file it as a subproject of another top-level project; pass an " +
-        "empty string to clear it and promote it back to top-level. Subprojects always take on " +
-        "their parent's domain.",
+        "parent_project_id to file it as a subproject of another top-level project; pass null " +
+        "to clear it and promote it back to top-level (an empty string is not accepted — it's " +
+        "not a valid UUID). Subprojects always take on their parent's domain.",
       inputSchema: {
         id: z.string().uuid(),
         name: z.string().min(1).optional(),
@@ -595,15 +595,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     },
     async ({ habit_id, date }) => {
       const loggedDate = date ?? todayLocal();
-      const { count, error: countError } = await admin
-        .from("habit_logs")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("habit_id", habit_id)
-        .eq("logged_date", loggedDate);
-      if (countError) return fail(countError.message);
-      if ((count ?? 0) >= 7) return fail("Already logged 7 times that day — that's the max.");
-
+      // The daily cap (7/day) is enforced by a DB trigger
+      // (20260715060000_habit_log_daily_cap.sql), whose message is already
+      // fit to surface as-is.
       const { data, error } = await admin
         .from("habit_logs")
         .insert({ user_id: userId, habit_id, logged_date: loggedDate })

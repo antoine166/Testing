@@ -22,6 +22,7 @@ const TOOL_LABELS: Record<string, string> = {
   update_project: "Update project",
   delete_project: "Delete project",
   log_habit: "Log habit",
+  unlog_habit: "Undo habit log",
   create_domain: "Create domain",
   update_domain: "Update domain",
   create_routine: "Create routine",

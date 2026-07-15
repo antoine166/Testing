@@ -125,7 +125,7 @@ Simple habit tracker with streak counting.
   - `daily` — every day
   - `specific_days` — fixed days of the week (e.g. Mon/Wed/Fri)
   - `times_per_week` — any N days per week, Antoine's choice which days (e.g. "3x per week")
-- Logging: tap a day's square to log/unlog it. **Extra credit**: a habit can be logged more than once on the same day (e.g. two workouts), capped at 7/day — the day's square gets a small "+" once logged, which appends another, darker-green square right next to it; clicking any of a day's squares removes the most recently added one first. Enforced server-side too (API route, Coach, MCP), not just the UI. For `daily`/`specific_days` streaks this is purely cosmetic (streak math dedupes by date via a `Set`, unaffected by count); for `times_per_week`, extra same-day logs *do* count toward that week's target and streak, since that math already counts raw log rows rather than distinct days — two workouts on Monday count as 2 of a 3x/week goal. The `times_per_week` tally row (the `target_count` progress boxes) is unaffected/uncapped-display — it still shows at most `target_count` boxes, all filled once the target's hit; it doesn't grow extra boxes past target the way a single day's square does
+- Logging: tap a day's square to log/unlog it. **Extra credit**: a habit can be logged more than once on the same day (e.g. two workouts), capped at 7/day — the day's square gets a small "+" once logged, which appends another, darker-green square right next to it; clicking any of a day's squares removes the most recently added one first. The 7/day cap is enforced by a DB trigger (`habit_logs_daily_cap`), not app-level checks, so it applies uniformly regardless of which surface (app, Coach, MCP) creates the log. For `daily`/`specific_days` streaks this is purely cosmetic (streak math dedupes by date via a `Set`, unaffected by count); for `times_per_week`, extra same-day logs *do* count toward that week's target and streak, since that math already counts raw log rows rather than distinct days — two workouts on Monday count as 2 of a 3x/week goal. The `times_per_week` tally row (the `target_count` progress boxes) is unaffected/uncapped-display — it still shows at most `target_count` boxes, all filled once the target's hit; it doesn't grow extra boxes past target the way a single day's square does
 - **Current streak**:
   - `daily` / `specific_days`: consecutive required days logged up to today, missing a required day resets to 0
   - `times_per_week`: consecutive weeks where the log count hit the target; a week that falls short resets to 0 (the current, still-in-progress week doesn't break the streak until it ends)
@@ -153,9 +153,9 @@ Reusable, resettable lists — for things you run through repeatedly rather than
 A personal second brain for saving things Antoine wants to keep.
 
 - Types: `note` | `article` | `book` | `quote` | `resource`
-- Fields: title, content/body, URL (optional), tags, type
+- Fields: title, content/body, URL (optional), tags, type, optional folder
 - Search across all items by keyword or tag
-- No folders — tags only
+- **Folders** (`knowledge_folders`): nested, arbitrary depth via a self-referencing `parent_id` (like folders on a computer — see §6). A DB trigger (`knowledge_folders_no_cycle`) rejects any insert/update that would make a folder its own ancestor, since the Library page's breadcrumb walks up `parent_id` and would hang on a cycle. Deleting a folder cascades to its subfolders; items inside just become unfiled (`folder_id` null) rather than being deleted
 
 ### 3.11 Coach *(Phase 2)*
 AI assistant powered by the Anthropic API (`claude-sonnet-5`).
@@ -443,6 +443,25 @@ tags        text[]
 created_at  timestamptz default now()
 updated_at  timestamptz default now()
 deleted_at  timestamptz   -- soft delete (Trash, 3.12)
+```
+
+---
+
+### `gmail_connections` *(Phase 2)*
+```sql
+id            uuid primary key default gen_random_uuid()
+user_id       uuid references auth.users(id) on delete cascade not null
+access_token  text not null
+refresh_token text not null
+expires_at    timestamptz not null
+scope         text
+created_at    timestamptz not null default now()
+updated_at    timestamptz not null default now()
+unique (user_id)
+-- One row per user (3.1a Gmail auto-link). Tokens are never returned to
+-- the client — read only by the inbound email webhook (service-role
+-- client) or by /api/gmail/{connect,callback,disconnect} (the owner's
+-- own session).
 ```
 
 ---
