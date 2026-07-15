@@ -197,15 +197,17 @@ export default function TasksPage() {
     await loadAll();
   }
 
-  const inboxTasks = tasks.filter((t) => !t.domain_id);
-  const processedTasks = tasks.filter((t) => t.domain_id);
+  const inboxTasks = tasks.filter((t) => !t.domain_id && t.status !== "done");
+  const processedTasks = tasks.filter((t) => t.domain_id && t.status !== "done");
 
   const filteredTasks = searchQuery
-    ? tasks.filter((t) => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? tasks.filter(
+        (t) => t.title.toLowerCase().includes(searchQuery.toLowerCase()) && t.status !== "done",
+      )
     : domainFilter
-      ? tasks.filter((t) => t.domain_id === domainFilter)
+      ? tasks.filter((t) => t.domain_id === domainFilter && t.status !== "done")
       : projectFilter
-        ? tasks.filter((t) => t.project_id === projectFilter)
+        ? tasks.filter((t) => t.project_id === projectFilter && t.status !== "done")
         : null;
   const filterLabel = searchQuery
     ? `"${searchQuery}"`
