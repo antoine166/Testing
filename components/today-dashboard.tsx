@@ -302,7 +302,7 @@ export default function TodayDashboard() {
     isAtRisk(h, logs.filter((l) => l.habit_id === h.id), today),
   ).length;
   const todayTasks = [...tasks]
-    .filter((t) => t.scheduled_date === today)
+    .filter((t) => t.scheduled_date === today && t.status !== "done")
     .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
   const overdueTasks = [...tasks]
     .filter((t) => t.scheduled_date && t.scheduled_date < today && t.status !== "done")
