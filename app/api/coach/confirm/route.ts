@@ -30,67 +30,78 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "messages and resolutions are required" }, { status: 400 });
   }
 
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const toolUseBlocks = Array.isArray(lastAssistant?.content)
-    ? lastAssistant.content.filter((b) => b.type === "tool_use")
-    : [];
+  try {
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    const toolUseBlocks = Array.isArray(lastAssistant?.content)
+      ? lastAssistant.content.filter((b) => b.type === "tool_use")
+      : [];
 
-  const toolResults: ToolResultBlockParam[] = [];
-  for (const block of toolUseBlocks) {
-    if (block.type !== "tool_use") continue;
-    const resolution = resolutions.find((r) => r.tool_use_id === block.id);
-    if (!resolution) continue;
+    const toolResults: ToolResultBlockParam[] = [];
+    for (const block of toolUseBlocks) {
+      if (block.type !== "tool_use") continue;
+      const resolution = resolutions.find((r) => r.tool_use_id === block.id);
+      if (!resolution) continue;
 
-    if (!resolution.approved) {
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: block.id,
-        content: "The user declined this action.",
-      });
-      continue;
+      if (!resolution.approved) {
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: "The user declined this action.",
+        });
+        continue;
+      }
+
+      const result = await executeTool(
+        supabase,
+        user.id,
+        today,
+        block.name,
+        block.input as Record<string, unknown>,
+      );
+      toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
     }
 
-    const result = await executeTool(
-      supabase,
-      user.id,
-      today,
-      block.name,
-      block.input as Record<string, unknown>,
-    );
-    toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
-  }
+    messages.push({ role: "user", content: toolResults });
 
-  messages.push({ role: "user", content: toolResults });
+    const context = await buildContext(supabase, today, mode);
+    const system = systemPrompt(mode, context);
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const context = await buildContext(supabase, today, mode);
-  const system = systemPrompt(mode, context);
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 1024,
+      system,
+      messages,
+      tools: TOOLS,
+    });
 
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system,
-    messages,
-    tools: TOOLS,
-  });
+    if (response.stop_reason !== "tool_use") {
+      return NextResponse.json({
+        type: "text",
+        reply: extractText(response.content),
+        assistantContent: response.content,
+        toolResults,
+      });
+    }
 
-  if (response.stop_reason !== "tool_use") {
+    const actions = response.content
+      .filter((block) => block.type === "tool_use")
+      .map((block) => ({ id: block.id, name: block.name, input: block.input }));
+
     return NextResponse.json({
-      type: "text",
-      reply: extractText(response.content),
+      type: "tool_use",
       assistantContent: response.content,
+      actions,
       toolResults,
     });
+  } catch (err) {
+    console.error("Coach confirm request failed:", err);
+    const message =
+      err instanceof Anthropic.APIError
+        ? `Anthropic API error (${err.status}): ${err.message}`
+        : err instanceof Error
+          ? err.message
+          : "Unexpected error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const actions = response.content
-    .filter((block) => block.type === "tool_use")
-    .map((block) => ({ id: block.id, name: block.name, input: block.input }));
-
-  return NextResponse.json({
-    type: "tool_use",
-    assistantContent: response.content,
-    actions,
-    toolResults,
-  });
 }

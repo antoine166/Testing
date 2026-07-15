@@ -27,30 +27,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "messages is required" }, { status: 400 });
   }
 
-  const context = await buildContext(supabase, today, mode);
-  const system = systemPrompt(mode, context);
-  const messages: MessageParam[] = userMessages;
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  try {
+    const context = await buildContext(supabase, today, mode);
+    const system = systemPrompt(mode, context);
+    const messages: MessageParam[] = userMessages;
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system,
-    messages,
-    tools: TOOLS,
-  });
-
-  if (response.stop_reason !== "tool_use") {
-    return NextResponse.json({
-      type: "text",
-      reply: extractText(response.content),
-      assistantContent: response.content,
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 1024,
+      system,
+      messages,
+      tools: TOOLS,
     });
+
+    if (response.stop_reason !== "tool_use") {
+      return NextResponse.json({
+        type: "text",
+        reply: extractText(response.content),
+        assistantContent: response.content,
+      });
+    }
+
+    const actions = response.content
+      .filter((block) => block.type === "tool_use")
+      .map((block) => ({ id: block.id, name: block.name, input: block.input }));
+
+    return NextResponse.json({ type: "tool_use", assistantContent: response.content, actions });
+  } catch (err) {
+    console.error("Coach request failed:", err);
+    const message =
+      err instanceof Anthropic.APIError
+        ? `Anthropic API error (${err.status}): ${err.message}`
+        : err instanceof Error
+          ? err.message
+          : "Unexpected error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const actions = response.content
-    .filter((block) => block.type === "tool_use")
-    .map((block) => ({ id: block.id, name: block.name, input: block.input }));
-
-  return NextResponse.json({ type: "tool_use", assistantContent: response.content, actions });
 }
