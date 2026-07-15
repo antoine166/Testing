@@ -41,8 +41,8 @@ export const TOOLS: Tool[] = [
     name: "update_task",
     description:
       "Update an existing task, referenced by its UUID from the context below. Use to mark it " +
-      "done, reschedule it, clear a Waiting For (set waiting_on to an empty string), move a " +
-      "Someday/Maybe item back to active (set someday to false), or file it into a domain/project.",
+      "done, reschedule it, clear a Waiting For (set waiting_for to false), move a Someday/Maybe " +
+      "item back to active (set someday to false), or file it into a domain/project.",
     input_schema: {
       type: "object",
       properties: {
@@ -52,7 +52,7 @@ export const TOOLS: Tool[] = [
         due_date: { type: "string", description: "Empty string clears it" },
         scheduled_date: { type: "string", description: "Empty string clears it" },
         someday: { type: "boolean" },
-        waiting_on: { type: "string", description: "Empty string clears it" },
+        waiting_for: { type: "boolean" },
         domain_id: { type: "string", description: "Empty string clears it" },
         project_id: { type: "string", description: "Empty string clears it" },
       },
@@ -146,7 +146,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     supabase
       .from("tasks")
       .select(
-        "id, title, status, priority, due_date, scheduled_date, someday, waiting_on, waiting_since, domain_id, project_id",
+        "id, title, status, priority, due_date, scheduled_date, someday, waiting_for, waiting_since, domain_id, project_id",
       )
       .is("deleted_at", null),
     supabase.from("habits").select("id, name, frequency, active").eq("active", true),
@@ -184,7 +184,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
               `- ${t.id} "${t.title}" [${t.status}, ${t.priority} priority${
                 t.scheduled_date ? `, scheduled ${t.scheduled_date}` : ""
               }${t.due_date ? `, due ${t.due_date}` : ""}${t.someday ? ", someday" : ""}${
-                t.waiting_on ? `, waiting on ${t.waiting_on} since ${t.waiting_since}` : ""
+                t.waiting_for ? `, waiting for since ${t.waiting_since}` : ""
               }]`,
           )
           .join("\n")
@@ -218,7 +218,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   const stalledProjects = projects.filter(
     (p) => p.status === "active" && !(openTaskCountByProject.get(p.id) ?? 0),
   );
-  const waitingFor = openTasks.filter((t) => t.waiting_on);
+  const waitingFor = openTasks.filter((t) => t.waiting_for);
   const somedayTasks = openTasks.filter((t) => t.someday);
 
   lines.push("\nStalled projects (active, zero open tasks):");
@@ -230,7 +230,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   lines.push(
     waitingFor.length
       ? waitingFor
-          .map((t) => `- ${t.id} "${t.title}" waiting on ${t.waiting_on} since ${t.waiting_since}`)
+          .map((t) => `- ${t.id} "${t.title}" waiting since ${t.waiting_since}`)
           .join("\n")
       : "(none)",
   );
@@ -304,9 +304,9 @@ export async function executeTool(
     if (typeof input.due_date === "string") updates.due_date = input.due_date || null;
     if (typeof input.scheduled_date === "string") updates.scheduled_date = input.scheduled_date || null;
     if (typeof input.someday === "boolean") updates.someday = input.someday;
-    if (typeof input.waiting_on === "string") {
-      updates.waiting_on = input.waiting_on || null;
-      updates.waiting_since = input.waiting_on ? today : null;
+    if (typeof input.waiting_for === "boolean") {
+      updates.waiting_for = input.waiting_for;
+      updates.waiting_since = input.waiting_for ? today : null;
     }
     if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
     if (typeof input.project_id === "string") updates.project_id = input.project_id || null;

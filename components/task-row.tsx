@@ -18,7 +18,7 @@ export type Task = {
   scheduled_date: string | null;
   someday: boolean;
   context: string | null;
-  waiting_on: string | null;
+  waiting_for: boolean;
   waiting_since: string | null;
   completed_at?: string | null;
 };
@@ -232,7 +232,7 @@ export default function TaskRow({
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
   const [scheduledDate, setScheduledDate] = useState(task.scheduled_date ?? "");
   const [someday, setSomeday] = useState(task.someday);
-  const [waitingOn, setWaitingOn] = useState(task.waiting_on ?? "");
+  const [waitingFor, setWaitingFor] = useState(task.waiting_for);
   const [context, setContext] = useState(task.context ?? "");
 
   function startEdit() {
@@ -246,7 +246,7 @@ export default function TaskRow({
     setDueDate(task.due_date ?? "");
     setScheduledDate(task.scheduled_date ?? "");
     setSomeday(task.someday);
-    setWaitingOn(task.waiting_on ?? "");
+    setWaitingFor(task.waiting_for);
     setContext(task.context ?? "");
     setEditing(true);
   }
@@ -257,7 +257,7 @@ export default function TaskRow({
       title,
       link: link.trim() || null,
       notes,
-      waiting_on: waitingOn.trim() || null,
+      waiting_for: waitingFor,
       context: context.trim() || null,
       domain_id: domainId || null,
       project_id: projectId || null,
@@ -370,18 +370,20 @@ export default function TaskRow({
               />
               Someday
             </label>
+            <label className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <input
+                type="checkbox"
+                checked={waitingFor}
+                onChange={(e) => setWaitingFor(e.target.checked)}
+              />
+              Waiting for
+            </label>
             <input
               value={context}
               onChange={(e) => setContext(e.target.value)}
               list="task-contexts"
               placeholder="Context (optional) — e.g. Errands, Deep Work"
               className="min-w-40 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <input
-              value={waitingOn}
-              onChange={(e) => setWaitingOn(e.target.value)}
-              placeholder="Waiting on (optional) — e.g. Jane re: contract"
-              className="min-w-48 flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
             <button
               onClick={handleSave}
@@ -467,7 +469,7 @@ export default function TaskRow({
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
             {task.someday ? " · someday" : ""}
           </p>
-          {task.waiting_on && (
+          {task.waiting_for && (
             <p
               className={`mt-0.5 text-xs font-medium ${
                 task.waiting_since && daysSince(task.waiting_since) >= 7
@@ -475,7 +477,7 @@ export default function TaskRow({
                   : "text-zinc-500"
               }`}
             >
-              ⏳ waiting on {task.waiting_on}
+              ⏳ Waiting For
               {task.waiting_since ? ` · ${daysSince(task.waiting_since)}d` : ""}
             </p>
           )}

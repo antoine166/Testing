@@ -18,9 +18,20 @@ function extractEmail(from: string): string {
   return (match ? match[1] : from).trim().toLowerCase();
 }
 
-function extractFirstLink(body: string): string | undefined {
-  const match = body.match(/https?:\/\/[^\s<>"')\]]+/);
-  return match ? match[0].replace(/[.,;:]+$/, "") : undefined;
+// Forwarding always prepends "Fwd:" (sometimes several times over multiple
+// forwards) — strip it since the task is already understood to come from an
+// email, no need to carry that noise into the title.
+function stripForwardPrefix(subject: string): string {
+  return subject.replace(/^(\s*(fwd?|fw)\s*:\s*)+/gi, "").trim();
+}
+
+function extractLink(body: string): string | undefined {
+  const matches = (body.match(/https?:\/\/[^\s<>"')\]]+/g) ?? []).map((m) =>
+    m.replace(/[.,;:]+$/, ""),
+  );
+  // Prefer a Gmail permalink if one was pasted into the forward, even if it's
+  // not the first link (e.g. below a signature with other links).
+  return matches.find((url) => url.includes("mail.google.com")) ?? matches[0];
 }
 
 // No user session here — this is a public webhook Resend calls when an
@@ -72,10 +83,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to fetch email content" }, { status: 500 });
   }
 
-  const title = (event.data.subject || "Untitled").trim().slice(0, 200);
+  const title = (stripForwardPrefix(event.data.subject || "") || "Untitled").slice(0, 200);
   const body = email.text || (email.html ? stripHtml(email.html) : "");
   const notes = body.slice(0, MAX_NOTES_LENGTH) || undefined;
-  const link = extractFirstLink(body);
+  const link = extractLink(body);
 
   // Single-user app — the email allowed to trigger this (INBOUND_ALLOWED_SENDER)
   // doesn't have to be the same address the account was created with, so this

@@ -43,7 +43,7 @@ export default async function ProtectedLayout({
         .from("tasks")
         .select("id", { count: "exact", head: true })
         .is("deleted_at", null)
-        .not("waiting_on", "is", null)
+        .eq("waiting_for", true)
         .neq("status", "done"),
       supabase.from("tasks").select("context").not("context", "is", null),
     ]);

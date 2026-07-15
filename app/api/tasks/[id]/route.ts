@@ -72,21 +72,17 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if (typeof body.someday === "boolean") {
     updates.someday = body.someday;
   }
-  if ("waiting_on" in body) {
-    const waitingOn =
-      typeof body.waiting_on === "string" && body.waiting_on.trim()
-        ? body.waiting_on.trim()
-        : null;
+  if (typeof body.waiting_for === "boolean") {
     const { data: existing } = await supabase
       .from("tasks")
-      .select("waiting_on")
+      .select("waiting_for")
       .eq("id", id)
       .maybeSingle();
 
-    updates.waiting_on = waitingOn;
-    if (!existing?.waiting_on && waitingOn) {
+    updates.waiting_for = body.waiting_for;
+    if (!existing?.waiting_for && body.waiting_for) {
       updates.waiting_since = new Date().toISOString().slice(0, 10);
-    } else if (!waitingOn) {
+    } else if (!body.waiting_for) {
       updates.waiting_since = null;
     }
   }

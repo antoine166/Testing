@@ -9,7 +9,7 @@ export default function WaitingForPage() {
     useTaskList();
 
   const waitingTasks = tasks
-    .filter((t) => t.waiting_on && t.status !== "done")
+    .filter((t) => t.waiting_for && t.status !== "done")
     .sort((a, b) => (a.waiting_since ?? "").localeCompare(b.waiting_since ?? ""));
 
   return (
@@ -31,7 +31,7 @@ export default function WaitingForPage() {
         <p className="text-sm text-zinc-500">Loading...</p>
       ) : waitingTasks.length === 0 ? (
         <p className="text-sm text-zinc-500">
-          Nothing outstanding &mdash; set &ldquo;Waiting on&rdquo; from a task&rsquo;s edit form
+          Nothing outstanding &mdash; check &ldquo;Waiting for&rdquo; from a task&rsquo;s edit form
           when you hand something off to someone else.
         </p>
       ) : (
