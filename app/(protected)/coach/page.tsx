@@ -30,6 +30,14 @@ function summarizeInput(input: Record<string, unknown>): string {
     .join(", ");
 }
 
+const REQUEST_TIMEOUT_MS = 45_000;
+
+function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 export default function CoachPage() {
   const searchParams = useSearchParams();
   const initialMode: "chat" | "weekly-review" =
@@ -50,21 +58,33 @@ export default function CoachPage() {
   async function sendTurn(nextMessages: RawMessage[], currentMode: string) {
     setSending(true);
     setError(null);
-    const res = await fetch("/api/coach", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: nextMessages, today: todayLocal(), mode: currentMode }),
-    });
-    setSending(false);
+    try {
+      const res = await fetchWithTimeout("/api/coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages, today: todayLocal(), mode: currentMode }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Coach is unavailable right now.");
-      return;
+      if (!res.ok) {
+        const message = await res
+          .json()
+          .then((body) => body.error)
+          .catch(() => null);
+        setError(message ?? `Coach is unavailable right now (${res.status}).`);
+        return;
+      }
+
+      const data = await res.json();
+      setMessages([...nextMessages, { role: "assistant", content: data.assistantContent }]);
+    } catch (err) {
+      setError(
+        err instanceof DOMException && err.name === "AbortError"
+          ? "Coach took too long to respond — try again."
+          : "Couldn't reach Coach — check your connection and try again.",
+      );
+    } finally {
+      setSending(false);
     }
-
-    const data = await res.json();
-    setMessages([...nextMessages, { role: "assistant", content: data.assistantContent }]);
   }
 
   useEffect(() => {
@@ -103,30 +123,42 @@ export default function CoachPage() {
       approved: statusMap[b.id].approved,
     }));
 
-    const res = await fetch("/api/coach/confirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, resolutions, today: todayLocal(), mode }),
-    });
-    setSending(false);
+    try {
+      const res = await fetchWithTimeout("/api/coach/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages, resolutions, today: todayLocal(), mode }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to apply actions");
-      return;
-    }
+      if (!res.ok) {
+        const message = await res
+          .json()
+          .then((body) => body.error)
+          .catch(() => null);
+        setError(message ?? `Failed to apply actions (${res.status}).`);
+        return;
+      }
 
-    const data = await res.json();
-    const results: Record<string, string> = {};
-    for (const tr of data.toolResults ?? []) {
-      results[tr.tool_use_id] = tr.content;
+      const data = await res.json();
+      const results: Record<string, string> = {};
+      for (const tr of data.toolResults ?? []) {
+        results[tr.tool_use_id] = tr.content;
+      }
+      setActionResults((prev) => ({ ...prev, ...results }));
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: data.toolResults ?? [] },
+        { role: "assistant", content: data.assistantContent },
+      ]);
+    } catch (err) {
+      setError(
+        err instanceof DOMException && err.name === "AbortError"
+          ? "Coach took too long to respond — try again."
+          : "Couldn't reach Coach — check your connection and try again.",
+      );
+    } finally {
+      setSending(false);
     }
-    setActionResults((prev) => ({ ...prev, ...results }));
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: data.toolResults ?? [] },
-      { role: "assistant", content: data.assistantContent },
-    ]);
   }
 
   function resolveAction(id: string, approved: boolean) {
