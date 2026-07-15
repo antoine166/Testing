@@ -560,19 +560,19 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Vercel deploy
 
 ### Phase 2 — Routines, Library, Coach
-- [ ] Routines builder + Today view integration
-- [ ] Knowledge library (CRUD + search + tags)
-- [ ] Coach (Anthropic API, read-only context)
-- [ ] Claude Connector (MCP) — remote MCP server for claude.ai / Claude Desktop (3.11a)
+- [x] Routines builder + Today view integration (due-today routines with their steps surface on `/`, via `components/today-dashboard.tsx`)
+- [x] Knowledge library (CRUD + search + tags, plus nested folders — 3.9)
+- [x] Coach (Anthropic API) — now full read/write per 3.11, not read-only as originally scoped; see 3.11 for current tool scope
+- [x] Claude Connector (MCP) — remote MCP server for claude.ai / Claude Desktop (3.11a), also expanded to full read/write per 3.11a
 
 ### Phase 4 — Polish
 - [ ] Supabase Realtime (live updates across tabs)
-- [ ] Mobile UX pass
-- [ ] Habit analytics / weekly review view
-- [ ] Data export
-- [ ] Trash / soft delete with 30-day recovery (3.12)
-- [ ] Task image attachments (3.4), including from forwarded emails (3.1a)
-- [ ] Checklists (3.8a)
+- [ ] Mobile UX pass (sidebar/nav and most pages are responsive already; no dedicated audit pass has been done)
+- [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window); weekly review is covered conversationally by Coach's Weekly Review mode (3.11) rather than a separate static view
+- [x] Data export (`GET /api/export` — full JSON export of all content types)
+- [x] Trash / soft delete with 30-day recovery (3.12)
+- [x] Task image attachments (3.4), including from forwarded emails (3.1a)
+- [x] Checklists (3.8a)
 
 ---
 
