@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { findGmailPermalink } from "@/lib/gmail/client";
 
 const MAX_NOTES_LENGTH = 5000;
 
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
   const title = (stripForwardPrefix(event.data.subject || "") || "Untitled").slice(0, 200);
   const body = email.text || (email.html ? stripHtml(email.html) : "");
   const notes = body.slice(0, MAX_NOTES_LENGTH) || undefined;
-  const link = extractLink(body);
+  const fallbackLink = extractLink(body);
 
   // Single-user app — the email allowed to trigger this (INBOUND_ALLOWED_SENDER)
   // doesn't have to be the same address the account was created with, so this
@@ -101,6 +102,14 @@ export async function POST(request: Request) {
   if (!owner) {
     return NextResponse.json({ error: "No account exists to own this task" }, { status: 500 });
   }
+
+  // Prefer an authoritative Gmail permalink (via the connected account, if
+  // any) over whatever link parsing found pasted in the forward body —
+  // Gmail's own forward format doesn't reliably include one.
+  const gmailLink = event.data.message_id
+    ? await findGmailPermalink(admin, owner.id, event.data.message_id)
+    : undefined;
+  const link = gmailLink ?? fallbackLink;
 
   const { data: task, error: insertError } = await admin
     .from("tasks")
