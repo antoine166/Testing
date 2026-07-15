@@ -266,49 +266,31 @@ export default function HabitRow({
           </p>
         )}
 
-        {habit.frequency === "times_per_week" ? (
-          <div className="mt-1.5 flex gap-1">
-            {Array.from({ length: habit.target_count ?? 1 }).map((_, i) => (
+        <div className="mt-1.5 flex gap-1">
+          {requiredDates.map((date) => {
+            const isFuture = date > today;
+            const isLogged = loggedDates.has(date);
+            return (
               <button
-                key={i}
+                key={date}
                 type="button"
-                onClick={() => onToggle(habit, today, loggedToday)}
-                aria-label={loggedToday ? "Unlog today" : "Log today"}
-                className={`h-5 w-5 rounded ${
-                  i < weekCount
-                    ? "bg-emerald-500"
-                    : "border border-zinc-300 hover:border-emerald-400 dark:border-zinc-700"
+                disabled={isFuture}
+                onClick={() => onToggle(habit, date, isLogged)}
+                title={date}
+                aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
+                className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
+                  isLogged
+                    ? "bg-emerald-500 text-white"
+                    : isFuture
+                      ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
+                      : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
                 }`}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-1.5 flex gap-1">
-            {requiredDates.map((date) => {
-              const isFuture = date > today;
-              const isLogged = loggedDates.has(date);
-              return (
-                <button
-                  key={date}
-                  type="button"
-                  disabled={isFuture}
-                  onClick={() => onToggle(habit, date, isLogged)}
-                  title={date}
-                  aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
-                  className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
-                    isLogged
-                      ? "bg-emerald-500 text-white"
-                      : isFuture
-                        ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
-                        : "border border-zinc-300 text-zinc-400 hover:border-emerald-400 dark:border-zinc-700"
-                  }`}
-                >
-                  {DAY_LABELS[weekdayOf(date)][0]}
-                </button>
-              );
-            })}
-          </div>
-        )}
+              >
+                {DAY_LABELS[weekdayOf(date)][0]}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div className="shrink-0">
         <OverflowMenu
