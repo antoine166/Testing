@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
 
+// "Extra credit" cap — a habit can be logged more than once on the same
+// day (see 20260715030000_habit_logs_extra_credit.sql), but not unbounded.
+const MAX_LOGS_PER_DAY = 7;
+
 export async function GET() {
   const { supabase, user } = await requireUser();
 
@@ -10,7 +14,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("habit_logs")
-    .select("id, habit_id, logged_date")
+    .select("id, habit_id, logged_date, created_at")
     .order("logged_date");
 
   if (error) {
@@ -34,6 +38,22 @@ export async function POST(request: Request) {
   if (!habitId || !date) {
     return NextResponse.json(
       { error: "habit_id and date are required" },
+      { status: 400 },
+    );
+  }
+
+  const { count, error: countError } = await supabase
+    .from("habit_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("habit_id", habitId)
+    .eq("logged_date", date);
+
+  if (countError) {
+    return NextResponse.json({ error: countError.message }, { status: 500 });
+  }
+  if ((count ?? 0) >= MAX_LOGS_PER_DAY) {
+    return NextResponse.json(
+      { error: `Already logged ${MAX_LOGS_PER_DAY} times today — that's the max.` },
       { status: 400 },
     );
   }
@@ -69,11 +89,25 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const { error } = await supabase
+  // Multiple logs can now exist for the same day (extra credit) — removing
+  // pops the most recently added one rather than wiping the whole day.
+  const { data: mostRecent, error: findError } = await supabase
     .from("habit_logs")
-    .delete()
+    .select("id")
     .eq("habit_id", habitId)
-    .eq("logged_date", date);
+    .eq("logged_date", date)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (findError) {
+    return NextResponse.json({ error: findError.message }, { status: 500 });
+  }
+  if (!mostRecent) {
+    return new NextResponse(null, { status: 204 });
+  }
+
+  const { error } = await supabase.from("habit_logs").delete().eq("id", mostRecent.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

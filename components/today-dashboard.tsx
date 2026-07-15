@@ -197,16 +197,12 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
-  async function toggleHabit(habit: Habit, date: string, loggedOnDate: boolean) {
-    const res = loggedOnDate
-      ? await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${date}`, {
-          method: "DELETE",
-        })
-      : await fetch("/api/habit-logs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ habit_id: habit.id, date }),
-        });
+  async function addHabitLog(habit: Habit, date: string) {
+    const res = await fetch("/api/habit-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ habit_id: habit.id, date }),
+    });
 
     if (!res.ok) {
       const body = await res.json();
@@ -215,6 +211,28 @@ export default function TodayDashboard() {
     }
 
     await loadAll();
+  }
+
+  async function removeHabitLog(habit: Habit, date: string) {
+    const res = await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${date}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to update habit");
+      return;
+    }
+
+    await loadAll();
+  }
+
+  async function toggleHabit(habit: Habit, date: string, loggedOnDate: boolean) {
+    if (loggedOnDate) {
+      await removeHabitLog(habit, date);
+    } else {
+      await addHabitLog(habit, date);
+    }
   }
 
   async function handleUpdateHabit(id: string, updates: Record<string, unknown>) {
@@ -393,6 +411,8 @@ export default function TodayDashboard() {
                 today={today}
                 domains={domains}
                 onToggle={toggleHabit}
+                onAddLog={addHabitLog}
+                onRemoveLog={removeHabitLog}
                 onUpdate={handleUpdateHabit}
                 onDelete={handleDeleteHabit}
               />

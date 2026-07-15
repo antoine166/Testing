@@ -125,7 +125,7 @@ Simple habit tracker with streak counting.
   - `daily` — every day
   - `specific_days` — fixed days of the week (e.g. Mon/Wed/Fri)
   - `times_per_week` — any N days per week, Antoine's choice which days (e.g. "3x per week")
-- Logging: one log per habit per day (tap to toggle on/off)
+- Logging: tap a day's square to log/unlog it. **Extra credit**: a habit can be logged more than once on the same day (e.g. two workouts), capped at 7/day — the day's square gets a small "+" once logged, which appends another, darker-green square right next to it; clicking any of a day's squares removes the most recently added one first. Enforced server-side too (API route, Coach, MCP), not just the UI. For `daily`/`specific_days` streaks this is purely cosmetic (streak math dedupes by date via a `Set`, unaffected by count); for `times_per_week`, extra same-day logs *do* count toward that week's target and streak, since that math already counts raw log rows rather than distinct days — two workouts on Monday count as 2 of a 3x/week goal. The `times_per_week` tally row (the `target_count` progress boxes) is unaffected/uncapped-display — it still shows at most `target_count` boxes, all filled once the target's hit; it doesn't grow extra boxes past target the way a single day's square does
 - **Current streak**:
   - `daily` / `specific_days`: consecutive required days logged up to today, missing a required day resets to 0
   - `times_per_week`: consecutive weeks where the log count hit the target; a week that falls short resets to 0 (the current, still-in-progress week doesn't break the streak until it ends)

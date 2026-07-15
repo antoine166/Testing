@@ -136,16 +136,12 @@ export default function HabitsPage() {
     await loadAll();
   }
 
-  async function toggleDate(habit: Habit, date: string, loggedOnDate: boolean) {
-    const res = loggedOnDate
-      ? await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${date}`, {
-          method: "DELETE",
-        })
-      : await fetch("/api/habit-logs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ habit_id: habit.id, date }),
-        });
+  async function addLog(habit: Habit, date: string) {
+    const res = await fetch("/api/habit-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ habit_id: habit.id, date }),
+    });
 
     if (!res.ok) {
       const body = await res.json();
@@ -154,6 +150,28 @@ export default function HabitsPage() {
     }
 
     await loadAll();
+  }
+
+  async function removeLog(habit: Habit, date: string) {
+    const res = await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${date}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to update log");
+      return;
+    }
+
+    await loadAll();
+  }
+
+  async function toggleDate(habit: Habit, date: string, loggedOnDate: boolean) {
+    if (loggedOnDate) {
+      await removeLog(habit, date);
+    } else {
+      await addLog(habit, date);
+    }
   }
 
   return (
@@ -276,6 +294,8 @@ export default function HabitsPage() {
                       today={today}
                       domains={domains}
                       onToggle={toggleDate}
+                      onAddLog={addLog}
+                      onRemoveLog={removeLog}
                       onUpdate={handleUpdate}
                       onDelete={handleDelete}
                     />
@@ -309,6 +329,8 @@ export default function HabitsPage() {
                       today={today}
                       domains={domains}
                       onToggle={toggleDate}
+                      onAddLog={addLog}
+                      onRemoveLog={removeLog}
                       onUpdate={handleUpdate}
                       onDelete={handleDelete}
                     />

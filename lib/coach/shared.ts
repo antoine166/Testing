@@ -545,14 +545,18 @@ export async function executeTool(
     const habitId = typeof input.habit_id === "string" ? input.habit_id : "";
     if (!habitId) return "Error: habit_id is required";
 
+    const { count } = await supabase
+      .from("habit_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("habit_id", habitId)
+      .eq("logged_date", today);
+    if ((count ?? 0) >= 7) return "Already logged 7 times today — that's the max.";
+
     const { error } = await supabase
       .from("habit_logs")
       .insert({ user_id: userId, habit_id: habitId, logged_date: today });
 
-    if (error) {
-      if (error.code === "23505") return "That habit is already logged for today.";
-      return `Error: ${error.message}`;
-    }
+    if (error) return `Error: ${error.message}`;
     return "Logged.";
   }
 

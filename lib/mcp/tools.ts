@@ -583,7 +583,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     "log_habit",
     {
       title: "Log habit",
-      description: "Record that Antoine did a habit on a given day (e.g. \"I did my workout\").",
+      description:
+        "Record that Antoine did a habit on a given day (e.g. \"I did my workout\"). Can be " +
+        "called more than once for the same day for \"extra credit\" (e.g. two workouts in one " +
+        "day) — capped at 7 logs per habit per day.",
       inputSchema: {
         habit_id: z.string().uuid(),
         date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
@@ -591,9 +594,19 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
     async ({ habit_id, date }) => {
+      const loggedDate = date ?? todayLocal();
+      const { count, error: countError } = await admin
+        .from("habit_logs")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("habit_id", habit_id)
+        .eq("logged_date", loggedDate);
+      if (countError) return fail(countError.message);
+      if ((count ?? 0) >= 7) return fail("Already logged 7 times that day — that's the max.");
+
       const { data, error } = await admin
         .from("habit_logs")
-        .insert({ user_id: userId, habit_id, logged_date: date ?? todayLocal() })
+        .insert({ user_id: userId, habit_id, logged_date: loggedDate })
         .select()
         .single();
       if (error) return fail(error.message);
@@ -605,7 +618,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     "unlog_habit",
     {
       title: "Unlog habit",
-      description: "Undo a habit log entry for a given day.",
+      description:
+        "Undo a habit log entry for a given day. If it was logged more than once that day " +
+        "(extra credit), this removes just the most recently added one, not all of them.",
       inputSchema: {
         habit_id: z.string().uuid(),
         date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
@@ -613,14 +628,22 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
     async ({ habit_id, date }) => {
-      const { error } = await admin
+      const loggedDate = date ?? todayLocal();
+      const { data: mostRecent, error: findError } = await admin
         .from("habit_logs")
-        .delete()
+        .select("id")
         .eq("user_id", userId)
         .eq("habit_id", habit_id)
-        .eq("logged_date", date ?? todayLocal());
+        .eq("logged_date", loggedDate)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (findError) return fail(findError.message);
+      if (!mostRecent) return ok({ unlogged: null, date: loggedDate });
+
+      const { error } = await admin.from("habit_logs").delete().eq("id", mostRecent.id);
       if (error) return fail(error.message);
-      return ok({ unlogged: habit_id, date: date ?? todayLocal() });
+      return ok({ unlogged: habit_id, date: loggedDate });
     },
   );
 
