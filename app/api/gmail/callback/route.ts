@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { requireUser } from "@/lib/supabase/require-user";
-import { exchangeCodeForTokens } from "@/lib/gmail/client";
+import { exchangeCodeForTokens, fetchGoogleAccountEmail } from "@/lib/gmail/client";
 
 const STATE_COOKIE = "gmail_oauth_state";
 
@@ -42,18 +42,34 @@ export async function GET(request: Request) {
     }
 
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+    const email = await fetchGoogleAccountEmail(tokens.access_token);
 
-    const { error: dbError } = await supabase.from("gmail_connections").upsert(
-      {
-        user_id: user.id,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: expiresAt,
-        scope: tokens.scope,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
+    const row = {
+      user_id: user.id,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: expiresAt,
+      scope: tokens.scope,
+      email,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Multiple accounts can be connected at once, identified by email. If
+    // this exact account is already connected, update its tokens in place
+    // rather than adding a duplicate row. If not, but there's a
+    // pre-existing connection from before multi-account support with no
+    // email on file, adopt that row instead of leaving it orphaned.
+    const { data: existing } = await supabase
+      .from("gmail_connections")
+      .select("id, email")
+      .eq("user_id", user.id);
+
+    const targetId =
+      existing?.find((c) => c.email === email)?.id ?? existing?.find((c) => c.email === null)?.id;
+
+    const { error: dbError } = targetId
+      ? await supabase.from("gmail_connections").update(row).eq("id", targetId)
+      : await supabase.from("gmail_connections").insert(row);
     if (dbError) {
       return NextResponse.redirect(settingsUrl("error"));
     }

@@ -3,13 +3,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-// Least-privilege scope: metadata-only read access is enough to look a
-// message up by its RFC822 Message-ID and read its Gmail-internal ID (for
-// building a permalink) — no message content is ever fetched.
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.metadata";
+// gmail.metadata: enough to look a message up by RFC822 Message-ID and
+// read its Gmail-internal ID (for building a permalink) — no message
+// content is ever fetched. userinfo.email: just enough to know *which*
+// Google account was connected, so multiple connections can be told apart
+// and disconnected individually — no other profile data is requested.
+export const GMAIL_SCOPE =
+  "https://www.googleapis.com/auth/gmail.metadata https://www.googleapis.com/auth/userinfo.email";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
+const USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo";
 
 export function isGmailConfigured(): boolean {
   return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -25,7 +29,10 @@ export function buildAuthorizeUrl(redirectUri: string, state: string): string {
   // Forces the consent screen every time so Google always issues a fresh
   // refresh_token — without this, reconnecting after a prior grant can come
   // back with no refresh_token at all (Google only issues one on first consent).
-  url.searchParams.set("prompt", "consent");
+  // Also lets Antoine pick a *different* Google account when connecting a
+  // second one, instead of silently reusing whichever one is already
+  // signed into the browser.
+  url.searchParams.set("prompt", "consent select_account");
   url.searchParams.set("state", state);
   return url.toString();
 }
@@ -76,20 +83,32 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> 
   return res.json();
 }
 
+/** Fetches the connected Google account's email address, so a connection can be identified and told apart from others. Best-effort — returns null on any failure rather than blocking the connect flow over a non-essential detail. */
+export async function fetchGoogleAccountEmail(accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch(USERINFO_ENDPOINT, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data.email === "string" ? data.email : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Returns a valid access token for the user's stored Gmail connection,
- * refreshing it first if it's expired (or close to it). Returns null if
- * the user has no connection. Uses the admin client since this runs from
- * the inbound email webhook, which has no user session.
+ * Returns a valid access token for one specific Gmail connection (by row
+ * id), refreshing it first if it's expired (or close to it). Returns null
+ * if the connection doesn't exist. Uses the admin client since this runs
+ * from the inbound email webhook, which has no user session.
  */
 export async function getValidAccessToken(
   admin: AdminClient,
-  userId: string,
+  connectionId: string,
 ): Promise<string | null> {
   const { data: connection } = await admin
     .from("gmail_connections")
     .select("access_token, refresh_token, expires_at")
-    .eq("user_id", userId)
+    .eq("id", connectionId)
     .maybeSingle();
   if (!connection) return null;
 
@@ -105,44 +124,54 @@ export async function getValidAccessToken(
   await admin
     .from("gmail_connections")
     .update({ access_token: refreshed.access_token, expires_at: newExpiresAt })
-    .eq("user_id", userId);
+    .eq("id", connectionId);
 
   return refreshed.access_token;
 }
 
 /**
- * Looks up a forwarded email in the user's connected Gmail account by its
- * RFC822 Message-ID header, and returns a permalink Antoine can open
- * directly in Gmail. Best-effort: returns undefined on any failure (no
- * connection, message not found, API error) — callers should already have
- * a fallback (see extractLink in the inbound webhook).
+ * Looks up a forwarded email by its RFC822 Message-ID across every Gmail
+ * account Antoine has connected (it could plausibly have come from any of
+ * them), and returns a permalink to whichever one finds it. Best-effort:
+ * returns undefined if there's no connection, no match in any of them, or
+ * an API error — callers should already have a fallback (see extractLink
+ * in the inbound webhook).
  */
 export async function findGmailPermalink(
   admin: AdminClient,
   userId: string,
   rfc822MessageId: string,
 ): Promise<string | undefined> {
-  try {
-    const accessToken = await getValidAccessToken(admin, userId);
-    if (!accessToken) return undefined;
+  const { data: connections } = await admin
+    .from("gmail_connections")
+    .select("id")
+    .eq("user_id", userId);
+  if (!connections || connections.length === 0) return undefined;
 
-    const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-    listUrl.searchParams.set("q", `rfc822msgid:${rfc822MessageId}`);
-    listUrl.searchParams.set("maxResults", "1");
+  for (const connection of connections) {
+    try {
+      const accessToken = await getValidAccessToken(admin, connection.id);
+      if (!accessToken) continue;
 
-    const res = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) return undefined;
+      const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+      listUrl.searchParams.set("q", `rfc822msgid:${rfc822MessageId}`);
+      listUrl.searchParams.set("maxResults", "1");
 
-    const data = await res.json();
-    const gmailId = data.messages?.[0]?.id;
-    if (!gmailId) return undefined;
+      const res = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!res.ok) continue;
 
-    return `https://mail.google.com/mail/u/0/#all/${gmailId}`;
-  } catch {
-    return undefined;
+      const data = await res.json();
+      const gmailId = data.messages?.[0]?.id;
+      if (!gmailId) continue;
+
+      return `https://mail.google.com/mail/u/0/#all/${gmailId}`;
+    } catch {
+      continue;
+    }
   }
+  return undefined;
 }
 
-export async function disconnectGmail(supabase: SupabaseClient, userId: string): Promise<void> {
-  await supabase.from("gmail_connections").delete().eq("user_id", userId);
+export async function disconnectGmail(supabase: SupabaseClient, connectionId: string): Promise<void> {
+  await supabase.from("gmail_connections").delete().eq("id", connectionId);
 }
