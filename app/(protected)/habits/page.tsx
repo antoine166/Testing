@@ -284,7 +284,7 @@ export default function HabitsPage() {
                   <span className="text-zinc-400 transition-transform group-open:rotate-90">
                     ›
                   </span>
-                  Not done yet today ({pending.length})
+                  Still To Do ({pending.length})
                 </summary>
                 <ul className="space-y-2">
                   {pending.map((habit) => (
