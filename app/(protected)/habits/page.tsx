@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
 import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import HabitRow, {
   FrequencyFields,
   FREQUENCIES,
@@ -76,6 +77,8 @@ export default function HabitsPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["habits", "habit_logs", "domains"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

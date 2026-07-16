@@ -7,6 +7,7 @@ import {
   type Habit as StreakHabit,
 } from "@/lib/habits/streaks";
 import { todayLocal, lastNDays } from "@/lib/date";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type HabitFrequency = "daily" | "specific_days" | "times_per_week";
 
@@ -56,6 +57,33 @@ export default function AnalyticsPage() {
   const days = lastNDays(WINDOW_DAYS);
   const last7 = lastNDays(7);
 
+  async function loadAll(signal?: AbortSignal) {
+    try {
+      const opts = { signal };
+      const [habitsRes, logsRes, tasksRes, checkinsRes, domainsRes] = await Promise.all([
+        fetch("/api/habits", opts),
+        fetch("/api/habit-logs", opts),
+        fetch("/api/tasks", opts),
+        fetch("/api/checkins", opts),
+        fetch("/api/domains", opts),
+      ]);
+      if (!habitsRes.ok || !logsRes.ok || !tasksRes.ok || !checkinsRes.ok || !domainsRes.ok) {
+        throw new Error("Failed to load analytics");
+      }
+      setHabits(await habitsRes.json());
+      setLogs(await logsRes.json());
+      setTasks(await tasksRes.json());
+      setCheckins(await checkinsRes.json());
+      setDomains(await domainsRes.json());
+      setError(null);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     const opts = { signal: controller.signal };
@@ -94,6 +122,10 @@ export default function AnalyticsPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["habits", "habit_logs", "tasks", "daily_checkins", "domains"], () =>
+    loadAll(),
+  );
 
   if (loading) {
     return (

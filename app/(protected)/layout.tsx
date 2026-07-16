@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import QuickCapture from "@/components/quick-capture";
 import SidebarNav from "@/components/sidebar-nav";
+import RealtimeLayoutRefresher from "@/components/realtime-layout-refresher";
 import { todayLocal } from "@/lib/date";
 
 export default async function ProtectedLayout({
@@ -77,6 +78,7 @@ export default async function ProtectedLayout({
         ))}
       </datalist>
       <QuickCapture />
+      <RealtimeLayoutRefresher />
     </>
   );
 }

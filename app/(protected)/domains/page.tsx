@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
 import TaskRow, { type Task } from "@/components/task-row";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type Domain = {
   id: string;
@@ -81,6 +82,8 @@ export default function DomainsPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["domains", "projects", "tasks"], () => loadDomains());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

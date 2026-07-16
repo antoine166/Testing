@@ -8,6 +8,7 @@ import KnowledgeItemRow, {
   type KnowledgeFolder,
   type KnowledgeType,
 } from "@/components/knowledge-item-row";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 export default function LibraryPage() {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
@@ -66,6 +67,8 @@ export default function LibraryPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["knowledge_items", "knowledge_folders"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

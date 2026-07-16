@@ -6,6 +6,7 @@ import RoutineCard, {
   type Routine,
   type TimeOfDay,
 } from "@/components/routine-card";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 const TIME_ORDER: Record<TimeOfDay, number> = {
   morning: 0,
@@ -49,6 +50,8 @@ export default function RoutinesPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["routines", "routine_items"], () => loadRoutines());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

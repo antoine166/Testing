@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type Domain = {
   id: string;
@@ -101,6 +102,8 @@ export default function ProjectsPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["projects", "domains", "tasks"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
