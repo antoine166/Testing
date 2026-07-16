@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Life OS Clipper</title>
+    <style>
+      body {
+        width: 320px;
+        font-family: -apple-system, system-ui, sans-serif;
+        font-size: 13px;
+        color: #18181b;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 10px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 8px 0 3px;
+      }
+      input,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        border: 1px solid #d4d4d8;
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 13px;
+      }
+      textarea {
+        resize: vertical;
+        min-height: 70px;
+      }
+      button {
+        margin-top: 10px;
+        width: 100%;
+        padding: 8px;
+        border: none;
+        border-radius: 6px;
+        background: #18181b;
+        color: white;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #status {
+        margin-top: 8px;
+        font-size: 12px;
+      }
+      #status.error {
+        color: #dc2626;
+      }
+      #status.success {
+        color: #059669;
+      }
+      #setup {
+        text-align: center;
+      }
+      #setup a {
+        color: #2563eb;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Save to Life OS</h1>
+
+    <div id="setup" style="display: none">
+      <p>No access token set yet.</p>
+      <a id="open-options">Open extension settings</a>
+    </div>
+
+    <form id="clip-form">
+      <label for="title">Title</label>
+      <input id="title" required />
+
+      <label for="url">URL</label>
+      <input id="url" />
+
+      <label for="content">Notes</label>
+      <textarea id="content" placeholder="Selected text, or your own notes"></textarea>
+
+      <label for="tags">Tags (comma-separated)</label>
+      <input id="tags" placeholder="e.g. reading, recipe" />
+
+      <button id="save" type="submit">Save</button>
+      <p id="status"></p>
+    </form>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -156,6 +156,7 @@ A personal second brain for saving things Antoine wants to keep.
 - Fields: title, content/body, URL (optional), tags, type, optional folder
 - Search across all items by keyword or tag
 - **Folders** (`knowledge_folders`): nested, arbitrary depth via a self-referencing `parent_id` (like folders on a computer — see §6). A DB trigger (`knowledge_folders_no_cycle`) rejects any insert/update that would make a folder its own ancestor, since the Library page's breadcrumb walks up `parent_id` and would hang on a cycle. Deleting a folder cascades to its subfolders; items inside just become unfiled (`folder_id` null) rather than being deleted
+- **Chrome extension** (`chrome-extension/`, minimal v1 — see its README for setup): a browser popup that saves the current tab's title/URL/selected text as a `resource` item, for lower-friction web capture than forwarding an email. Not part of the Next.js build; a separate, unpacked (not Chrome Web Store-published) extension in the same repo. Authenticates via a personal access token (`POST /api/clip`, `Authorization: Bearer <EXTENSION_ACCESS_TOKEN>`) rather than the app's session cookie, since an extension page can't read that — same pattern as the digest endpoint (3.11a). No folder/tag picker, no full-page or readability capture, no screenshot clipping yet; intentionally minimal pending a decision on whether to build toward full Evernote-Clipper-style parity
 
 ### 3.11 Coach *(Phase 2)*
 AI assistant powered by the Anthropic API (`claude-sonnet-5`).
