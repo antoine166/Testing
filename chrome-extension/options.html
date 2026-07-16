@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Life OS Clipper — Settings</title>
+    <style>
+      body {
+        font-family: -apple-system, system-ui, sans-serif;
+        font-size: 14px;
+        color: #18181b;
+        max-width: 420px;
+        margin: 40px auto;
+        padding: 0 16px;
+      }
+      h1 {
+        font-size: 18px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 16px 0 4px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border: 1px solid #d4d4d8;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      p.hint {
+        color: #71717a;
+        font-size: 12px;
+        margin: 4px 0 0;
+      }
+      button {
+        margin-top: 20px;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        background: #18181b;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 12px;
+        color: #059669;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Life OS Clipper Settings</h1>
+
+    <label for="api-base">Life OS URL</label>
+    <input id="api-base" placeholder="https://testing-azure-eta.vercel.app" />
+    <p class="hint">Your deployed Life OS domain — no trailing slash.</p>
+
+    <label for="access-token">Access token</label>
+    <input id="access-token" type="password" placeholder="Paste your EXTENSION_ACCESS_TOKEN" />
+    <p class="hint">
+      The same value as the <code>EXTENSION_ACCESS_TOKEN</code> environment variable configured
+      on the server — generate one with <code>openssl rand -hex 32</code> if you haven't already.
+    </p>
+
+    <button id="save">Save</button>
+    <p id="status"></p>
+
+    <script src="options.js"></script>
+  </body>
+</html>
