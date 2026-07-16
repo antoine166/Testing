@@ -566,6 +566,40 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
   // --- Recurring tasks ---
 
   server.registerTool(
+    "generate_recurring_tasks",
+    {
+      title: "Generate recurring tasks",
+      description:
+        "Top up every active recurring task template's pre-generated occurrences back up to its " +
+        "horizon. Meant to be called roughly daily (e.g. by a scheduled routine) — safe to call more " +
+        "often or skip days, since it's idempotent: a template with no deficit generates nothing, " +
+        "and it never generates past its horizon regardless of how long it's been since the last run.",
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async () => {
+      const { data: templates, error } = await admin
+        .from("recurring_task_templates")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("active", true);
+      if (error) return fail(error.message);
+
+      const results = await Promise.all(
+        (templates as StoredTemplate[]).map(async (template) => {
+          const { generated, error: topUpError } = await topUpTemplate(admin, template);
+          return { template_id: template.id, title: template.title, generated, error: topUpError };
+        }),
+      );
+
+      return ok({
+        checked: results.length,
+        generated_total: results.reduce((sum, r) => sum + r.generated, 0),
+        results,
+      });
+    },
+  );
+
+  server.registerTool(
     "list_recurring_tasks",
     {
       title: "List recurring tasks",
