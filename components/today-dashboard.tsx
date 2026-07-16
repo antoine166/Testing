@@ -503,38 +503,6 @@ export default function TodayDashboard() {
         </div>
       )}
 
-      <details open className="group">
-        <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-          <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-          Habits today {dueHabits.length > 0 && `(${dueHabits.length})`}
-        </summary>
-        {atRiskCount > 0 && (
-          <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-500">
-            ⚠️ {atRiskCount} at risk of breaking a streak twice in a row — do these first
-          </p>
-        )}
-        {dueHabits.length === 0 ? (
-          <p className="text-sm text-zinc-500">No habits due today.</p>
-        ) : (
-          <ul className="space-y-2">
-            {dueHabits.map((habit) => (
-              <HabitRow
-                key={habit.id}
-                habit={habit}
-                logs={logs.filter((l) => l.habit_id === habit.id)}
-                today={today}
-                domains={domains}
-                onToggle={toggleHabit}
-                onAddLog={addHabitLog}
-                onRemoveLog={removeHabitLog}
-                onUpdate={handleUpdateHabit}
-                onDelete={handleDeleteHabit}
-              />
-            ))}
-          </ul>
-        )}
-      </details>
-
       <div>
         <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
           Today {todayTasks.length > 0 && `(${todayTasks.length})`}
@@ -783,6 +751,38 @@ export default function TodayDashboard() {
           </ul>
         )}
       </div>
+
+      <details open className="group">
+        <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
+          Habits today {dueHabits.length > 0 && `(${dueHabits.length})`}
+        </summary>
+        {atRiskCount > 0 && (
+          <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-500">
+            ⚠️ {atRiskCount} at risk of breaking a streak twice in a row — do these first
+          </p>
+        )}
+        {dueHabits.length === 0 ? (
+          <p className="text-sm text-zinc-500">No habits due today.</p>
+        ) : (
+          <ul className="space-y-2">
+            {dueHabits.map((habit) => (
+              <HabitRow
+                key={habit.id}
+                habit={habit}
+                logs={logs.filter((l) => l.habit_id === habit.id)}
+                today={today}
+                domains={domains}
+                onToggle={toggleHabit}
+                onAddLog={addHabitLog}
+                onRemoveLog={removeHabitLog}
+                onUpdate={handleUpdateHabit}
+                onDelete={handleDeleteHabit}
+              />
+            ))}
+          </ul>
+        )}
+      </details>
 
       {overdueTasks.length > 0 && (
         <div>
