@@ -46,7 +46,11 @@ export async function POST(request: Request) {
       parent_project_id:
         typeof body.parent_project_id === "string" ? body.parent_project_id : null,
       status: typeof body.status === "string" ? body.status : undefined,
+      priority: typeof body.priority === "string" ? body.priority : undefined,
       due_date: typeof body.due_date === "string" ? body.due_date : undefined,
+      scheduled_date:
+        typeof body.scheduled_date === "string" ? body.scheduled_date : undefined,
+      link: typeof body.link === "string" && body.link.trim() ? body.link.trim() : undefined,
     })
     .select()
     .single();

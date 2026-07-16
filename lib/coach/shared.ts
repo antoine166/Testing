@@ -127,6 +127,10 @@ export const TOOLS: Tool[] = [
       properties: {
         project_id: { type: "string" },
         status: { type: "string", enum: ["active", "someday", "completed", "archived"] },
+        priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+        due_date: { type: "string", description: "Empty string clears it" },
+        scheduled_date: { type: "string", description: "Empty string clears it" },
+        link: { type: "string", description: "Related URL. Empty string clears it." },
         domain_id: { type: "string" },
         parent_project_id: {
           type: "string",
@@ -155,6 +159,10 @@ export const TOOLS: Tool[] = [
           description: "UUID of a top-level project to nest this new project under, if any.",
         },
         description: { type: "string" },
+        priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+        due_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
+        scheduled_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
+        link: { type: "string", description: "Optional related URL." },
       },
       required: ["name"],
     },
@@ -790,6 +798,10 @@ export async function executeTool(
 
     const updates: Record<string, unknown> = {};
     if (typeof input.status === "string") updates.status = input.status;
+    if (typeof input.priority === "string") updates.priority = input.priority;
+    if (typeof input.due_date === "string") updates.due_date = input.due_date || null;
+    if (typeof input.scheduled_date === "string") updates.scheduled_date = input.scheduled_date || null;
+    if (typeof input.link === "string") updates.link = input.link.trim() || null;
     if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
     if (typeof input.parent_project_id === "string") {
       updates.parent_project_id = input.parent_project_id || null;
@@ -810,6 +822,8 @@ export async function executeTool(
     const projectName = typeof input.name === "string" ? input.name.trim() : "";
     if (!projectName) return "Error: name is required";
 
+    const link = typeof input.link === "string" && input.link.trim() ? input.link.trim() : undefined;
+
     const { data, error } = await supabase
       .from("projects")
       .insert({
@@ -819,6 +833,10 @@ export async function executeTool(
         parent_project_id:
           typeof input.parent_project_id === "string" ? input.parent_project_id : null,
         description: typeof input.description === "string" ? input.description : undefined,
+        priority: typeof input.priority === "string" ? input.priority : undefined,
+        due_date: typeof input.due_date === "string" ? input.due_date : undefined,
+        scheduled_date: typeof input.scheduled_date === "string" ? input.scheduled_date : undefined,
+        link,
       })
       .select()
       .single();

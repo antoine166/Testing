@@ -12,6 +12,7 @@ type Domain = {
 };
 
 type ProjectStatus = "active" | "someday" | "completed" | "archived";
+type ProjectPriority = "none" | "low" | "medium" | "high";
 
 type Project = {
   id: string;
@@ -20,14 +21,26 @@ type Project = {
   name: string;
   description: string | null;
   status: ProjectStatus;
+  priority: ProjectPriority;
   due_date: string | null;
+  scheduled_date: string | null;
+  link: string | null;
   created_at: string;
 };
 
 type ProjectTask = { project_id: string | null; status: "todo" | "in_progress" | "done" };
 
 const STATUSES: ProjectStatus[] = ["active", "someday", "completed", "archived"];
+const PRIORITIES: ProjectPriority[] = ["none", "low", "medium", "high"];
 const NO_DOMAIN_KEY = "__none__";
+
+function linkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
 
 export default function ProjectsPage() {
   const searchParams = useSearchParams();
@@ -44,7 +57,10 @@ export default function ProjectsPage() {
   const [domainId, setDomainId] = useState(domainFilter ?? "");
   const [parentProjectId, setParentProjectId] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("active");
+  const [priority, setPriority] = useState<ProjectPriority>("none");
   const [dueDate, setDueDate] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [link, setLink] = useState("");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -52,7 +68,13 @@ export default function ProjectsPage() {
   const [editDomainId, setEditDomainId] = useState("");
   const [editParentProjectId, setEditParentProjectId] = useState("");
   const [editStatus, setEditStatus] = useState<ProjectStatus>("active");
+  const [editPriority, setEditPriority] = useState<ProjectPriority>("none");
   const [editDueDate, setEditDueDate] = useState("");
+  const [editScheduledDate, setEditScheduledDate] = useState("");
+  const [editLink, setEditLink] = useState("");
+
+  const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
+  const [addingTaskId, setAddingTaskId] = useState<string | null>(null);
 
   async function loadAll() {
     try {
@@ -118,7 +140,10 @@ export default function ProjectsPage() {
         domain_id: domainId || null,
         parent_project_id: parentProjectId || null,
         status,
+        priority,
         due_date: dueDate || undefined,
+        scheduled_date: scheduledDate || undefined,
+        link: link || undefined,
       }),
     });
 
@@ -133,7 +158,10 @@ export default function ProjectsPage() {
     setDomainId("");
     setParentProjectId("");
     setStatus("active");
+    setPriority("none");
     setDueDate("");
+    setScheduledDate("");
+    setLink("");
     await loadAll();
   }
 
@@ -160,7 +188,10 @@ export default function ProjectsPage() {
     setEditDomainId(project.domain_id ?? "");
     setEditParentProjectId(project.parent_project_id ?? "");
     setEditStatus(project.status);
+    setEditPriority(project.priority);
     setEditDueDate(project.due_date ?? "");
+    setEditScheduledDate(project.scheduled_date ?? "");
+    setEditLink(project.link ?? "");
   }
 
   async function handleUpdate(id: string) {
@@ -175,7 +206,10 @@ export default function ProjectsPage() {
         domain_id: editDomainId || null,
         parent_project_id: editParentProjectId || null,
         status: editStatus,
+        priority: editPriority,
         due_date: editDueDate || null,
+        scheduled_date: editScheduledDate || null,
+        link: editLink || null,
       }),
     });
 
@@ -186,6 +220,33 @@ export default function ProjectsPage() {
     }
 
     setEditingId(null);
+    await loadAll();
+  }
+
+  async function handleAddTask(project: Project, e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const title = (newTaskTitles[project.id] ?? "").trim();
+    if (!title) return;
+
+    setAddingTaskId(project.id);
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        project_id: project.id,
+        domain_id: project.domain_id,
+      }),
+    });
+    setAddingTaskId(null);
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create task");
+      return;
+    }
+
+    setNewTaskTitles((prev) => ({ ...prev, [project.id]: "" }));
     await loadAll();
   }
 
@@ -296,6 +357,22 @@ export default function ProjectsPage() {
             className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
+        <div>
+          <label
+            htmlFor="link"
+            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Link (optional)
+          </label>
+          <input
+            id="link"
+            type="url"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="e.g. a shared doc or spec"
+            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          />
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label
@@ -365,6 +442,26 @@ export default function ProjectsPage() {
           </div>
           <div>
             <label
+              htmlFor="priority"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Priority
+            </label>
+            <select
+              id="priority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as ProjectPriority)}
+              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              {PRIORITIES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
               htmlFor="due_date"
               className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
             >
@@ -375,6 +472,21 @@ export default function ProjectsPage() {
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
+              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="scheduled_date"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Scheduled
+            </label>
+            <input
+              id="scheduled_date"
+              type="date"
+              value={scheduledDate}
+              onChange={(e) => setScheduledDate(e.target.value)}
               className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
           </div>
@@ -449,6 +561,13 @@ export default function ProjectsPage() {
                 rows={2}
                 className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
+              <input
+                type="url"
+                value={editLink}
+                onChange={(e) => setEditLink(e.target.value)}
+                placeholder="Link (optional)"
+                className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={editParentProjectId}
@@ -494,10 +613,29 @@ export default function ProjectsPage() {
                     </option>
                   ))}
                 </select>
+                <select
+                  value={editPriority}
+                  onChange={(e) => setEditPriority(e.target.value as ProjectPriority)}
+                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
                 <input
                   type="date"
                   value={editDueDate}
                   onChange={(e) => setEditDueDate(e.target.value)}
+                  title="Due date"
+                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+                <input
+                  type="date"
+                  value={editScheduledDate}
+                  onChange={(e) => setEditScheduledDate(e.target.value)}
+                  title="Scheduled date"
                   className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
                 <button
@@ -515,8 +653,9 @@ export default function ProjectsPage() {
               </div>
             </div>
           ) : (
+            <>
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                   {project.name}
                 </p>
@@ -525,9 +664,21 @@ export default function ProjectsPage() {
                     {project.description}
                   </p>
                 )}
+                {project.link && (
+                  <a
+                    href={project.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-0.5 block truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    {linkLabel(project.link)}
+                  </a>
+                )}
                 <p className="mt-1 text-xs text-zinc-500">
                   {project.status}
+                  {project.priority !== "none" ? ` · ${project.priority} priority` : ""}
                   {project.due_date ? ` · due ${project.due_date}` : ""}
+                  {project.scheduled_date ? ` · scheduled ${project.scheduled_date}` : ""}
                 </p>
                 {isStalled(project) && (
                   <p className="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
@@ -596,6 +747,28 @@ export default function ProjectsPage() {
                 </button>
               </div>
             </div>
+            <form
+              onSubmit={(e) => handleAddTask(project, e)}
+              className="mt-2 flex flex-wrap gap-2"
+            >
+              <input
+                value={newTaskTitles[project.id] ?? ""}
+                onChange={(e) =>
+                  setNewTaskTitles((prev) => ({ ...prev, [project.id]: e.target.value }))
+                }
+                placeholder="Add a task to this project"
+                disabled={addingTaskId === project.id}
+                className="min-w-[10rem] flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+              />
+              <button
+                type="submit"
+                disabled={addingTaskId === project.id || !(newTaskTitles[project.id] ?? "").trim()}
+                className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              >
+                {addingTaskId === project.id ? "Adding..." : "Add"}
+              </button>
+            </form>
+            </>
           )}
         </div>
       </li>
