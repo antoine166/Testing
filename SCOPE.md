@@ -52,7 +52,7 @@ A second frictionless-capture path: forward or send an email, it becomes an inbo
 - Any email from a non-allowlisted sender is silently dropped (no error surfaced, nothing created)
 - **Dedup**: the task stores the email's Message-ID (`tasks.source_message_id`, unique). If Resend redelivers the same webhook, or the same email otherwise lands twice, the second insert hits the unique constraint and is treated as a no-op instead of creating a duplicate task
 - Body is captured as plain text only (no rendered HTML view) — tried once, but marketing/newsletter email templates rely on inline CSS for layout that isn't safe to render as-is, and stripping it produced broken-looking output (e.g. background images overlapping text)
-- **Gmail auto-link** (optional — everything above works without it): the created task's `link` field is normally filled by regex-parsing the forward body for a URL (preferring one that looks like a Gmail permalink, if any was pasted in), which is a best-effort heuristic since Gmail's own "Forward" doesn't reliably include one. If Antoine has connected his Gmail account (Settings page → `lib/gmail/client.ts`, OAuth via `/api/gmail/connect` → `/api/gmail/callback`), the webhook instead looks the forwarded email up by its RFC822 Message-ID (`rfc822msgid:` search, already captured as `tasks.source_message_id` for dedup) via the Gmail API and builds an authoritative `https://mail.google.com/mail/u/0/#all/<id>` link from the real Gmail-internal message ID — falling back to the regex heuristic if no connection exists or the lookup fails for any reason. Uses the minimal `gmail.metadata` scope (message existence + ID only, never message content). Requires `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (Google Cloud Console — see `.env.local.example` for setup steps); tokens live in `gmail_connections` (one row per user, RLS owner-only, never returned to the client — read only by the inbound webhook via the service-role client, or by the connect/callback/disconnect routes via the owner's own session)
+- **Gmail auto-link** (optional — everything above works without it): the created task's `link` field is normally filled by regex-parsing the forward body for a URL (preferring one that looks like a Gmail permalink, if any was pasted in), which is a best-effort heuristic since Gmail's own "Forward" doesn't reliably include one. If Antoine has connected a Gmail account (Settings page → `lib/gmail/client.ts`, OAuth via `/api/gmail/connect` → `/api/gmail/callback`), the webhook instead looks the forwarded email up by its RFC822 Message-ID (`rfc822msgid:` search, already captured as `tasks.source_message_id` for dedup) via the Gmail API and builds an authoritative `https://mail.google.com/mail/u/0/#all/<id>` link from the real Gmail-internal message ID — falling back to the regex heuristic if no connection exists or the lookup fails for any reason. Uses the minimal `gmail.metadata` + `userinfo.email` scopes (message existence + ID, and which account was connected — never message content). Requires `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (Google Cloud Console — see `.env.local.example` for setup steps); tokens live in `gmail_connections`, RLS owner-only, never returned to the client — read only by the inbound webhook via the service-role client, or by the connect/callback/disconnect routes via the owner's own session. **Multiple Gmail accounts can be connected at once** (e.g. personal + work) — a forwarded email is checked against every connected account (by `email`) until one finds a match; each is listed and disconnectable independently on the Settings page
 
 ### 3.2 Domains
 Top-level buckets for life areas (e.g., Health, Work, Business, Personal, Finance, Learning).
@@ -455,13 +455,15 @@ access_token  text not null
 refresh_token text not null
 expires_at    timestamptz not null
 scope         text
+email         text  -- the connected Google account; nullable (connections made
+              -- before multi-account support won't have one until reconnected)
 created_at    timestamptz not null default now()
 updated_at    timestamptz not null default now()
-unique (user_id)
--- One row per user (3.1a Gmail auto-link). Tokens are never returned to
--- the client — read only by the inbound email webhook (service-role
--- client) or by /api/gmail/{connect,callback,disconnect} (the owner's
--- own session).
+unique (user_id, email)
+-- One row per connected Google account (3.1a Gmail auto-link) — a user can
+-- have several. Tokens are never returned to the client — read only by the
+-- inbound email webhook (service-role client) or by
+-- /api/gmail/{connect,callback,disconnect} (the owner's own session).
 ```
 
 ---
