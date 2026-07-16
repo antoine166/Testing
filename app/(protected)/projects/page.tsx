@@ -536,6 +536,7 @@ export default function ProjectsPage() {
                 <Link
                   href={`/tasks?project=${project.id}`}
                   aria-label="View tasks"
+                  title="View tasks"
                   className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
                 >
                   <svg
@@ -554,6 +555,7 @@ export default function ProjectsPage() {
                 <button
                   onClick={() => startEdit(project)}
                   aria-label="Edit project"
+                  title="Edit project"
                   className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
                 >
                   <svg
@@ -571,6 +573,7 @@ export default function ProjectsPage() {
                 <button
                   onClick={() => handleDelete(project.id)}
                   aria-label="Delete project"
+                  title="Delete project"
                   className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
                 >
                   <svg

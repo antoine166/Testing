@@ -117,6 +117,7 @@ export default function QuickCapture() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Quick capture"
+        title="Quick capture"
         className="fixed right-6 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-2xl text-white shadow-lg hover:bg-blue-600"
       >
         +

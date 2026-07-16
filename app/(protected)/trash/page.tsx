@@ -115,18 +115,30 @@ export default function TrashPage() {
                     {remaining} day{remaining === 1 ? "" : "s"} left
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-3">
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     onClick={() => handleRestore(item)}
-                    className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+                    aria-label="Restore"
+                    title="Restore"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 dark:hover:text-emerald-400"
                   >
-                    Restore
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 12a9 9 0 1 0 2.64-6.36" />
+                      <path d="M3 4v5h5" />
+                    </svg>
                   </button>
                   <button
                     onClick={() => handlePurge(item)}
-                    className="text-sm font-medium text-red-600 hover:text-red-700"
+                    aria-label="Delete forever"
+                    title="Delete forever"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
                   >
-                    Delete forever
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
                   </button>
                 </div>
               </li>

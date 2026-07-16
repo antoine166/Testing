@@ -143,6 +143,7 @@ const AttachmentStrip = forwardRef<
                 <button
                   onClick={() => handleDelete(a.id)}
                   aria-label={`Remove ${a.filename}`}
+                  title={`Remove ${a.filename}`}
                   className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950 text-xs text-white group-hover:flex dark:bg-zinc-50 dark:text-zinc-950"
                 >
                   ×
@@ -152,6 +153,7 @@ const AttachmentStrip = forwardRef<
           {!hideAddButton && (
             <label
               aria-label="Add image"
+              title="Add image"
               className="flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
             >
               {uploading ? (
@@ -417,6 +419,7 @@ export default function TaskRow({
             checked={selected}
             onChange={(e) => onSelectChange?.(e.target.checked)}
             aria-label={`Select "${task.title}"`}
+            title={`Select "${task.title}"`}
             className="mt-1"
           />
         )}
@@ -425,6 +428,7 @@ export default function TaskRow({
           onClick={() => onToggleDone(task)}
           aria-pressed={task.status === "done"}
           aria-label={task.status === "done" ? "Mark not done" : "Mark done"}
+          title={task.status === "done" ? "Mark not done" : "Mark done"}
           className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
             task.status === "done"
               ? "border-blue-500 bg-blue-500 text-white"
@@ -493,6 +497,7 @@ export default function TaskRow({
           type="button"
           onClick={() => attachmentRef.current?.openPicker()}
           aria-label="Add image"
+          title="Add image"
           className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
         >
           <svg
@@ -514,6 +519,7 @@ export default function TaskRow({
           type="button"
           onClick={startEdit}
           aria-label="Edit task"
+          title="Edit task"
           className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
         >
           <svg
@@ -532,6 +538,7 @@ export default function TaskRow({
           type="button"
           onClick={() => onDelete(task.id)}
           aria-label="Delete task"
+          title="Delete task"
           className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
         >
           <svg
