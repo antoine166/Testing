@@ -36,13 +36,13 @@ export function useRealtimeRefresh(tables: string[], onChange: () => void) {
         "postgres_changes",
         { event: "*", schema: "public", table },
         (payload) => {
-          console.debug("[realtime] change received", table, payload.eventType);
+          console.log("[realtime] change received", table, payload.eventType);
           scheduleRefresh();
         },
       );
     }
     channel.subscribe((status, err) => {
-      console.debug("[realtime] subscribe status", tablesKey, status, err ?? "");
+      console.log("[realtime] subscribe status", tablesKey, status, err ?? "");
     });
 
     return () => {
