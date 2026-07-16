@@ -23,6 +23,7 @@ This project was scaffolded with a recent Next.js release that may differ from t
 - He's willing to learn beginner-level Supabase/Vercel work but isn't a backend engineer. Explain setup steps plainly; don't assume CLI/DevOps fluency.
 - Frictionless capture is the core value of the whole project. If a change adds friction to Quick Capture, flag it before building it.
 - Build in the phase order from `SCOPE.md` §11. Don't jump ahead to later-phase features (CRM, notifications, Coach) while an earlier phase is unfinished.
+- Whenever a feature is added or changed in the app (new fields, new CRUD operations, new entity types), also update the Coach/MCP connector (`lib/mcp/tools.ts`) so Claude has the same capability — unless it's explicitly app-only (currently: domain delete, permanent trash purge). Don't treat this as optional polish; do it in the same change, not as a follow-up.
 
 ## Current phase
 Phase 1: Next.js + Supabase setup, Domains/Projects/Tasks CRUD, Quick Capture, Today view, daily capacity check-in, habit logging with a basic streak counter. Full roadmap in `SCOPE.md` §11.
