@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
+import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
 import HabitRow, {
   FrequencyFields,
   FREQUENCIES,
@@ -137,32 +138,20 @@ export default function HabitsPage() {
   }
 
   async function addLog(habit: Habit, date: string) {
-    const res = await fetch("/api/habit-logs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ habit_id: habit.id, date }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update log");
+    const result = await postHabitLog(habit.id, date);
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-
     await loadAll();
   }
 
   async function removeLog(habit: Habit, date: string) {
-    const res = await fetch(`/api/habit-logs?habit_id=${habit.id}&date=${date}`, {
-      method: "DELETE",
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update log");
+    const result = await deleteHabitLog(habit.id, date);
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-
     await loadAll();
   }
 
