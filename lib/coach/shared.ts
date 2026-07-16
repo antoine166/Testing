@@ -1,5 +1,16 @@
 import type { ContentBlockParam, Tool } from "@anthropic-ai/sdk/resources/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { TRASH_CONFIG, type TrashType } from "@/lib/trash";
+
+// Domain restore stays app-only alongside domain deletion.
+const COACH_RESTORABLE_TRASH_TYPES = [
+  "project",
+  "task",
+  "habit",
+  "routine",
+  "checklist",
+  "knowledge-item",
+] as const satisfies readonly TrashType[];
 
 export const MODEL = "claude-sonnet-5";
 
@@ -391,6 +402,25 @@ export const TOOLS: Tool[] = [
       },
     },
   },
+  {
+    name: "restore_from_trash",
+    description:
+      "Restore a soft-deleted item from Trash — e.g. when Antoine says 'undo that' or 'restore the " +
+      "task I just deleted' (use the same id you passed to the delete tool earlier in this " +
+      "conversation). Works for tasks, projects, habits, routines, checklists, and knowledge items. " +
+      "Restoring a domain, and permanently purging anything, stay app-only.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: {
+          type: "string",
+          enum: ["project", "task", "habit", "routine", "checklist", "knowledge-item"],
+        },
+        id: { type: "string" },
+      },
+      required: ["type", "id"],
+    },
+  },
 ];
 
 const BASE_SYSTEM =
@@ -403,15 +433,18 @@ const BASE_SYSTEM =
   "subprojects), create/update domains, log/track habits, create/update/delete routines and add " +
   "steps to them, create/update/delete/reset checklists and add items to them, save/organize " +
   "knowledge library items and folders, create/update/delete agenda items (things to bring up " +
-  "with a person), and update his higher horizons. Every tool call requires the user's explicit confirmation " +
+  "with a person), update his higher horizons, and restore soft-deleted items from Trash. Every " +
+  "tool call requires the user's explicit confirmation " +
   "before it runs — the app shows him exactly what you're proposing and he approves or declines " +
   "each one. So don't ask for confirmation in your own text, just call the tool when it's clearly " +
   "implied and let the app handle confirmation.\n\n" +
-  "Some finer-grained actions (editing or deleting one routine step, one checklist item, or one " +
-  "saved knowledge item) aren't available here — those go through the app directly or the Claude " +
-  "connector (claude.ai / Claude Desktop), which can list existing items before acting on them. " +
-  "Domain deletion and permanently purging trashed items (bypassing the 30-day recovery window) " +
-  "are also app-only, deliberately kept out of your reach.";
+  "Deleting tasks/projects/habits/routines/checklists/knowledge-items sends them to Trash (30-day " +
+  "recovery), and you can restore them with restore_from_trash. A few actions are deliberately " +
+  "app-only and out of your reach: deleting a domain, deleting a knowledge-library folder, " +
+  "permanently purging trashed items (bypassing the recovery window), and Gmail/account settings. " +
+  "Some finer-grained edits (one routine step, one checklist item, one saved knowledge item) also " +
+  "go through the app or the Claude connector (claude.ai / Claude Desktop), which can list existing " +
+  "items before acting on them.";
 
 const WEEKLY_REVIEW_SYSTEM =
   BASE_SYSTEM +
@@ -1141,6 +1174,26 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return "Updated horizons.";
+  }
+
+  if (name === "restore_from_trash") {
+    const type = typeof input.type === "string" ? input.type : "";
+    const id = typeof input.id === "string" ? input.id : "";
+    if (!id) return "Error: id is required";
+    if (!(COACH_RESTORABLE_TRASH_TYPES as readonly string[]).includes(type)) {
+      return `Error: "${type}" can't be restored here — domain restore and purge are app-only.`;
+    }
+
+    const config = TRASH_CONFIG[type as TrashType];
+    if (config.restoreRpc && config.restoreRpcParam) {
+      const { error } = await supabase.rpc(config.restoreRpc, { [config.restoreRpcParam]: id });
+      if (error) return `Error: ${error.message}`;
+      return "Restored from Trash.";
+    }
+
+    const { error } = await supabase.from(config.table).update({ deleted_at: null }).eq("id", id);
+    if (error) return `Error: ${error.message}`;
+    return "Restored from Trash.";
   }
 
   return `Error: unknown tool ${name}`;
