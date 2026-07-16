@@ -14,6 +14,7 @@ type SidebarProject = {
 };
 
 const SMART_LISTS = [
+  { href: "/checkin", label: "Check-in", icon: "🌡️", iconBg: "#84cc16" },
   { href: "/inbox", label: "Inbox", icon: "📥", iconBg: "#3b82f6" },
   { href: "/", label: "Today", icon: "★", iconBg: "#eab308" },
   { href: "/upcoming", label: "Upcoming", icon: "📅", iconBg: "#ef4444" },
@@ -22,6 +23,8 @@ const SMART_LISTS = [
   { href: "/logbook", label: "Logbook", icon: "✓", iconBg: "#22c55e" },
   { href: "/trash", label: "Trash", icon: "🗑️", iconBg: "#71717a" },
   { href: "/waiting-for", label: "Waiting For", icon: "⏳", iconBg: "#f97316" },
+  { href: "/habits", label: "Habits", icon: "🔁", iconBg: "#ec4899" },
+  { href: "/coach", label: "Coach", icon: "🧭", iconBg: "#06b6d4" },
 ] as const;
 
 const UTILITY_LINKS = [
@@ -29,10 +32,7 @@ const UTILITY_LINKS = [
   { href: "/projects", label: "All Projects", icon: "🗂️", iconBg: "#0891b2" },
   { href: "/tasks", label: "All Tasks", icon: "📋", iconBg: "#6366f1" },
   { href: "/analytics", label: "Analytics", icon: "📈", iconBg: "#f43f5e" },
-  { href: "/checkin", label: "Check-in", icon: "🌡️", iconBg: "#84cc16" },
   { href: "/checklists", label: "Checklists", icon: "☑️", iconBg: "#0ea5e9" },
-  { href: "/coach", label: "Coach", icon: "🧭", iconBg: "#06b6d4" },
-  { href: "/habits", label: "Habits", icon: "🔁", iconBg: "#ec4899" },
   { href: "/horizons", label: "Horizons", icon: "🔭", iconBg: "#7c3aed" },
   { href: "/library", label: "Library", icon: "📖", iconBg: "#a855f7" },
   { href: "/routines", label: "Routines", icon: "🔄", iconBg: "#8b5cf6" },
