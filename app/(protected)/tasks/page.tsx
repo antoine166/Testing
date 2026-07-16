@@ -12,8 +12,34 @@ import TaskRow, {
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 type ProjectWithDomain = TaskProject & { domain_id: string | null };
+
+type RecurrenceType = "weekly" | "monthly" | "interval";
+
+type RecurringTemplate = {
+  id: string;
+  title: string;
+  domain_id: string | null;
+  project_id: string | null;
+  priority: TaskPriority;
+  recurrence_type: RecurrenceType;
+  days_of_week: number[] | null;
+  day_of_month: number | null;
+  interval_days: number | null;
+  active: boolean;
+};
+
+function describeRecurrence(t: RecurringTemplate): string {
+  if (t.recurrence_type === "weekly") {
+    return `Weekly on ${(t.days_of_week ?? []).map((d) => DAY_LABELS[d]).join(", ")}`;
+  }
+  if (t.recurrence_type === "monthly") {
+    return `Monthly on day ${t.day_of_month}`;
+  }
+  return `Every ${t.interval_days} day${t.interval_days === 1 ? "" : "s"}`;
+}
 
 export default function TasksPage() {
   const searchParams = useSearchParams();
@@ -36,6 +62,13 @@ export default function TasksPage() {
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [image, setImage] = useState<File | null>(null);
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("weekly");
+  const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<number[]>([]);
+  const [recurrenceDayOfMonth, setRecurrenceDayOfMonth] = useState(1);
+  const [recurrenceIntervalDays, setRecurrenceIntervalDays] = useState(7);
+  const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>([]);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -80,6 +113,11 @@ export default function TasksPage() {
     }
   }
 
+  async function loadRecurringTemplates() {
+    const res = await fetch("/api/recurring-task-templates");
+    if (res.ok) setRecurringTemplates(await res.json());
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     const opts = { signal: controller.signal };
@@ -106,14 +144,74 @@ export default function TasksPage() {
       })
       .finally(() => setLoading(false));
 
+    fetch("/api/recurring-task-templates", opts)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
+      .then((data: RecurringTemplate[]) => setRecurringTemplates(data))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      });
+
     return () => controller.abort();
   }, []);
 
   useRealtimeRefresh(["tasks", "domains", "projects"], () => loadAll());
+  useRealtimeRefresh(["recurring_task_templates"], () => loadRecurringTemplates());
+
+  function resetCreateForm() {
+    setTitle("");
+    setLink("");
+    setNotes("");
+    setDomainId("");
+    setProjectId("");
+    setPriority("none");
+    setDueDate("");
+    setScheduledDate("");
+    setImage(null);
+    setIsRecurring(false);
+    setRecurrenceType("weekly");
+    setRecurrenceDaysOfWeek([]);
+    setRecurrenceDayOfMonth(1);
+    setRecurrenceIntervalDays(7);
+  }
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!title.trim()) return;
+
+    if (isRecurring) {
+      if (recurrenceType === "weekly" && recurrenceDaysOfWeek.length === 0) {
+        setError("Pick at least one day for a weekly recurring task.");
+        return;
+      }
+
+      const res = await fetch("/api/recurring-task-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          link: link || undefined,
+          notes: notes || undefined,
+          domain_id: domainId || null,
+          project_id: projectId || null,
+          priority,
+          recurrence_type: recurrenceType,
+          days_of_week: recurrenceType === "weekly" ? recurrenceDaysOfWeek : undefined,
+          day_of_month: recurrenceType === "monthly" ? recurrenceDayOfMonth : undefined,
+          interval_days: recurrenceType === "interval" ? recurrenceIntervalDays : undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? "Failed to create recurring task");
+        return;
+      }
+
+      resetCreateForm();
+      await loadRecurringTemplates();
+      await loadAll();
+      return;
+    }
 
     const res = await fetch("/api/tasks", {
       method: "POST",
@@ -144,16 +242,38 @@ export default function TasksPage() {
       await fetch(`/api/tasks/${task.id}/attachments`, { method: "POST", body: formData });
     }
 
-    setTitle("");
-    setLink("");
-    setNotes("");
-    setDomainId("");
-    setProjectId("");
-    setPriority("none");
-    setDueDate("");
-    setScheduledDate("");
-    setImage(null);
+    resetCreateForm();
     await loadAll();
+  }
+
+  async function handleToggleTemplateActive(id: string, active: boolean) {
+    const res = await fetch(`/api/recurring-task-templates/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to update recurring task");
+      return;
+    }
+    await loadRecurringTemplates();
+  }
+
+  async function handleDeleteTemplate(id: string) {
+    if (
+      !confirm(
+        "Delete this recurring task? Already-generated occurrences stay as regular tasks — only future generation stops.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/recurring-task-templates/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to delete recurring task");
+      return;
+    }
+    await loadRecurringTemplates();
   }
 
   async function handleUpdate(id: string, updates: Record<string, unknown>) {
@@ -400,79 +520,83 @@ export default function TasksPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label
-              htmlFor="due_date"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Due date
-            </label>
-            <input
-              id="due_date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => {
-                const value = e.target.value;
-                setDueDate(value);
-                if (value && !scheduledDate) setScheduledDate(value);
-              }}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="scheduled_date"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Scheduled
-            </label>
-            <input
-              id="scheduled_date"
-              type="date"
-              value={scheduledDate}
-              onChange={(e) => {
-                const value = e.target.value;
-                setScheduledDate(value);
-                if (value && !dueDate) setDueDate(value);
-              }}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <label
-            aria-label="Add image"
-            title={image ? image.name : "Add image"}
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="5" width="18" height="14" rx="2" />
-              <circle cx="9" cy="10.5" r="1.5" />
-              <path d="M3 16l5-4 4 3 4-3 5 4" />
-              <path d="M15 6h4M17 4v4" />
-            </svg>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-              className="hidden"
-            />
-          </label>
-          {image && (
-            <button
-              type="button"
-              onClick={() => setImage(null)}
-              title="Remove image"
-              className="flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
-            >
-              {image.name} ✕
-            </button>
+          {!isRecurring && (
+            <>
+              <div>
+                <label
+                  htmlFor="due_date"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Due date
+                </label>
+                <input
+                  id="due_date"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setDueDate(value);
+                    if (value && !scheduledDate) setScheduledDate(value);
+                  }}
+                  className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="scheduled_date"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Scheduled
+                </label>
+                <input
+                  id="scheduled_date"
+                  type="date"
+                  value={scheduledDate}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setScheduledDate(value);
+                    if (value && !dueDate) setDueDate(value);
+                  }}
+                  className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </div>
+              <label
+                aria-label="Add image"
+                title={image ? image.name : "Add image"}
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <circle cx="9" cy="10.5" r="1.5" />
+                  <path d="M3 16l5-4 4 3 4-3 5 4" />
+                  <path d="M15 6h4M17 4v4" />
+                </svg>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                  className="hidden"
+                />
+              </label>
+              {image && (
+                <button
+                  type="button"
+                  onClick={() => setImage(null)}
+                  title="Remove image"
+                  className="flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+                >
+                  {image.name} ✕
+                </button>
+              )}
+            </>
           )}
           <button
             type="submit"
@@ -481,7 +605,137 @@ export default function TasksPage() {
             Add
           </button>
         </div>
+
+        <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+            <input
+              type="checkbox"
+              checked={isRecurring}
+              onChange={(e) => setIsRecurring(e.target.checked)}
+            />
+            Make this recurring
+          </label>
+
+          {isRecurring && (
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap gap-3">
+                <select
+                  value={recurrenceType}
+                  onChange={(e) => setRecurrenceType(e.target.value as RecurrenceType)}
+                  className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="interval">Every N days</option>
+                </select>
+
+                {recurrenceType === "weekly" && (
+                  <div className="flex flex-wrap gap-2">
+                    {DAY_LABELS.map((label, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() =>
+                          setRecurrenceDaysOfWeek((prev) =>
+                            prev.includes(i) ? prev.filter((d) => d !== i) : [...prev, i],
+                          )
+                        }
+                        className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                          recurrenceDaysOfWeek.includes(i)
+                            ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-50 dark:bg-zinc-50 dark:text-zinc-950"
+                            : "border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {recurrenceType === "monthly" && (
+                  <label className="flex items-center gap-2 text-sm text-zinc-500">
+                    Day of month
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={recurrenceDayOfMonth}
+                      onChange={(e) => setRecurrenceDayOfMonth(Number(e.target.value))}
+                      className="w-20 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                  </label>
+                )}
+
+                {recurrenceType === "interval" && (
+                  <label className="flex items-center gap-2 text-sm text-zinc-500">
+                    Every
+                    <input
+                      type="number"
+                      min={1}
+                      value={recurrenceIntervalDays}
+                      onChange={(e) => setRecurrenceIntervalDays(Number(e.target.value))}
+                      className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    days
+                  </label>
+                )}
+              </div>
+              {recurrenceType === "weekly" && recurrenceDaysOfWeek.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Pick at least one day.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </form>
+
+      {recurringTemplates.length > 0 && (
+        <details className="mb-8 group">
+          <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
+            Recurring tasks ({recurringTemplates.length})
+          </summary>
+          <ul className="space-y-2">
+            {recurringTemplates.map((t) => (
+              <li
+                key={t.id}
+                className={`flex items-center justify-between gap-3 rounded-md border px-4 py-3 ${
+                  t.active
+                    ? "border-zinc-200 dark:border-zinc-800"
+                    : "border-zinc-200 opacity-50 dark:border-zinc-800"
+                }`}
+              >
+                <div>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    {t.title}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {describeRecurrence(t)}
+                    {!t.active ? " · paused" : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleTemplateActive(t.id, !t.active)}
+                    className="text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                  >
+                    {t.active ? "Pause" : "Resume"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTemplate(t.id)}
+                    className="text-sm font-medium text-zinc-500 hover:text-red-600 dark:hover:text-red-400"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>

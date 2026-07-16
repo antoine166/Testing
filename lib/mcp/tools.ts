@@ -5,6 +5,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { todayLocal } from "@/lib/date";
 import { computeStreak, isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
 import { TRASH_CONFIG, TRASH_TYPES, type TrashType } from "@/lib/trash";
+import { topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -23,6 +24,7 @@ const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
 const TASK_PRIORITIES = ["none", "low", "medium", "high"] as const;
 const HABIT_FREQUENCIES = ["daily", "specific_days", "times_per_week"] as const;
 const PROJECT_STATUSES = ["active", "someday", "completed", "archived"] as const;
+const RECURRENCE_TYPES = ["weekly", "monthly", "interval"] as const;
 const TIME_OF_DAY = ["morning", "afternoon", "evening", "custom"] as const;
 const KNOWLEDGE_TYPES = ["note", "article", "book", "quote", "resource"] as const;
 
@@ -558,6 +560,216 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       }
 
       return ok(project);
+    },
+  );
+
+  // --- Recurring tasks ---
+
+  server.registerTool(
+    "list_recurring_tasks",
+    {
+      title: "List recurring tasks",
+      description:
+        "List Antoine's recurring task templates. Each generates ordinary tasks ahead of time " +
+        "(bounded by its horizon_count), rather than one being created only after the last is done.",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("recurring_task_templates")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_recurring_task",
+    {
+      title: "Create recurring task",
+      description:
+        "Create a recurring task template (e.g. \"submit the BSL accountability tracker every " +
+        "Monday\"). Generates the first batch of occurrences immediately, up to horizon_count.",
+      inputSchema: {
+        title: z.string().min(1),
+        notes: z.string().optional(),
+        link: z.string().optional(),
+        domain_id: z.string().uuid().optional(),
+        project_id: z.string().uuid().optional(),
+        priority: z.enum(TASK_PRIORITIES).optional(),
+        recurrence_type: z.enum(RECURRENCE_TYPES),
+        days_of_week: z
+          .array(z.number().int().min(0).max(6))
+          .min(1)
+          .optional()
+          .describe("Required for weekly: 0=Sun..6=Sat, one or more days."),
+        day_of_month: z
+          .number()
+          .int()
+          .min(1)
+          .max(31)
+          .optional()
+          .describe("Required for monthly: 1-31, clamped to the last day of shorter months."),
+        interval_days: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("Required for interval: generate every N days, starting today."),
+        horizon_count: z
+          .number()
+          .int()
+          .min(1)
+          .max(52)
+          .optional()
+          .describe("How many future occurrences stay generated at once. Defaults to 12."),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({
+      title,
+      notes,
+      link,
+      domain_id,
+      project_id,
+      priority,
+      recurrence_type,
+      days_of_week,
+      day_of_month,
+      interval_days,
+      horizon_count,
+    }) => {
+      const trimmed = title.trim();
+      if (!trimmed) return fail("Title is required");
+
+      if (recurrence_type === "weekly" && (!days_of_week || days_of_week.length === 0)) {
+        return fail("days_of_week is required for a weekly recurrence");
+      }
+      if (recurrence_type === "monthly" && !day_of_month) {
+        return fail("day_of_month is required for a monthly recurrence");
+      }
+      if (recurrence_type === "interval" && !interval_days) {
+        return fail("interval_days is required for an interval recurrence");
+      }
+
+      const { data: template, error } = await admin
+        .from("recurring_task_templates")
+        .insert({
+          user_id: userId,
+          title: trimmed,
+          notes,
+          link: link && link.trim() ? link.trim() : undefined,
+          domain_id: domain_id ?? null,
+          project_id: project_id ?? null,
+          priority,
+          recurrence_type,
+          days_of_week: recurrence_type === "weekly" ? days_of_week : null,
+          day_of_month: recurrence_type === "monthly" ? day_of_month : null,
+          interval_days: recurrence_type === "interval" ? interval_days : null,
+          horizon_count: horizon_count ?? 12,
+        })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+
+      const { error: topUpError } = await topUpTemplate(admin, template as StoredTemplate);
+      if (topUpError) {
+        return fail(`Template created, but generating the first occurrences failed: ${topUpError}`);
+      }
+
+      return ok(template);
+    },
+  );
+
+  server.registerTool(
+    "update_recurring_task",
+    {
+      title: "Update recurring task",
+      description:
+        "Update a recurring task template's details, pause/resume it (active), or change its " +
+        "horizon. Changing the recurrence pattern only affects occurrences generated from now on — " +
+        "already-generated tasks are untouched.",
+      inputSchema: {
+        id: z.string().uuid(),
+        title: z.string().min(1).optional(),
+        notes: z.string().optional(),
+        link: z.string().nullable().optional(),
+        domain_id: z.string().uuid().nullable().optional(),
+        project_id: z.string().uuid().nullable().optional(),
+        priority: z.enum(TASK_PRIORITIES).optional(),
+        active: z.boolean().optional(),
+        horizon_count: z.number().int().min(1).max(52).optional(),
+        recurrence_type: z.enum(RECURRENCE_TYPES).optional(),
+        days_of_week: z.array(z.number().int().min(0).max(6)).min(1).optional(),
+        day_of_month: z.number().int().min(1).max(31).optional(),
+        interval_days: z.number().int().min(1).optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, title, link, recurrence_type, days_of_week, day_of_month, interval_days, ...rest }) => {
+      const updates: Record<string, unknown> = { ...rest };
+      if (title !== undefined) {
+        const trimmed = title.trim();
+        if (!trimmed) return fail("Title cannot be empty");
+        updates.title = trimmed;
+      }
+      if (link !== undefined) {
+        updates.link = link && link.trim() ? link.trim() : null;
+      }
+
+      if (recurrence_type !== undefined) {
+        updates.recurrence_type = recurrence_type;
+        updates.days_of_week = null;
+        updates.day_of_month = null;
+        updates.interval_days = null;
+
+        if (recurrence_type === "weekly") {
+          if (!days_of_week || days_of_week.length === 0) {
+            return fail("days_of_week is required when switching to weekly");
+          }
+          updates.days_of_week = days_of_week;
+        } else if (recurrence_type === "monthly") {
+          if (!day_of_month) return fail("day_of_month is required when switching to monthly");
+          updates.day_of_month = day_of_month;
+        } else {
+          if (!interval_days) return fail("interval_days is required when switching to interval");
+          updates.interval_days = interval_days;
+        }
+      }
+
+      const { data, error } = await admin
+        .from("recurring_task_templates")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_recurring_task",
+    {
+      title: "Delete recurring task",
+      description:
+        "Permanently delete a recurring task template. Stops future generation; already-generated " +
+        "tasks stay as ordinary tasks. Not in the Trash system, so this can't be undone — pausing " +
+        "(update_recurring_task with active: false) is reversible if that's what's actually wanted.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("recurring_task_templates")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
     },
   );
 
