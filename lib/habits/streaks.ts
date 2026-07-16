@@ -181,6 +181,12 @@ export function computeStreak(
   return computeDailyStreak(habit, loggedDates, today);
 }
 
+/** True when a habit is due today and hasn't been checked off yet today. */
+export function isPendingToday(habit: Habit, logs: HabitLog[], today: string): boolean {
+  if (!isHabitDueToday(habit, today)) return false;
+  return !logs.some((l) => l.logged_date === today);
+}
+
 /**
  * "Don't break it twice" (James Clear): true when missing today would be a
  * second consecutive miss for daily/specific_days habits, or when a

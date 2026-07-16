@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
 import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
+import { isAtRisk, isPendingToday } from "@/lib/habits/streaks";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import HabitRow, {
   FrequencyFields,
@@ -267,7 +268,50 @@ export default function HabitsPage() {
       ) : (
         <div className="space-y-6">
           {(() => {
-            const unfiled = habits.filter((h) => !h.domain_id);
+            const pending = habits
+              .filter(
+                (h) => h.active && isPendingToday(h, logs.filter((l) => l.habit_id === h.id), today),
+              )
+              .sort((a, b) => {
+                const aRisk = isAtRisk(a, logs.filter((l) => l.habit_id === a.id), today);
+                const bRisk = isAtRisk(b, logs.filter((l) => l.habit_id === b.id), today);
+                return aRisk === bRisk ? 0 : aRisk ? -1 : 1;
+              });
+            if (pending.length === 0) return null;
+            return (
+              <details open className="group">
+                <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                    ›
+                  </span>
+                  Not done yet today ({pending.length})
+                </summary>
+                <ul className="space-y-2">
+                  {pending.map((habit) => (
+                    <HabitRow
+                      key={habit.id}
+                      habit={habit}
+                      logs={logs.filter((l) => l.habit_id === habit.id)}
+                      today={today}
+                      domains={domains}
+                      onToggle={toggleDate}
+                      onAddLog={addLog}
+                      onRemoveLog={removeLog}
+                      onUpdate={handleUpdate}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </ul>
+              </details>
+            );
+          })()}
+
+          {(() => {
+            const unfiled = habits.filter(
+              (h) =>
+                !h.domain_id &&
+                !(h.active && isPendingToday(h, logs.filter((l) => l.habit_id === h.id), today)),
+            );
             if (unfiled.length === 0) return null;
             return (
               <details open className="group">
@@ -298,7 +342,11 @@ export default function HabitsPage() {
           })()}
 
           {domains.map((domain) => {
-            const domainHabits = habits.filter((h) => h.domain_id === domain.id);
+            const domainHabits = habits.filter(
+              (h) =>
+                h.domain_id === domain.id &&
+                !(h.active && isPendingToday(h, logs.filter((l) => l.habit_id === h.id), today)),
+            );
             if (domainHabits.length === 0) return null;
             return (
               <details key={domain.id} open className="group">
