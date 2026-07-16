@@ -35,10 +35,15 @@ export function useRealtimeRefresh(tables: string[], onChange: () => void) {
       channel = channel.on(
         "postgres_changes",
         { event: "*", schema: "public", table },
-        scheduleRefresh,
+        (payload) => {
+          console.debug("[realtime] change received", table, payload.eventType);
+          scheduleRefresh();
+        },
       );
     }
-    channel.subscribe();
+    channel.subscribe((status, err) => {
+      console.debug("[realtime] subscribe status", tablesKey, status, err ?? "");
+    });
 
     return () => {
       if (timeout) clearTimeout(timeout);
