@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { todayLocal } from "@/lib/date";
-import { isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
+import { isAtRisk, isHabitDueToday, isPendingToday } from "@/lib/habits/streaks";
 import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
 import LevelPicker from "@/components/level-picker";
 import HabitRow, { type Habit, type HabitLogRow } from "@/components/habit-row";
@@ -315,10 +315,13 @@ export default function TodayDashboard() {
   const dueHabits = habits
     .filter((h) => h.active && isHabitDueToday(h, today))
     .sort((a, b) => {
-      // At-risk habits ("don't break it twice") surface first.
-      const aRisk = isAtRisk(a, logs.filter((l) => l.habit_id === a.id), today);
-      const bRisk = isAtRisk(b, logs.filter((l) => l.habit_id === b.id), today);
-      return aRisk === bRisk ? 0 : aRisk ? -1 : 1;
+      // Not-done-yet-today habits rise above ones already checked off, and
+      // at-risk ones ("don't break it twice") surface first within that.
+      const aLogs = logs.filter((l) => l.habit_id === a.id);
+      const bLogs = logs.filter((l) => l.habit_id === b.id);
+      const rank = (h: Habit, hLogs: HabitLogRow[]) =>
+        !isPendingToday(h, hLogs, today) ? 2 : isAtRisk(h, hLogs, today) ? 0 : 1;
+      return rank(a, aLogs) - rank(b, bLogs);
     });
   const atRiskCount = dueHabits.filter((h) =>
     isAtRisk(h, logs.filter((l) => l.habit_id === h.id), today),
