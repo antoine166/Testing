@@ -79,6 +79,7 @@ const AttachmentStrip = forwardRef<
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useImperativeHandle(ref, () => ({
@@ -108,10 +109,16 @@ const AttachmentStrip = forwardRef<
     if (!file) return;
 
     setUploading(true);
+    setError(null);
     const formData = new FormData();
     formData.append("file", file);
-    await fetch(`/api/tasks/${taskId}/attachments`, { method: "POST", body: formData });
+    const res = await fetch(`/api/tasks/${taskId}/attachments`, { method: "POST", body: formData });
     setUploading(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Failed to upload image");
+      return;
+    }
     await loadAttachments();
   }
 
@@ -196,6 +203,7 @@ const AttachmentStrip = forwardRef<
           className="hidden"
         />
       )}
+      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </>
   );
 });
