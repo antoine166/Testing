@@ -471,7 +471,11 @@ export default function ProjectsPage() {
               id="due_date"
               type="date"
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setDueDate(value);
+                if (value && !scheduledDate) setScheduledDate(value);
+              }}
               className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
           </div>
@@ -486,7 +490,11 @@ export default function ProjectsPage() {
               id="scheduled_date"
               type="date"
               value={scheduledDate}
-              onChange={(e) => setScheduledDate(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setScheduledDate(value);
+                if (value && !dueDate) setDueDate(value);
+              }}
               className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
           </div>
@@ -627,14 +635,22 @@ export default function ProjectsPage() {
                 <input
                   type="date"
                   value={editDueDate}
-                  onChange={(e) => setEditDueDate(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setEditDueDate(value);
+                    if (value && !editScheduledDate) setEditScheduledDate(value);
+                  }}
                   title="Due date"
                   className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
                 <input
                   type="date"
                   value={editScheduledDate}
-                  onChange={(e) => setEditScheduledDate(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setEditScheduledDate(value);
+                    if (value && !editDueDate) setEditDueDate(value);
+                  }}
                   title="Scheduled date"
                   className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />

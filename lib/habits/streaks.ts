@@ -182,17 +182,19 @@ export function computeStreak(
 }
 
 /**
- * True when a habit still needs attention: for daily/specific_days habits,
- * due today and not yet checked off today; for times_per_week habits, the
- * week's target hasn't been hit yet (checking today specifically doesn't
- * matter — once the week's count is met, it's done regardless of day).
+ * True when a habit still needs attention today: not yet checked off today,
+ * AND (for times_per_week habits) the week's target hasn't been hit yet.
+ * Both conditions matter for times_per_week — logging it today clears
+ * today's action item even if the week isn't done, and hitting the week's
+ * target clears it for the rest of the week even on a day it wasn't logged.
  */
 export function isPendingToday(habit: Habit, logs: HabitLog[], today: string): boolean {
   if (!isHabitDueToday(habit, today)) return false;
+  if (logs.some((l) => l.logged_date === today)) return false;
   if (habit.frequency === "times_per_week") {
     return countThisWeek(logs, today) < (habit.target_count ?? 1);
   }
-  return !logs.some((l) => l.logged_date === today);
+  return true;
 }
 
 /**

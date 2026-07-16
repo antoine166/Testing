@@ -100,6 +100,9 @@ export default function TodayDashboard() {
   const [focusLevel, setFocusLevel] = useState<number | null>(null);
   const [savingCheckin, setSavingCheckin] = useState(false);
 
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [addingTask, setAddingTask] = useState(false);
+
   async function loadAll() {
     try {
       const data = await fetchDashboardData(today);
@@ -305,6 +308,23 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
+  async function handleCreateTask(title: string) {
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, scheduled_date: today }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create task");
+      return false;
+    }
+
+    await loadAll();
+    return true;
+  }
+
   if (loading) {
     return <p className="text-sm text-zinc-500">Loading...</p>;
   }
@@ -432,6 +452,32 @@ export default function TodayDashboard() {
         <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
           Today {todayTasks.length > 0 && `(${todayTasks.length})`}
         </h2>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!newTaskTitle.trim() || addingTask) return;
+            setAddingTask(true);
+            const ok = await handleCreateTask(newTaskTitle);
+            setAddingTask(false);
+            if (ok) setNewTaskTitle("");
+          }}
+          className="mb-2 flex gap-2"
+        >
+          <input
+            value={newTaskTitle}
+            onChange={(e) => setNewTaskTitle(e.target.value)}
+            placeholder="Add a task for today"
+            disabled={addingTask}
+            className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <button
+            type="submit"
+            disabled={addingTask || !newTaskTitle.trim()}
+            className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            Add
+          </button>
+        </form>
         {todayTasks.length === 0 ? (
           <p className="text-sm text-zinc-500">Nothing scheduled for today.</p>
         ) : (
