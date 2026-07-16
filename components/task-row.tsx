@@ -351,17 +351,6 @@ export default function TaskRow({
               ))}
             </select>
             <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as TaskPriority)}
               className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
@@ -400,6 +389,17 @@ export default function TaskRow({
                 className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
             </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as TaskStatus)}
+              className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
             <label className="flex items-center gap-1.5 text-xs text-zinc-500">
               <input
                 type="checkbox"
