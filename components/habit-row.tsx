@@ -158,7 +158,7 @@ export default function HabitRow({
         onClick={() => onToggle(habit, date, isLogged)}
         aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
         title={`${isLogged ? "Unlog" : "Log"} ${date}`}
-        className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-medium ${
+        className={`flex h-6 w-6 items-center justify-center rounded text-[10px] font-medium sm:h-5 sm:w-5 ${
           isLogged
             ? "bg-emerald-500 text-white"
             : isFuture
@@ -269,8 +269,8 @@ export default function HabitRow({
         className="h-4 w-4 shrink-0 rounded-full"
         style={{ backgroundColor: displayColor }}
       />
-      <div className="flex-1">
-        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+      <div className="min-w-0 flex-1">
+        <p className="break-words text-sm font-medium text-zinc-900 dark:text-zinc-100">
           {current > 0 && !atRisk && "🔥 "}
           {atRisk && "⚠️ "}
           {habit.name}
@@ -309,7 +309,7 @@ export default function HabitRow({
                     onClick={() => onToggle(habit, today, loggedToday)}
                     aria-label={loggedToday ? "Unlog today" : "Log today"}
                     title={loggedToday ? "Unlog today" : "Log today"}
-                    className={`h-5 w-5 rounded ${
+                    className={`h-6 w-6 rounded sm:h-5 sm:w-5 ${
                       i < weekCount
                         ? "bg-emerald-500"
                         : "border border-zinc-300 hover:border-emerald-400 dark:border-zinc-700"
@@ -327,7 +327,7 @@ export default function HabitRow({
                       onClick={() => onRemoveLog(habit, today)}
                       aria-label="Remove extra credit"
                       title="Extra credit — you exceeded this week's target"
-                      className="h-5 w-5 rounded bg-emerald-500"
+                      className="h-6 w-6 rounded bg-emerald-500 sm:h-5 sm:w-5"
                     />
                   ))}
                 {weekCount >= (habit.target_count ?? 1) && (
@@ -336,7 +336,7 @@ export default function HabitRow({
                     onClick={() => onAddLog(habit, today)}
                     aria-label="Add extra credit for this week"
                     title="Did it again this week? Add extra credit."
-                    className="flex h-5 w-5 items-center justify-center rounded border border-dashed border-zinc-300 text-[10px] text-zinc-400 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-700 dark:hover:text-emerald-400"
+                    className="flex h-6 w-6 items-center justify-center rounded border border-dashed border-zinc-300 text-[10px] text-zinc-400 hover:border-emerald-400 hover:text-emerald-600 sm:h-5 sm:w-5 dark:border-zinc-700 dark:hover:text-emerald-400"
                   >
                     +
                   </button>
@@ -378,7 +378,7 @@ export default function HabitRow({
           onClick={startEdit}
           aria-label="Edit habit"
           title="Edit habit"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 sm:h-7 sm:w-7 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
@@ -388,7 +388,7 @@ export default function HabitRow({
           onClick={() => onDelete(habit.id)}
           aria-label="Delete habit"
           title="Delete habit"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 sm:h-7 sm:w-7 dark:hover:bg-red-950 dark:hover:text-red-400"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 6h18" />

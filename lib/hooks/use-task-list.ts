@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Task, TaskDomain, TaskProject } from "@/components/task-row";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 /** Shared fetch + CRUD wiring for the Things-style smart-list pages (Inbox, Upcoming, Anytime, Someday, Logbook). */
 export function useTaskList() {
@@ -60,6 +61,8 @@ export function useTaskList() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["tasks", "domains", "projects"], () => loadAll());
 
   async function handleUpdate(id: string, updates: Record<string, unknown>) {
     const res = await fetch(`/api/tasks/${id}`, {

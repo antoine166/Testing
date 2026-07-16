@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import ChecklistCard, { type Checklist } from "@/components/checklist-card";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 export default function ChecklistsPage() {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
@@ -39,6 +40,8 @@ export default function ChecklistsPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["checklists", "checklist_items"], () => loadChecklists());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

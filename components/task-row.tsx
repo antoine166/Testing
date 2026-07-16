@@ -144,7 +144,7 @@ const AttachmentStrip = forwardRef<
                   onClick={() => handleDelete(a.id)}
                   aria-label={`Remove ${a.filename}`}
                   title={`Remove ${a.filename}`}
-                  className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950 text-xs text-white group-hover:flex dark:bg-zinc-50 dark:text-zinc-950"
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-950 text-xs text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 dark:bg-zinc-50 dark:text-zinc-950"
                 >
                   ×
                 </button>
@@ -412,7 +412,7 @@ export default function TaskRow({
 
   return (
     <li className="flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         {selectable && (
           <input
             type="checkbox"
@@ -449,9 +449,9 @@ export default function TaskRow({
             </svg>
           )}
         </button>
-        <div>
+        <div className="min-w-0 flex-1">
           <p
-            className={`text-sm font-medium text-zinc-900 dark:text-zinc-100 ${
+            className={`break-words text-sm font-medium text-zinc-900 dark:text-zinc-100 ${
               task.status === "done" ? "line-through opacity-60" : ""
             }`}
           >
@@ -498,7 +498,7 @@ export default function TaskRow({
           onClick={() => attachmentRef.current?.openPicker()}
           aria-label="Add image"
           title="Add image"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 sm:h-7 sm:w-7 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
         >
           <svg
             viewBox="0 0 24 24"
@@ -520,7 +520,7 @@ export default function TaskRow({
           onClick={startEdit}
           aria-label="Edit task"
           title="Edit task"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 sm:h-7 sm:w-7 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
         >
           <svg
             viewBox="0 0 24 24"
@@ -539,7 +539,7 @@ export default function TaskRow({
           onClick={() => onDelete(task.id)}
           aria-label="Delete task"
           title="Delete task"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 sm:h-7 sm:w-7 dark:hover:bg-red-950 dark:hover:text-red-400"
         >
           <svg
             viewBox="0 0 24 24"

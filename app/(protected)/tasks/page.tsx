@@ -9,6 +9,7 @@ import TaskRow, {
   type TaskProject,
   type TaskPriority,
 } from "@/components/task-row";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
@@ -88,6 +89,8 @@ export default function TasksPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["tasks", "domains", "projects"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

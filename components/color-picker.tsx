@@ -20,8 +20,8 @@ export default function ColorPicker({
   onChange: (color: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex gap-1">
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap gap-1.5 sm:gap-1">
         {PRESET_COLORS.map(({ hex, name }) => (
           <button
             key={hex}
@@ -29,7 +29,7 @@ export default function ColorPicker({
             onClick={() => onChange(hex)}
             aria-label={`Pick color ${name}`}
             title={name}
-            className={`h-6 w-6 rounded-full ${
+            className={`h-7 w-7 shrink-0 rounded-full sm:h-6 sm:w-6 ${
               value.toLowerCase() === hex
                 ? "ring-2 ring-zinc-950 ring-offset-1 dark:ring-zinc-50"
                 : ""

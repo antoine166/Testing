@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import SmartListHeader from "@/components/smart-list-header";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type AgendaItem = {
   id: string;
@@ -41,6 +42,8 @@ export default function AgendasPage() {
       .finally(() => setLoading(false));
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["agenda_items"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

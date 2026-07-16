@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
 import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import HabitRow, {
   FrequencyFields,
   FREQUENCIES,
@@ -76,6 +77,8 @@ export default function HabitsPage() {
 
     return () => controller.abort();
   }, []);
+
+  useRealtimeRefresh(["habits", "habit_logs", "domains"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -179,8 +182,8 @@ export default function HabitsPage() {
         onSubmit={handleCreate}
         className="mb-8 space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
       >
-        <div className="flex items-end gap-3">
-          <div className="flex-1">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[10rem] flex-1">
             <label
               htmlFor="name"
               className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"

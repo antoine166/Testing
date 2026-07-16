@@ -14,6 +14,7 @@ import TaskRow, {
   type TaskPriority,
 } from "@/components/task-row";
 import { type Routine } from "@/components/routine-card";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type Checkin = {
   date: string;
@@ -138,6 +139,20 @@ export default function TodayDashboard() {
 
     return () => controller.abort();
   }, [today]);
+
+  useRealtimeRefresh(
+    [
+      "daily_checkins",
+      "habits",
+      "habit_logs",
+      "tasks",
+      "domains",
+      "projects",
+      "routines",
+      "routine_items",
+    ],
+    () => loadAll(),
+  );
 
   useEffect(() => {
     const controller = new AbortController();
