@@ -93,5 +93,30 @@ export function useTaskList() {
     await loadAll();
   }
 
-  return { domains, projects, tasks, loading, error, handleUpdate, toggleDone, handleDelete };
+  async function createTask(input: Record<string, unknown>) {
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create task");
+      return false;
+    }
+    await loadAll();
+    return true;
+  }
+
+  return {
+    domains,
+    projects,
+    tasks,
+    loading,
+    error,
+    handleUpdate,
+    toggleDone,
+    handleDelete,
+    createTask,
+  };
 }

@@ -13,6 +13,7 @@ export default function QuickCapture() {
   const [notes, setNotes] = useState("");
   const [domainId, setDomainId] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [waitingFor, setWaitingFor] = useState(false);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [domainsLoaded, setDomainsLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -83,6 +84,7 @@ export default function QuickCapture() {
         link: link || undefined,
         domain_id: domainId || null,
         due_date: dueDate || undefined,
+        waiting_for: waitingFor || undefined,
       }),
     });
 
@@ -109,6 +111,7 @@ export default function QuickCapture() {
     setShowMore(false);
     setDomainId("");
     setDueDate("");
+    setWaitingFor(false);
     setOpen(false);
   }
 
@@ -175,9 +178,20 @@ export default function QuickCapture() {
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
+                  aria-label="Due date"
+                  title="Due date"
                   className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={waitingFor}
+                  onChange={(e) => setWaitingFor(e.target.checked)}
+                />
+                Waiting for someone else
+              </label>
 
               {showMore ? (
                 <div className="space-y-3">
