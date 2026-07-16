@@ -5,7 +5,10 @@ import { constantTimeEqual } from "@/lib/mcp/oauth";
 // Plain token-secured endpoint for the Chrome extension (chrome-extension/)
 // to call directly — an extension page has no way to share the app's
 // session cookie, so it authenticates with a personal access token
-// instead, same pattern as /api/digest.
+// instead, same pattern as /api/digest. Creates a task rather than a
+// knowledge item, landing in the Inbox (no domain_id/project_id set) like
+// any other unfiled capture, since that's where a clip should start —
+// filing it into the Knowledge Library, a project, etc. happens from there.
 export async function POST(request: Request) {
   const expected = process.env.EXTENSION_ACCESS_TOKEN;
   if (!expected) {
@@ -32,14 +35,12 @@ export async function POST(request: Request) {
   }
 
   const { data, error } = await admin
-    .from("knowledge_items")
+    .from("tasks")
     .insert({
       user_id: owner.id,
       title,
-      content: typeof body.content === "string" ? body.content : undefined,
-      url: typeof body.url === "string" ? body.url : undefined,
-      type: "resource",
-      tags: Array.isArray(body.tags) ? body.tags : null,
+      notes: typeof body.content === "string" ? body.content : undefined,
+      link: typeof body.url === "string" ? body.url : undefined,
     })
     .select()
     .single();

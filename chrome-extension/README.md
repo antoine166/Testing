@@ -1,8 +1,8 @@
 # Life OS Clipper
 
 A minimal Chrome extension: saves the current page's title, URL, and any
-selected text to your Life OS Knowledge Library. No build step — it's
-plain HTML/JS, loaded as an unpacked extension.
+selected text as a task in your Life OS Inbox. No build step — it's plain
+HTML/JS, loaded as an unpacked extension.
 
 ## Setup
 
@@ -26,15 +26,17 @@ plain HTML/JS, loaded as an unpacked extension.
 ## Use
 
 Click the extension icon on any page. It pre-fills the title, URL, and
-whatever text (if any) you had selected on the page. Edit anything, add
-comma-separated tags if you want, and click Save — it lands in your
-Knowledge Library as a `resource` item.
+whatever text (if any) you had selected on the page. Edit anything and
+click Save — it lands in your Inbox as a task, same as any other unfiled
+capture, ready to be processed from there (filed into a project, moved to
+the Knowledge Library, etc.).
 
 ## Notes
 
-- This is the minimal version: no folder picker, no screenshot capture, no
-  full-page/readability extraction — just title + URL + selection + tags.
-  See if it's actually useful before investing in more.
+- This is the minimal version: no folder/project picker, no tags, no
+  screenshot capture, no full-page/readability extraction — just title +
+  URL + selection, saved to the Inbox. See if it's actually useful before
+  investing in more.
 - Not published to the Chrome Web Store — it's a personal, unpacked
   extension. Reloading it after any file changes: `chrome://extensions` →
   the refresh icon on the Life OS Clipper card.

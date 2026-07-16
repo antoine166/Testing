@@ -6,7 +6,6 @@ const statusEl = document.getElementById("status");
 const titleInput = document.getElementById("title");
 const urlInput = document.getElementById("url");
 const contentInput = document.getElementById("content");
-const tagsInput = document.getElementById("tags");
 const saveButton = document.getElementById("save");
 
 document.getElementById("open-options").addEventListener("click", () => {
@@ -64,11 +63,6 @@ form.addEventListener("submit", async (e) => {
   const { apiBase, accessToken } = await chrome.storage.sync.get(["apiBase", "accessToken"]);
   const base = apiBase || DEFAULT_API_BASE;
 
-  const tags = tagsInput.value
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
-
   try {
     const res = await fetch(`${base}/api/clip`, {
       method: "POST",
@@ -80,7 +74,6 @@ form.addEventListener("submit", async (e) => {
         title: titleInput.value,
         url: urlInput.value,
         content: contentInput.value,
-        tags,
       }),
     });
 
@@ -91,7 +84,7 @@ form.addEventListener("submit", async (e) => {
       return;
     }
 
-    setStatus("Saved to your Knowledge Library.", "success");
+    setStatus("Saved to your Inbox.", "success");
     setTimeout(() => window.close(), 900);
   } catch {
     setStatus("Couldn't reach Life OS — check your connection and settings.", "error");
