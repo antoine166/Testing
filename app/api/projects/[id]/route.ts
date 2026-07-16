@@ -56,8 +56,17 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if (typeof body.status === "string") {
     updates.status = body.status;
   }
+  if (typeof body.priority === "string") {
+    updates.priority = body.priority;
+  }
   if ("due_date" in body) {
     updates.due_date = typeof body.due_date === "string" ? body.due_date : null;
+  }
+  if ("scheduled_date" in body) {
+    updates.scheduled_date = typeof body.scheduled_date === "string" ? body.scheduled_date : null;
+  }
+  if ("link" in body) {
+    updates.link = typeof body.link === "string" && body.link.trim() ? body.link.trim() : null;
   }
 
   const { data, error } = await supabase

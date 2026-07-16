@@ -137,7 +137,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     async ({ domain_id }) => {
       let query = admin
         .from("projects")
-        .select("id, name, description, domain_id, parent_project_id, status, due_date")
+        .select(
+          "id, name, description, domain_id, parent_project_id, status, priority, due_date, scheduled_date, link",
+        )
         .eq("user_id", userId)
         .is("deleted_at", null);
       if (domain_id) query = query.eq("domain_id", domain_id);
@@ -165,11 +167,24 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .optional()
           .describe("UUID of a top-level project to nest this new project under, if any."),
         status: z.enum(PROJECT_STATUSES).optional(),
+        priority: z.enum(TASK_PRIORITIES).optional(),
         due_date: z.string().optional().describe("YYYY-MM-DD"),
+        scheduled_date: z.string().optional().describe("YYYY-MM-DD"),
+        link: z.string().optional().describe("A related URL, e.g. a shared doc or spec."),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
-    async ({ name, description, domain_id, parent_project_id, status, due_date }) => {
+    async ({
+      name,
+      description,
+      domain_id,
+      parent_project_id,
+      status,
+      priority,
+      due_date,
+      scheduled_date,
+      link,
+    }) => {
       const trimmed = name.trim();
       if (!trimmed) return fail("Name is required");
 
@@ -182,7 +197,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           domain_id: domain_id ?? null,
           parent_project_id: parent_project_id ?? null,
           status,
+          priority,
           due_date,
+          scheduled_date,
+          link: link && link.trim() ? link.trim() : undefined,
         })
         .select()
         .single();
@@ -207,16 +225,22 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         domain_id: z.string().uuid().nullable().optional(),
         parent_project_id: z.string().uuid().nullable().optional(),
         status: z.enum(PROJECT_STATUSES).optional(),
+        priority: z.enum(TASK_PRIORITIES).optional(),
         due_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
+        scheduled_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
+        link: z.string().nullable().optional().describe("Related URL, or null to clear."),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ id, name, ...rest }) => {
+    async ({ id, name, link, ...rest }) => {
       const updates: Record<string, unknown> = { ...rest };
       if (name !== undefined) {
         const trimmed = name.trim();
         if (!trimmed) return fail("Name cannot be empty");
         updates.name = trimmed;
+      }
+      if (link !== undefined) {
+        updates.link = link && link.trim() ? link.trim() : null;
       }
 
       const { data, error } = await admin
