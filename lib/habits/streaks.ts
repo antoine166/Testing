@@ -181,9 +181,17 @@ export function computeStreak(
   return computeDailyStreak(habit, loggedDates, today);
 }
 
-/** True when a habit is due today and hasn't been checked off yet today. */
+/**
+ * True when a habit still needs attention: for daily/specific_days habits,
+ * due today and not yet checked off today; for times_per_week habits, the
+ * week's target hasn't been hit yet (checking today specifically doesn't
+ * matter — once the week's count is met, it's done regardless of day).
+ */
 export function isPendingToday(habit: Habit, logs: HabitLog[], today: string): boolean {
   if (!isHabitDueToday(habit, today)) return false;
+  if (habit.frequency === "times_per_week") {
+    return countThisWeek(logs, today) < (habit.target_count ?? 1);
+  }
   return !logs.some((l) => l.logged_date === today);
 }
 
