@@ -510,9 +510,14 @@ export default function TasksPage() {
                         )}
                         <Link
                           href={`/tasks?domain=${domain.id}`}
-                          className="ml-auto text-xs font-medium text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50"
+                          aria-label="View all tasks"
+                          title="View all tasks"
+                          className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
                         >
-                          View all
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 6h11M9 12h11M9 18h11" />
+                            <path d="M4 6h.01M4 12h.01M4 18h.01" />
+                          </svg>
                         </Link>
                       </div>
 

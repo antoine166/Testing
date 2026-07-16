@@ -272,6 +272,7 @@ export default function SidebarNav({
         <button
           onClick={() => setMobileOpen((o) => !o)}
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          title={mobileOpen ? "Close menu" : "Open menu"}
           className="flex h-9 w-9 items-center justify-center rounded-md border border-zinc-300 text-lg text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
         >
           {mobileOpen ? "✕" : "☰"}

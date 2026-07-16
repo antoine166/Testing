@@ -247,6 +247,7 @@ export default function LibraryPage() {
               <button
                 onClick={() => handleDeleteFolder(f.id)}
                 aria-label="Delete folder"
+                title="Delete folder"
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
               >
                 <svg
