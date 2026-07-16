@@ -215,6 +215,7 @@ export default function TaskRow({
   onToggleDone,
   onUpdate,
   onDelete,
+  onConvertToProject,
   selectable = false,
   selected = false,
   onSelectChange,
@@ -225,6 +226,7 @@ export default function TaskRow({
   onToggleDone: (task: Task) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
+  onConvertToProject?: (id: string) => void;
   /** Shows a selection checkbox for bulk actions (e.g. filing multiple Inbox tasks at once). */
   selectable?: boolean;
   selected?: boolean;
@@ -423,6 +425,18 @@ export default function TaskRow({
             />
           </div>
           <AttachmentStrip taskId={task.id} />
+          {onConvertToProject && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false);
+                onConvertToProject(task.id);
+              }}
+              className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            >
+              Convert to project →
+            </button>
+          )}
         </div>
       </li>
     );

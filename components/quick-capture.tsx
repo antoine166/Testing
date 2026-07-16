@@ -9,6 +9,7 @@ type Domain = {
 
 export default function QuickCapture() {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"task" | "project">("task");
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [domainId, setDomainId] = useState("");
@@ -75,17 +76,27 @@ export default function QuickCapture() {
     setSubmitting(true);
     setError(null);
 
-    const res = await fetch("/api/tasks", {
+    const res = await fetch(mode === "project" ? "/api/projects" : "/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        notes: notes || undefined,
-        link: link || undefined,
-        domain_id: domainId || null,
-        due_date: dueDate || undefined,
-        waiting_for: waitingFor || undefined,
-      }),
+      body: JSON.stringify(
+        mode === "project"
+          ? {
+              name: title,
+              description: notes || undefined,
+              link: link || undefined,
+              domain_id: domainId || null,
+              due_date: dueDate || undefined,
+            }
+          : {
+              title,
+              notes: notes || undefined,
+              link: link || undefined,
+              domain_id: domainId || null,
+              due_date: dueDate || undefined,
+              waiting_for: waitingFor || undefined,
+            },
+      ),
     });
 
     if (!res.ok) {
@@ -95,12 +106,12 @@ export default function QuickCapture() {
       return;
     }
 
-    const task = await res.json();
+    const created = await res.json();
 
-    if (image) {
+    if (mode === "task" && image) {
       const formData = new FormData();
       formData.append("file", image);
-      await fetch(`/api/tasks/${task.id}/attachments`, { method: "POST", body: formData });
+      await fetch(`/api/tasks/${created.id}/attachments`, { method: "POST", body: formData });
     }
 
     setSubmitting(false);
@@ -112,6 +123,7 @@ export default function QuickCapture() {
     setDomainId("");
     setDueDate("");
     setWaitingFor(false);
+    setMode("task");
     setOpen(false);
   }
 
@@ -135,9 +147,35 @@ export default function QuickCapture() {
             className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-4 text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-              Quick capture
-            </h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+                Quick capture
+              </h2>
+              <div className="inline-flex rounded-md border border-zinc-300 p-0.5 text-xs dark:border-zinc-700">
+                <button
+                  type="button"
+                  onClick={() => setMode("task")}
+                  className={`rounded px-2 py-1 font-medium ${
+                    mode === "task"
+                      ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
+                      : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                  }`}
+                >
+                  Task
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("project")}
+                  className={`rounded px-2 py-1 font-medium ${
+                    mode === "project"
+                      ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
+                      : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                  }`}
+                >
+                  Project
+                </button>
+              </div>
+            </div>
 
             {error && (
               <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
@@ -150,7 +188,7 @@ export default function QuickCapture() {
                 ref={titleRef}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="What's on your mind?"
+                placeholder={mode === "project" ? "Project name" : "What's on your mind?"}
                 required
                 className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
@@ -167,7 +205,7 @@ export default function QuickCapture() {
                   onChange={(e) => setDomainId(e.target.value)}
                   className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 >
-                  <option value="">No domain (Inbox)</option>
+                  <option value="">{mode === "project" ? "No domain" : "No domain (Inbox)"}</option>
                   {domains.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
@@ -184,14 +222,16 @@ export default function QuickCapture() {
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={waitingFor}
-                  onChange={(e) => setWaitingFor(e.target.checked)}
-                />
-                Waiting for someone else
-              </label>
+              {mode === "task" && (
+                <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={waitingFor}
+                    onChange={(e) => setWaitingFor(e.target.checked)}
+                  />
+                  Waiting for someone else
+                </label>
+              )}
 
               {showMore ? (
                 <div className="space-y-3">
@@ -202,17 +242,19 @@ export default function QuickCapture() {
                     placeholder="Link (optional)"
                     className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
-                  <label className="flex items-center gap-2 text-sm text-zinc-500">
-                    <span className="flex h-9 cursor-pointer items-center rounded-md border border-dashed border-zinc-300 px-3 hover:border-zinc-400 dark:border-zinc-700">
-                      {image ? image.name : "+ Add image"}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-                      className="hidden"
-                    />
-                  </label>
+                  {mode === "task" && (
+                    <label className="flex items-center gap-2 text-sm text-zinc-500">
+                      <span className="flex h-9 cursor-pointer items-center rounded-md border border-dashed border-zinc-300 px-3 hover:border-zinc-400 dark:border-zinc-700">
+                        {image ? image.name : "+ Add image"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
                 </div>
               ) : (
                 <button
@@ -220,7 +262,7 @@ export default function QuickCapture() {
                   onClick={() => setShowMore(true)}
                   className="text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                 >
-                  + Add link or image
+                  {mode === "task" ? "+ Add link or image" : "+ Add link"}
                 </button>
               )}
 

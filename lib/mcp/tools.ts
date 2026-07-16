@@ -510,6 +510,57 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     },
   );
 
+  server.registerTool(
+    "convert_task_to_project",
+    {
+      title: "Convert task to project",
+      description:
+        "Turn a task into a project when it turns out to need multiple steps, not one action. " +
+        "Creates a new project carrying over the task's title, notes, domain, priority, dates, and " +
+        "link, then moves the original task to Trash (recoverable for 30 days).",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ id }) => {
+      const { data: task, error: taskError } = await admin
+        .from("tasks")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .single();
+      if (taskError || !task) return fail("Task not found");
+
+      const { data: project, error: projectError } = await admin
+        .from("projects")
+        .insert({
+          user_id: userId,
+          name: task.title,
+          description: task.notes,
+          domain_id: task.domain_id,
+          priority: task.priority,
+          due_date: task.due_date,
+          scheduled_date: task.scheduled_date,
+          link: task.link,
+        })
+        .select()
+        .single();
+      if (projectError) return fail(projectError.message);
+
+      const { error: trashError } = await admin
+        .from("tasks")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (trashError) {
+        return fail(
+          `Project created but couldn't trash the original task: ${trashError.message}`,
+        );
+      }
+
+      return ok(project);
+    },
+  );
+
   // --- Habits ---
 
   server.registerTool(
