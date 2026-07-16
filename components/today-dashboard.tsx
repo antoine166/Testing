@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { todayLocal } from "@/lib/date";
 import { isAtRisk, isHabitDueToday, isPendingToday } from "@/lib/habits/streaks";
@@ -37,6 +37,8 @@ const PRIORITY_RANK: Record<TaskPriority, number> = {
   low: 2,
   none: 3,
 };
+
+const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 function currentTimeOfDay(): "morning" | "afternoon" | "evening" {
   const hour = new Date().getHours();
@@ -100,9 +102,17 @@ export default function TodayDashboard() {
   const [focusLevel, setFocusLevel] = useState<number | null>(null);
   const [savingCheckin, setSavingCheckin] = useState(false);
 
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [addingTask, setAddingTask] = useState(false);
   const [captureMode, setCaptureMode] = useState<"task" | "project">("task");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskLink, setNewTaskLink] = useState("");
+  const [newTaskNotes, setNewTaskNotes] = useState("");
+  const [newTaskDomainId, setNewTaskDomainId] = useState("");
+  const [newTaskProjectId, setNewTaskProjectId] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("none");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskScheduledDate, setNewTaskScheduledDate] = useState(today);
+  const [newTaskImage, setNewTaskImage] = useState<File | null>(null);
+  const [addingTask, setAddingTask] = useState(false);
 
   async function loadAll() {
     try {
@@ -325,38 +335,81 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
-  async function handleCreateTask(title: string) {
+  function resetCreateForm() {
+    setNewTaskTitle("");
+    setNewTaskLink("");
+    setNewTaskNotes("");
+    setNewTaskDomainId("");
+    setNewTaskProjectId("");
+    setNewTaskPriority("none");
+    setNewTaskDueDate("");
+    setNewTaskScheduledDate(today);
+    setNewTaskImage(null);
+  }
+
+  async function handleCreateSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!newTaskTitle.trim() || addingTask) return;
+    setAddingTask(true);
+
+    if (captureMode === "project") {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTaskTitle,
+          description: newTaskNotes || undefined,
+          link: newTaskLink || undefined,
+          domain_id: newTaskDomainId || null,
+          priority: newTaskPriority,
+          due_date: newTaskDueDate || undefined,
+          scheduled_date: newTaskScheduledDate || undefined,
+        }),
+      });
+      setAddingTask(false);
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? "Failed to create project");
+        return;
+      }
+      resetCreateForm();
+      await loadAll();
+      return;
+    }
+
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, scheduled_date: today }),
+      body: JSON.stringify({
+        title: newTaskTitle,
+        link: newTaskLink || undefined,
+        notes: newTaskNotes || undefined,
+        domain_id: newTaskDomainId || null,
+        project_id: newTaskProjectId || null,
+        priority: newTaskPriority,
+        due_date: newTaskDueDate || undefined,
+        scheduled_date: newTaskScheduledDate || undefined,
+      }),
     });
 
     if (!res.ok) {
+      setAddingTask(false);
       const body = await res.json();
       setError(body.error ?? "Failed to create task");
-      return false;
+      return;
     }
 
-    await loadAll();
-    return true;
-  }
+    const created = await res.json();
 
-  async function handleCreateProject(name: string) {
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, scheduled_date: today }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to create project");
-      return false;
+    if (newTaskImage) {
+      const formData = new FormData();
+      formData.append("file", newTaskImage);
+      await fetch(`/api/tasks/${created.id}/attachments`, { method: "POST", body: formData });
     }
 
+    setAddingTask(false);
+    resetCreateForm();
     await loadAll();
-    return true;
   }
 
   if (loading) {
@@ -487,18 +540,8 @@ export default function TodayDashboard() {
           Today {todayTasks.length > 0 && `(${todayTasks.length})`}
         </h2>
         <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!newTaskTitle.trim() || addingTask) return;
-            setAddingTask(true);
-            const ok =
-              captureMode === "project"
-                ? await handleCreateProject(newTaskTitle)
-                : await handleCreateTask(newTaskTitle);
-            setAddingTask(false);
-            if (ok) setNewTaskTitle("");
-          }}
-          className="mb-2 space-y-2"
+          onSubmit={handleCreateSubmit}
+          className="mb-4 space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
         >
           <div className="inline-flex rounded-md border border-zinc-300 p-0.5 text-xs dark:border-zinc-700">
             <button
@@ -524,14 +567,194 @@ export default function TodayDashboard() {
               Project
             </button>
           </div>
-          <div className="flex gap-2">
+          <div>
+            <label
+              htmlFor="today-title"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              {captureMode === "task" ? "New task" : "New project"}
+            </label>
             <input
+              id="today-title"
               value={newTaskTitle}
               onChange={(e) => setNewTaskTitle(e.target.value)}
               placeholder={captureMode === "task" ? "Add a task for today" : "New project name"}
               disabled={addingTask}
-              className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+              required
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
             />
+          </div>
+          <div>
+            <label
+              htmlFor="today-link"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Link (optional)
+            </label>
+            <input
+              id="today-link"
+              type="url"
+              value={newTaskLink}
+              onChange={(e) => setNewTaskLink(e.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="today-notes"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Notes (optional)
+            </label>
+            <textarea
+              id="today-notes"
+              value={newTaskNotes}
+              onChange={(e) => setNewTaskNotes(e.target.value)}
+              rows={2}
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label
+                htmlFor="today-domain"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Domain
+              </label>
+              <select
+                id="today-domain"
+                value={newTaskDomainId}
+                onChange={(e) => setNewTaskDomainId(e.target.value)}
+                className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                <option value="">Inbox</option>
+                {domains.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {captureMode === "task" && (
+              <div>
+                <label
+                  htmlFor="today-project"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Project
+                </label>
+                <select
+                  id="today-project"
+                  value={newTaskProjectId}
+                  onChange={(e) => setNewTaskProjectId(e.target.value)}
+                  className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="">No project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label
+                htmlFor="today-priority"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Priority
+              </label>
+              <select
+                id="today-priority"
+                value={newTaskPriority}
+                onChange={(e) => setNewTaskPriority(e.target.value as TaskPriority)}
+                className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="today-due"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Due date
+              </label>
+              <input
+                id="today-due"
+                type="date"
+                value={newTaskDueDate}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setNewTaskDueDate(value);
+                  if (value && !newTaskScheduledDate) setNewTaskScheduledDate(value);
+                }}
+                className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="today-scheduled"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Scheduled
+              </label>
+              <input
+                id="today-scheduled"
+                type="date"
+                value={newTaskScheduledDate}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setNewTaskScheduledDate(value);
+                  if (value && !newTaskDueDate) setNewTaskDueDate(value);
+                }}
+                className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            </div>
+            {captureMode === "task" && (
+              <label
+                aria-label="Add image"
+                title={newTaskImage ? newTaskImage.name : "Add image"}
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <circle cx="9" cy="10.5" r="1.5" />
+                  <path d="M3 16l5-4 4 3 4-3 5 4" />
+                  <path d="M15 6h4M17 4v4" />
+                </svg>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setNewTaskImage(e.target.files?.[0] ?? null)}
+                  className="hidden"
+                />
+              </label>
+            )}
+            {newTaskImage && (
+              <button
+                type="button"
+                onClick={() => setNewTaskImage(null)}
+                title="Remove image"
+                className="flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+              >
+                {newTaskImage.name} ✕
+              </button>
+            )}
             <button
               type="submit"
               disabled={addingTask || !newTaskTitle.trim()}

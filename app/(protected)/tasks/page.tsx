@@ -42,6 +42,23 @@ export default function TasksPage() {
   const [bulkDomainId, setBulkDomainId] = useState("");
   const [bulkFiling, setBulkFiling] = useState(false);
 
+  // Re-sync the create form's domain/project whenever the URL filter
+  // changes — e.g. clicking from one domain's task view to another reuses
+  // this same component instance, so the useState initializers above only
+  // run once and would otherwise leave the form pointed at the old filter.
+  // Adjusting state during render (not in an effect) is React's documented
+  // pattern for this: https://react.dev/learn/you-might-not-need-an-effect
+  const [prevDomainFilter, setPrevDomainFilter] = useState(domainFilter);
+  if (domainFilter !== prevDomainFilter) {
+    setPrevDomainFilter(domainFilter);
+    setDomainId(domainFilter ?? "");
+  }
+  const [prevProjectFilter, setPrevProjectFilter] = useState(projectFilter);
+  if (projectFilter !== prevProjectFilter) {
+    setPrevProjectFilter(projectFilter);
+    setProjectId(projectFilter ?? "");
+  }
+
   async function loadAll() {
     try {
       const [domainsRes, projectsRes, tasksRes] = await Promise.all([
@@ -334,7 +351,7 @@ export default function TasksPage() {
               onChange={(e) => setDomainId(e.target.value)}
               className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             >
-              <option value="">No domain (stays in Inbox)</option>
+              <option value="">Inbox</option>
               {domains.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
