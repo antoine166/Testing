@@ -125,11 +125,11 @@ export default function QuickCapture() {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8 sm:pt-24"
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="mb-4 text-lg font-semibold text-zinc-950 dark:text-zinc-50">

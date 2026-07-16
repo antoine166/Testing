@@ -179,8 +179,8 @@ export default function HabitsPage() {
         onSubmit={handleCreate}
         className="mb-8 space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
       >
-        <div className="flex items-end gap-3">
-          <div className="flex-1">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[10rem] flex-1">
             <label
               htmlFor="name"
               className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"

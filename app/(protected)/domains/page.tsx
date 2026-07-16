@@ -228,8 +228,8 @@ export default function DomainsPage() {
         </p>
       )}
 
-      <form onSubmit={handleCreate} className="mb-8 flex items-end gap-3">
-        <div className="flex-1">
+      <form onSubmit={handleCreate} className="mb-8 flex flex-wrap items-end gap-3">
+        <div className="min-w-[10rem] flex-1">
           <label
             htmlFor="name"
             className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
@@ -283,7 +283,7 @@ export default function DomainsPage() {
                 editingId === domain.id ? "" : "cursor-grab active:cursor-grabbing"
               } ${draggedId === domain.id ? "opacity-40" : ""}`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {editingId !== domain.id && (
                   <span className="select-none text-zinc-300 dark:text-zinc-600" aria-hidden>
                     ⠿
@@ -295,7 +295,7 @@ export default function DomainsPage() {
                     <input
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      className="flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      className="min-w-[10rem] flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                     />
                     <button
                       onClick={() => handleUpdate(domain.id)}
