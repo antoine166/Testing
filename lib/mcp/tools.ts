@@ -292,15 +292,40 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       inputSchema: {
         title: z.string().min(1),
         notes: z.string().optional(),
+        link: z.string().optional().describe("A single related URL, shown between the title and notes."),
+        context: z
+          .string()
+          .optional()
+          .describe("GTD context tag like \"calls\", \"errands\", \"computer\" — free text, no @ prefix."),
         domain_id: z.string().uuid().optional(),
         project_id: z.string().uuid().optional(),
         priority: z.enum(TASK_PRIORITIES).optional(),
         due_date: z.string().optional().describe("YYYY-MM-DD"),
         scheduled_date: z.string().optional().describe("YYYY-MM-DD"),
+        someday: z
+          .boolean()
+          .optional()
+          .describe("Things-style Someday/Maybe: deliberately deferred rather than actioned now."),
+        waiting_for: z
+          .boolean()
+          .optional()
+          .describe("GTD Waiting For: delegated/blocked on someone else. Starts the days-waiting clock."),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
-    async ({ title, notes, domain_id, project_id, priority, due_date, scheduled_date }) => {
+    async ({
+      title,
+      notes,
+      link,
+      context,
+      domain_id,
+      project_id,
+      priority,
+      due_date,
+      scheduled_date,
+      someday,
+      waiting_for,
+    }) => {
       const trimmed = title.trim();
       if (!trimmed) return fail("Title is required");
 
@@ -310,11 +335,16 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           user_id: userId,
           title: trimmed,
           notes,
+          link: link && link.trim() ? link.trim() : undefined,
+          context: context && context.trim() ? context.trim() : undefined,
           domain_id: domain_id ?? null,
           project_id: project_id ?? null,
           priority,
           due_date,
           scheduled_date,
+          someday,
+          waiting_for,
+          waiting_since: waiting_for === true ? todayLocal() : undefined,
         })
         .select()
         .single();
@@ -332,27 +362,63 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         id: z.string().uuid(),
         title: z.string().min(1).optional(),
         notes: z.string().optional(),
+        link: z.string().nullable().optional().describe("Related URL, or null to clear."),
+        context: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("GTD context tag (free text, no @ prefix), or null to clear."),
         domain_id: z.string().uuid().nullable().optional(),
         project_id: z.string().uuid().nullable().optional(),
         status: z.enum(TASK_STATUSES).optional(),
         priority: z.enum(TASK_PRIORITIES).optional(),
         due_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
         scheduled_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
+        someday: z.boolean().optional().describe("Things-style Someday/Maybe flag."),
+        waiting_for: z
+          .boolean()
+          .optional()
+          .describe(
+            "GTD Waiting For. Turning it on starts the days-waiting clock; turning it off clears it. " +
+              "Leaving an already-waiting task waiting doesn't reset the clock.",
+          ),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ id, title, ...rest }) => {
+    async ({ id, title, link, context, waiting_for, ...rest }) => {
       const updates: Record<string, unknown> = { ...rest };
       if (title !== undefined) {
         const trimmed = title.trim();
         if (!trimmed) return fail("Title cannot be empty");
         updates.title = trimmed;
       }
+      if (link !== undefined) {
+        updates.link = link && link.trim() ? link.trim() : null;
+      }
+      if (context !== undefined) {
+        updates.context = context && context.trim() ? context.trim() : null;
+      }
 
       if (rest.status !== undefined) {
         const { data: existing } = await admin.from("tasks").select("status").eq("id", id).maybeSingle();
         if (existing?.status !== rest.status) {
           updates.completed_at = rest.status === "done" ? new Date().toISOString() : null;
+        }
+      }
+
+      if (waiting_for !== undefined) {
+        updates.waiting_for = waiting_for;
+        if (waiting_for) {
+          // Only start the clock on the false→true transition, matching the
+          // app: re-asserting an already-waiting task shouldn't reset it.
+          const { data: existing } = await admin
+            .from("tasks")
+            .select("waiting_for")
+            .eq("id", id)
+            .maybeSingle();
+          if (!existing?.waiting_for) updates.waiting_since = todayLocal();
+        } else {
+          updates.waiting_since = null;
         }
       }
 
@@ -1282,6 +1348,183 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .update(updates)
         .eq("id", id)
         .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  // --- Agendas (GTD "bring up with a person next time") ---
+
+  server.registerTool(
+    "list_agenda_items",
+    {
+      title: "List agenda items",
+      description:
+        "List Antoine's GTD agenda items — things to bring up with a specific person next time he " +
+        "talks to them. Each has a person_name, a note, and a done flag.",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("agenda_items")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_agenda_item",
+    {
+      title: "Create agenda item",
+      description:
+        "Add something to bring up with a specific person next time Antoine talks to them " +
+        "(e.g. \"ask Sarah about the Q3 budget\").",
+      inputSchema: {
+        person_name: z.string().min(1).describe("Who to bring this up with — free text, not a contact record."),
+        note: z.string().min(1).describe("What to bring up."),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ person_name, note }) => {
+      const trimmedName = person_name.trim();
+      const trimmedNote = note.trim();
+      if (!trimmedName || !trimmedNote) return fail("person_name and note are required");
+
+      const { data, error } = await admin
+        .from("agenda_items")
+        .insert({ user_id: userId, person_name: trimmedName, note: trimmedNote })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_agenda_item",
+    {
+      title: "Update agenda item",
+      description:
+        "Update an agenda item's person, note, or done state (e.g. mark it done once it's been discussed).",
+      inputSchema: {
+        id: z.string().uuid(),
+        person_name: z.string().min(1).optional(),
+        note: z.string().min(1).optional(),
+        done: z.boolean().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, person_name, note, done }) => {
+      const updates: Record<string, unknown> = {};
+      if (person_name !== undefined) {
+        const trimmed = person_name.trim();
+        if (!trimmed) return fail("person_name cannot be empty");
+        updates.person_name = trimmed;
+      }
+      if (note !== undefined) {
+        const trimmed = note.trim();
+        if (!trimmed) return fail("note cannot be empty");
+        updates.note = trimmed;
+      }
+      if (done !== undefined) updates.done = done;
+
+      const { data, error } = await admin
+        .from("agenda_items")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_agenda_item",
+    {
+      title: "Delete agenda item",
+      description:
+        "Permanently delete an agenda item. Unlike tasks/projects these aren't in the Trash system, " +
+        "so this can't be undone.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("agenda_items")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  // --- Horizons (GTD levels 3-5: Goals, Vision, Purpose) ---
+
+  server.registerTool(
+    "get_horizons",
+    {
+      title: "Get horizons",
+      description:
+        "Antoine's GTD higher horizons — goals & objectives (1-2 yr), vision (3-5 yr), and purpose & " +
+        "principles. Useful context for coaching and weekly/quarterly reviews. Returns empty strings if unset.",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("horizons")
+        .select("goals, vision, purpose, updated_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) return fail(error.message);
+      return ok(data ?? { goals: "", vision: "", purpose: "" });
+    },
+  );
+
+  server.registerTool(
+    "update_horizons",
+    {
+      title: "Update horizons",
+      description:
+        "Update Antoine's goals, vision, and/or purpose. Only the fields you pass are changed — omitted " +
+        "fields keep their current value, so updating just the vision won't wipe the goals.",
+      inputSchema: {
+        goals: z.string().optional().describe("Goals & objectives, roughly a 1-2 year horizon."),
+        vision: z.string().optional().describe("Vision, roughly a 3-5 year horizon."),
+        purpose: z.string().optional().describe("Purpose & principles — the highest, why-it-all-matters level."),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ goals, vision, purpose }) => {
+      if (goals === undefined && vision === undefined && purpose === undefined) {
+        return fail("Pass at least one of goals, vision, or purpose to update.");
+      }
+
+      // Merge onto the existing row so a partial update doesn't blank the
+      // other fields (the horizons table is a single row per user).
+      const { data: existing, error: readError } = await admin
+        .from("horizons")
+        .select("goals, vision, purpose")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (readError) return fail(readError.message);
+
+      const { data, error } = await admin
+        .from("horizons")
+        .upsert({
+          user_id: userId,
+          goals: goals ?? existing?.goals ?? "",
+          vision: vision ?? existing?.vision ?? "",
+          purpose: purpose ?? existing?.purpose ?? "",
+          updated_at: new Date().toISOString(),
+        })
         .select()
         .single();
       if (error) return fail(error.message);
