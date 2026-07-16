@@ -102,10 +102,11 @@ export function useTaskList() {
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to create task");
-      return false;
+      return null;
     }
+    const created: Task = await res.json();
     await loadAll();
-    return true;
+    return created;
   }
 
   async function handleConvertToProject(id: string) {

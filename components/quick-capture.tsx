@@ -7,11 +7,6 @@ type Domain = {
   name: string;
 };
 
-type Project = {
-  id: string;
-  name: string;
-};
-
 type TaskPriority = "none" | "low" | "medium" | "high";
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
@@ -22,15 +17,13 @@ export default function QuickCapture() {
   const [link, setLink] = useState("");
   const [notes, setNotes] = useState("");
   const [domainId, setDomainId] = useState("");
-  const [projectId, setProjectId] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [waitingFor, setWaitingFor] = useState(false);
   const [image, setImage] = useState<File | null>(null);
   const [domains, setDomains] = useState<Domain[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [contextLoaded, setContextLoaded] = useState(false);
+  const [domainsLoaded, setDomainsLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -67,18 +60,21 @@ export default function QuickCapture() {
 
     titleRef.current?.focus();
 
-    if (contextLoaded) return;
+    // Only needed for Project mode — assigning a domain to a new project is
+    // a planning decision, not a capture decision, so tasks never get one
+    // here (GTD: capture first, decide domain/project later when processing).
+    if (domainsLoaded) return;
 
-    Promise.all([fetch("/api/domains"), fetch("/api/projects")])
-      .then(async ([domainsRes, projectsRes]) => {
-        if (domainsRes.ok) setDomains(await domainsRes.json());
-        if (projectsRes.ok) setProjects(await projectsRes.json());
-        setContextLoaded(true);
+    fetch("/api/domains")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
+      .then((data: Domain[]) => {
+        setDomains(data);
+        setDomainsLoaded(true);
       })
       .catch(() => {
-        // Domain/project pickers just stay empty — not fatal to capture itself.
+        // Domain picker just stays empty — not fatal to capture itself.
       });
-  }, [open, contextLoaded]);
+  }, [open, domainsLoaded]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -105,8 +101,6 @@ export default function QuickCapture() {
               title,
               notes: notes || undefined,
               link: link || undefined,
-              domain_id: domainId || null,
-              project_id: projectId || null,
               priority,
               due_date: dueDate || undefined,
               scheduled_date: scheduledDate || undefined,
@@ -135,7 +129,6 @@ export default function QuickCapture() {
     setLink("");
     setNotes("");
     setDomainId("");
-    setProjectId("");
     setPriority("none");
     setDueDate("");
     setScheduledDate("");
@@ -226,28 +219,16 @@ export default function QuickCapture() {
               />
 
               <div className="flex flex-wrap gap-3">
-                <select
-                  value={domainId}
-                  onChange={(e) => setDomainId(e.target.value)}
-                  className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  <option value="">{mode === "project" ? "No domain" : "No domain (Inbox)"}</option>
-                  {domains.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-                {mode === "task" && (
+                {mode === "project" && (
                   <select
-                    value={projectId}
-                    onChange={(e) => setProjectId(e.target.value)}
+                    value={domainId}
+                    onChange={(e) => setDomainId(e.target.value)}
                     className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   >
-                    <option value="">No project</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
+                    <option value="">No domain</option>
+                    {domains.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
                       </option>
                     ))}
                   </select>
