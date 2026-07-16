@@ -1,6 +1,7 @@
 import type { ContentBlockParam, Tool } from "@anthropic-ai/sdk/resources/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TRASH_CONFIG, type TrashType } from "@/lib/trash";
+import { topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
 
 // Domain restore stays app-only alongside domain deletion.
 const COACH_RESTORABLE_TRASH_TYPES = [
@@ -441,19 +442,96 @@ export const TOOLS: Tool[] = [
       required: ["type", "id"],
     },
   },
+  {
+    name: "create_recurring_task",
+    description:
+      "Create a recurring task template (e.g. 'submit the BSL accountability tracker every " +
+      "Monday'). Generates the first batch of occurrences immediately, up to horizon_count. Exactly " +
+      "one of days_of_week / day_of_month / interval_days is required, matching recurrence_type.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        notes: { type: "string" },
+        link: { type: "string" },
+        domain_id: { type: "string" },
+        project_id: { type: "string" },
+        priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+        recurrence_type: { type: "string", enum: ["weekly", "monthly", "interval"] },
+        days_of_week: {
+          type: "array",
+          items: { type: "number" },
+          description: "Required for weekly: 0=Sun..6=Sat, one or more days.",
+        },
+        day_of_month: {
+          type: "number",
+          description: "Required for monthly: 1-31, clamped to the last day of shorter months.",
+        },
+        interval_days: {
+          type: "number",
+          description: "Required for interval: generate every N days, starting today.",
+        },
+        horizon_count: {
+          type: "number",
+          description: "How many future occurrences stay generated at once. Defaults to 12.",
+        },
+      },
+      required: ["title", "recurrence_type"],
+    },
+  },
+  {
+    name: "update_recurring_task",
+    description:
+      "Update a recurring task template, referenced by its UUID from the context below — edit its " +
+      "details, pause/resume it (active), change its horizon, or change its recurrence pattern " +
+      "(only affects occurrences generated from now on, not already-generated tasks).",
+    input_schema: {
+      type: "object",
+      properties: {
+        recurring_task_id: { type: "string" },
+        title: { type: "string" },
+        notes: { type: "string" },
+        link: { type: "string" },
+        domain_id: { type: "string" },
+        project_id: { type: "string" },
+        priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+        active: { type: "boolean" },
+        horizon_count: { type: "number" },
+        recurrence_type: { type: "string", enum: ["weekly", "monthly", "interval"] },
+        days_of_week: { type: "array", items: { type: "number" } },
+        day_of_month: { type: "number" },
+        interval_days: { type: "number" },
+      },
+      required: ["recurring_task_id"],
+    },
+  },
+  {
+    name: "delete_recurring_task",
+    description:
+      "Permanently delete a recurring task template, referenced by its UUID. Stops future " +
+      "generation; already-generated tasks stay as ordinary tasks. Not in the Trash system, so this " +
+      "can't be undone — pausing (update_recurring_task with active: false) is reversible.",
+    input_schema: {
+      type: "object",
+      properties: { recurring_task_id: { type: "string" } },
+      required: ["recurring_task_id"],
+    },
+  },
 ];
 
 const BASE_SYSTEM =
   "You are Antoine's personal life coach inside his Life OS app, using the GTD (Getting Things " +
   "Done) methodology. You have read access to his domains, projects, tasks, habits, routines, " +
   "checklists, knowledge library folders, agenda items, higher horizons (goals/vision/purpose), " +
-  "and today's check-in, given below. Give specific, context-aware coaching grounded in this " +
-  "data — never generic advice. Keep replies conversational and brief.\n\n" +
+  "recurring task templates, and today's check-in, given below. Give specific, context-aware " +
+  "coaching grounded in this data — never generic advice. Keep replies conversational and brief.\n\n" +
   "You can take actions via tools: create/update/delete tasks and projects (including " +
   "subprojects), create/update domains, log/track habits, create/update/delete routines and add " +
   "steps to them, create/update/delete/reset checklists and add items to them, save/organize " +
   "knowledge library items and folders, create/update/delete agenda items (things to bring up " +
-  "with a person), update his higher horizons, and restore soft-deleted items from Trash. Every " +
+  "with a person), update his higher horizons, create/update/delete recurring task templates " +
+  "(these generate ordinary tasks ahead of time, bounded by a horizon — not created lazily on " +
+  "completion), and restore soft-deleted items from Trash. Every " +
   "tool call requires the user's explicit confirmation " +
   "before it runs — the app shows him exactly what you're proposing and he approves or declines " +
   "each one. So don't ask for confirmation in your own text, just call the tool when it's clearly " +
@@ -504,6 +582,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     foldersRes,
     agendaRes,
     horizonsRes,
+    recurringRes,
   ] = await Promise.all([
     supabase.from("domains").select("id, name"),
     supabase
@@ -527,6 +606,10 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     supabase.from("knowledge_folders").select("id, name"),
     supabase.from("agenda_items").select("id, person_name, note, done").order("created_at"),
     supabase.from("horizons").select("goals, vision, purpose").maybeSingle(),
+    supabase
+      .from("recurring_task_templates")
+      .select("id, title, recurrence_type, days_of_week, day_of_month, interval_days, active")
+      .order("created_at"),
   ]);
 
   const domains = domainsRes.data ?? [];
@@ -539,6 +622,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   const knowledgeFolders = foldersRes.data ?? [];
   const agendaItems = agendaRes.data ?? [];
   const horizons = horizonsRes.data;
+  const recurringTemplates = recurringRes.data ?? [];
   const openTasks = tasks.filter((t) => t.status !== "done");
   const openAgendaItems = agendaItems.filter((a) => !a.done);
 
@@ -591,6 +675,24 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     routines.length
       ? routines
           .map((r) => `- ${r.id} ${r.name} (${r.time_of_day}${r.active ? "" : ", paused"})`)
+          .join("\n")
+      : "(none)",
+  );
+
+  const RECURRENCE_DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  lines.push("\nRecurring tasks (generate ordinary tasks ahead of time on this schedule):");
+  lines.push(
+    recurringTemplates.length
+      ? recurringTemplates
+          .map((t) => {
+            const pattern =
+              t.recurrence_type === "weekly"
+                ? `weekly on ${(t.days_of_week ?? []).map((d: number) => RECURRENCE_DAY_LABELS[d]).join(", ")}`
+                : t.recurrence_type === "monthly"
+                  ? `monthly on day ${t.day_of_month}`
+                  : `every ${t.interval_days} days`;
+            return `- ${t.id} ${t.title} (${pattern}${t.active ? "" : ", paused"})`;
+          })
           .join("\n")
       : "(none)",
   );
@@ -1263,6 +1365,110 @@ export async function executeTool(
     const { error } = await supabase.from(config.table).update({ deleted_at: null }).eq("id", id);
     if (error) return `Error: ${error.message}`;
     return "Restored from Trash.";
+  }
+
+  if (name === "create_recurring_task") {
+    const title = typeof input.title === "string" ? input.title.trim() : "";
+    if (!title) return "Error: title is required";
+    const recurrenceType = input.recurrence_type;
+    if (recurrenceType !== "weekly" && recurrenceType !== "monthly" && recurrenceType !== "interval") {
+      return "Error: recurrence_type must be weekly, monthly, or interval";
+    }
+
+    const daysOfWeek = Array.isArray(input.days_of_week) ? input.days_of_week.map(Number) : [];
+    if (recurrenceType === "weekly" && daysOfWeek.length === 0) {
+      return "Error: days_of_week is required for a weekly recurrence";
+    }
+    if (recurrenceType === "monthly" && !input.day_of_month) {
+      return "Error: day_of_month is required for a monthly recurrence";
+    }
+    if (recurrenceType === "interval" && !input.interval_days) {
+      return "Error: interval_days is required for an interval recurrence";
+    }
+
+    const { data: template, error } = await supabase
+      .from("recurring_task_templates")
+      .insert({
+        user_id: userId,
+        title,
+        notes: typeof input.notes === "string" ? input.notes : undefined,
+        link: typeof input.link === "string" && input.link.trim() ? input.link.trim() : undefined,
+        domain_id: typeof input.domain_id === "string" ? input.domain_id : null,
+        project_id: typeof input.project_id === "string" ? input.project_id : null,
+        priority: typeof input.priority === "string" ? input.priority : undefined,
+        recurrence_type: recurrenceType,
+        days_of_week: recurrenceType === "weekly" ? daysOfWeek : null,
+        day_of_month: recurrenceType === "monthly" ? Number(input.day_of_month) : null,
+        interval_days: recurrenceType === "interval" ? Number(input.interval_days) : null,
+        horizon_count: typeof input.horizon_count === "number" ? input.horizon_count : 12,
+      })
+      .select()
+      .single();
+    if (error) return `Error: ${error.message}`;
+
+    const { error: topUpError } = await topUpTemplate(supabase, template as StoredTemplate);
+    if (topUpError) {
+      return `Created "${template.title}", but generating the first occurrences failed: ${topUpError}`;
+    }
+    return `Created recurring task "${template.title}".`;
+  }
+
+  if (name === "update_recurring_task") {
+    const recurringTaskId = typeof input.recurring_task_id === "string" ? input.recurring_task_id : "";
+    if (!recurringTaskId) return "Error: recurring_task_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.title === "string") {
+      const trimmed = input.title.trim();
+      if (!trimmed) return "Error: title cannot be empty";
+      updates.title = trimmed;
+    }
+    if (typeof input.notes === "string") updates.notes = input.notes;
+    if (typeof input.link === "string") updates.link = input.link.trim() || null;
+    if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
+    if (typeof input.project_id === "string") updates.project_id = input.project_id || null;
+    if (typeof input.priority === "string") updates.priority = input.priority;
+    if (typeof input.active === "boolean") updates.active = input.active;
+    if (typeof input.horizon_count === "number") updates.horizon_count = input.horizon_count;
+
+    if (typeof input.recurrence_type === "string") {
+      updates.recurrence_type = input.recurrence_type;
+      updates.days_of_week = null;
+      updates.day_of_month = null;
+      updates.interval_days = null;
+
+      if (input.recurrence_type === "weekly") {
+        const daysOfWeek = Array.isArray(input.days_of_week) ? input.days_of_week.map(Number) : [];
+        if (daysOfWeek.length === 0) return "Error: days_of_week is required when switching to weekly";
+        updates.days_of_week = daysOfWeek;
+      } else if (input.recurrence_type === "monthly") {
+        if (!input.day_of_month) return "Error: day_of_month is required when switching to monthly";
+        updates.day_of_month = Number(input.day_of_month);
+      } else if (input.recurrence_type === "interval") {
+        if (!input.interval_days) return "Error: interval_days is required when switching to interval";
+        updates.interval_days = Number(input.interval_days);
+      } else {
+        return "Error: recurrence_type must be weekly, monthly, or interval";
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("recurring_task_templates")
+      .update(updates)
+      .eq("id", recurringTaskId)
+      .select()
+      .single();
+    if (error) return `Error: ${error.message}`;
+    return `Updated recurring task "${data.title}".`;
+  }
+
+  if (name === "delete_recurring_task") {
+    const recurringTaskId = typeof input.recurring_task_id === "string" ? input.recurring_task_id : "";
+    if (!recurringTaskId) return "Error: recurring_task_id is required";
+
+    const { error } = await supabase.from("recurring_task_templates").delete().eq("id", recurringTaskId);
+    if (error) return `Error: ${error.message}`;
+    return "Deleted recurring task template.";
   }
 
   return `Error: unknown tool ${name}`;
