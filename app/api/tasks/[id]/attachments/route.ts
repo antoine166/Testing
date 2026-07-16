@@ -5,6 +5,14 @@ const BUCKET = "task-attachments";
 const MAX_SIZE_BYTES = 10 * 1024 * 1024;
 const SIGNED_URL_TTL_SECONDS = 3600;
 
+// Supabase Storage rejects object keys containing characters outside this
+// set (e.g. spaces) — macOS screenshot filenames like "Screenshot 2026-07-15
+// at 5.39.44 PM.png" are the most common real-world case that hits this.
+// The original name is preserved separately in task_attachments.filename.
+function sanitizeForStorageKey(filename: string): string {
+  return filename.replace(/[^a-zA-Z0-9_.-]/g, "_");
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase, user } = await requireUser();
@@ -56,7 +64,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Image must be under 10MB" }, { status: 400 });
   }
 
-  const storagePath = `${user.id}/${id}/${crypto.randomUUID()}-${file.name}`;
+  const storagePath = `${user.id}/${id}/${crypto.randomUUID()}-${sanitizeForStorageKey(file.name)}`;
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
