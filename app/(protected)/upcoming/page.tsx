@@ -20,8 +20,17 @@ function formatDateHeader(dateStr: string, today: string): string {
 }
 
 export default function UpcomingPage() {
-  const { domains, projects, tasks, loading, error, handleUpdate, toggleDone, handleDelete } =
-    useTaskList();
+  const {
+    domains,
+    projects,
+    tasks,
+    loading,
+    error,
+    handleUpdate,
+    toggleDone,
+    handleDelete,
+    handleConvertToProject,
+  } = useTaskList();
   const today = todayLocal();
 
   const upcomingTasks = tasks.filter(
@@ -70,6 +79,7 @@ export default function UpcomingPage() {
                     onToggleDone={toggleDone}
                     onUpdate={handleUpdate}
                     onDelete={handleDelete}
+                    onConvertToProject={handleConvertToProject}
                   />
                 ))}
               </ul>

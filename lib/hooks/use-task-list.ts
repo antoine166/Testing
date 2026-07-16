@@ -108,6 +108,22 @@ export function useTaskList() {
     return true;
   }
 
+  async function handleConvertToProject(id: string) {
+    if (
+      !confirm(
+        "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-project`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to project");
+      return;
+    }
+    await loadAll();
+  }
+
   return {
     domains,
     projects,
@@ -118,5 +134,6 @@ export function useTaskList() {
     toggleDone,
     handleDelete,
     createTask,
+    handleConvertToProject,
   };
 }

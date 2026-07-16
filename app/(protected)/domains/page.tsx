@@ -219,6 +219,22 @@ export default function DomainsPage() {
     await loadDomains();
   }
 
+  async function handleTaskConvertToProject(id: string) {
+    if (
+      !confirm(
+        "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-project`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to project");
+      return;
+    }
+    await loadDomains();
+  }
+
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
       <h1 className="mb-6 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
@@ -431,6 +447,7 @@ export default function DomainsPage() {
                                 onToggleDone={toggleTaskDone}
                                 onUpdate={handleTaskUpdate}
                                 onDelete={handleTaskDelete}
+                                onConvertToProject={handleTaskConvertToProject}
                               />
                             ))}
                           </ul>
@@ -467,6 +484,7 @@ export default function DomainsPage() {
                                     onToggleDone={toggleTaskDone}
                                     onUpdate={handleTaskUpdate}
                                     onDelete={handleTaskDelete}
+                                    onConvertToProject={handleTaskConvertToProject}
                                   />
                                 ))}
                               </ul>

@@ -5,8 +5,17 @@ import TaskRow from "@/components/task-row";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
 export default function AnytimePage() {
-  const { domains, projects, tasks, loading, error, handleUpdate, toggleDone, handleDelete } =
-    useTaskList();
+  const {
+    domains,
+    projects,
+    tasks,
+    loading,
+    error,
+    handleUpdate,
+    toggleDone,
+    handleDelete,
+    handleConvertToProject,
+  } = useTaskList();
 
   // Filed under a domain, no specific date, not deferred to Someday — actionable whenever.
   const anytimeTasks = tasks.filter(
@@ -38,6 +47,7 @@ export default function AnytimePage() {
               onToggleDone={toggleDone}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              onConvertToProject={handleConvertToProject}
             />
           ))}
         </ul>

@@ -102,6 +102,7 @@ export default function TodayDashboard() {
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [addingTask, setAddingTask] = useState(false);
+  const [captureMode, setCaptureMode] = useState<"task" | "project">("task");
 
   async function loadAll() {
     try {
@@ -308,6 +309,22 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
+  async function handleConvertTaskToProject(id: string) {
+    if (
+      !confirm(
+        "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-project`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to project");
+      return;
+    }
+    await loadAll();
+  }
+
   async function handleCreateTask(title: string) {
     const res = await fetch("/api/tasks", {
       method: "POST",
@@ -318,6 +335,23 @@ export default function TodayDashboard() {
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to create task");
+      return false;
+    }
+
+    await loadAll();
+    return true;
+  }
+
+  async function handleCreateProject(name: string) {
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, scheduled_date: today }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create project");
       return false;
     }
 
@@ -457,26 +491,55 @@ export default function TodayDashboard() {
             e.preventDefault();
             if (!newTaskTitle.trim() || addingTask) return;
             setAddingTask(true);
-            const ok = await handleCreateTask(newTaskTitle);
+            const ok =
+              captureMode === "project"
+                ? await handleCreateProject(newTaskTitle)
+                : await handleCreateTask(newTaskTitle);
             setAddingTask(false);
             if (ok) setNewTaskTitle("");
           }}
-          className="mb-2 flex gap-2"
+          className="mb-2 space-y-2"
         >
-          <input
-            value={newTaskTitle}
-            onChange={(e) => setNewTaskTitle(e.target.value)}
-            placeholder="Add a task for today"
-            disabled={addingTask}
-            className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <button
-            type="submit"
-            disabled={addingTask || !newTaskTitle.trim()}
-            className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-          >
-            Add
-          </button>
+          <div className="inline-flex rounded-md border border-zinc-300 p-0.5 text-xs dark:border-zinc-700">
+            <button
+              type="button"
+              onClick={() => setCaptureMode("task")}
+              className={`rounded px-2 py-1 font-medium ${
+                captureMode === "task"
+                  ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
+                  : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              Task
+            </button>
+            <button
+              type="button"
+              onClick={() => setCaptureMode("project")}
+              className={`rounded px-2 py-1 font-medium ${
+                captureMode === "project"
+                  ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
+                  : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              Project
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+              placeholder={captureMode === "task" ? "Add a task for today" : "New project name"}
+              disabled={addingTask}
+              className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <button
+              type="submit"
+              disabled={addingTask || !newTaskTitle.trim()}
+              className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+            >
+              Add
+            </button>
+          </div>
         </form>
         {todayTasks.length === 0 ? (
           <p className="text-sm text-zinc-500">Nothing scheduled for today.</p>
@@ -491,6 +554,7 @@ export default function TodayDashboard() {
                 onToggleDone={toggleTask}
                 onUpdate={handleUpdateTask}
                 onDelete={handleDeleteTask}
+                onConvertToProject={handleConvertTaskToProject}
               />
             ))}
           </ul>
@@ -512,6 +576,7 @@ export default function TodayDashboard() {
                 onToggleDone={toggleTask}
                 onUpdate={handleUpdateTask}
                 onDelete={handleDeleteTask}
+                onConvertToProject={handleConvertTaskToProject}
               />
             ))}
           </ul>

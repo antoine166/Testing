@@ -5,8 +5,17 @@ import TaskRow from "@/components/task-row";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
 export default function SomedayPage() {
-  const { domains, projects, tasks, loading, error, handleUpdate, toggleDone, handleDelete } =
-    useTaskList();
+  const {
+    domains,
+    projects,
+    tasks,
+    loading,
+    error,
+    handleUpdate,
+    toggleDone,
+    handleDelete,
+    handleConvertToProject,
+  } = useTaskList();
 
   const somedayTasks = tasks.filter((t) => t.someday && t.status !== "done");
 
@@ -37,6 +46,7 @@ export default function SomedayPage() {
               onToggleDone={toggleDone}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              onConvertToProject={handleConvertToProject}
             />
           ))}
         </ul>

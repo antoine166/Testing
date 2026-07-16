@@ -116,6 +116,18 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "convert_task_to_project",
+    description:
+      "Turn a task into a project when it turns out to need multiple steps, not one action. " +
+      "Creates a new project carrying over the task's title, notes, domain, priority, dates, and " +
+      "link, then moves the original task to Trash (recoverable for 30 days).",
+    input_schema: {
+      type: "object",
+      properties: { task_id: { type: "string" } },
+      required: ["task_id"],
+    },
+  },
+  {
     name: "update_project",
     description:
       "Update a project's status, domain, or parent project, referenced by its UUID from the " +
@@ -790,6 +802,45 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return "Moved to Trash.";
+  }
+
+  if (name === "convert_task_to_project") {
+    const taskId = typeof input.task_id === "string" ? input.task_id : "";
+    if (!taskId) return "Error: task_id is required";
+
+    const { data: task, error: taskError } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("id", taskId)
+      .is("deleted_at", null)
+      .single();
+    if (taskError || !task) return "Error: task not found";
+
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .insert({
+        user_id: userId,
+        name: task.title,
+        description: task.notes,
+        domain_id: task.domain_id,
+        priority: task.priority,
+        due_date: task.due_date,
+        scheduled_date: task.scheduled_date,
+        link: task.link,
+      })
+      .select()
+      .single();
+    if (projectError) return `Error: ${projectError.message}`;
+
+    const { error: trashError } = await supabase
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", taskId);
+    if (trashError) {
+      return `Project "${project.name}" created, but couldn't trash the original task: ${trashError.message}`;
+    }
+
+    return `Converted to project "${project.name}".`;
   }
 
   if (name === "update_project") {

@@ -5,8 +5,17 @@ import TaskRow from "@/components/task-row";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
 export default function WaitingForPage() {
-  const { domains, projects, tasks, loading, error, handleUpdate, toggleDone, handleDelete } =
-    useTaskList();
+  const {
+    domains,
+    projects,
+    tasks,
+    loading,
+    error,
+    handleUpdate,
+    toggleDone,
+    handleDelete,
+    handleConvertToProject,
+  } = useTaskList();
 
   const waitingTasks = tasks
     .filter((t) => t.waiting_for && t.status !== "done")
@@ -45,6 +54,7 @@ export default function WaitingForPage() {
               onToggleDone={toggleDone}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              onConvertToProject={handleConvertToProject}
             />
           ))}
         </ul>
