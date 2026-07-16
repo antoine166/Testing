@@ -28,12 +28,14 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
+  const [link, setLink] = useState("");
   const [notes, setNotes] = useState("");
   const [domainId, setDomainId] = useState(domainFilter ?? "");
   const [projectId, setProjectId] = useState(projectFilter ?? "");
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
+  const [image, setImage] = useState<File | null>(null);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -101,6 +103,7 @@ export default function TasksPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title,
+        link: link || undefined,
         notes: notes || undefined,
         domain_id: domainId || null,
         project_id: projectId || null,
@@ -116,13 +119,23 @@ export default function TasksPage() {
       return;
     }
 
+    const task = await res.json();
+
+    if (image) {
+      const formData = new FormData();
+      formData.append("file", image);
+      await fetch(`/api/tasks/${task.id}/attachments`, { method: "POST", body: formData });
+    }
+
     setTitle("");
+    setLink("");
     setNotes("");
     setDomainId("");
     setProjectId("");
     setPriority("none");
     setDueDate("");
     setScheduledDate("");
+    setImage(null);
     await loadAll();
   }
 
@@ -279,6 +292,21 @@ export default function TasksPage() {
         </div>
         <div>
           <label
+            htmlFor="link"
+            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Link (optional)
+          </label>
+          <input
+            id="link"
+            type="url"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          />
+        </div>
+        <div>
+          <label
             htmlFor="notes"
             className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
           >
@@ -393,6 +421,42 @@ export default function TasksPage() {
               className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
           </div>
+          <label
+            aria-label="Add image"
+            title={image ? image.name : "Add image"}
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <circle cx="9" cy="10.5" r="1.5" />
+              <path d="M3 16l5-4 4 3 4-3 5 4" />
+              <path d="M15 6h4M17 4v4" />
+            </svg>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+              className="hidden"
+            />
+          </label>
+          {image && (
+            <button
+              type="button"
+              onClick={() => setImage(null)}
+              title="Remove image"
+              className="flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+            >
+              {image.name} ✕
+            </button>
+          )}
           <button
             type="submit"
             className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
