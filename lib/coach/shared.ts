@@ -13,6 +13,11 @@ export const TOOLS: Tool[] = [
       type: "object",
       properties: {
         title: { type: "string", description: "The task title" },
+        link: { type: "string", description: "Optional related URL." },
+        context: {
+          type: "string",
+          description: "Optional GTD context tag like 'calls', 'errands', 'computer' — free text, no @ prefix.",
+        },
         domain_id: {
           type: "string",
           description: "Optional domain UUID from the context below. Omit to leave in Inbox.",
@@ -20,6 +25,14 @@ export const TOOLS: Tool[] = [
         priority: { type: "string", enum: ["none", "low", "medium", "high"] },
         due_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
         scheduled_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
+        someday: {
+          type: "boolean",
+          description: "Optional. Things-style Someday/Maybe — deliberately deferred rather than active now.",
+        },
+        waiting_for: {
+          type: "boolean",
+          description: "Optional. GTD Waiting For — delegated/blocked on someone else. Starts the days-waiting clock.",
+        },
       },
       required: ["title"],
     },
@@ -65,6 +78,11 @@ export const TOOLS: Tool[] = [
         task_id: { type: "string" },
         status: { type: "string", enum: ["todo", "in_progress", "done"] },
         priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+        link: { type: "string", description: "Related URL. Empty string clears it." },
+        context: {
+          type: "string",
+          description: "GTD context tag (free text, no @ prefix). Empty string clears it.",
+        },
         due_date: { type: "string", description: "Empty string clears it" },
         scheduled_date: { type: "string", description: "Empty string clears it" },
         someday: { type: "boolean" },
@@ -318,18 +336,74 @@ export const TOOLS: Tool[] = [
       required: ["folder_id"],
     },
   },
+  {
+    name: "create_agenda_item",
+    description:
+      "Add a GTD agenda item — something to bring up with a specific person next time Antoine " +
+      "talks to them (e.g. 'ask Sarah about the Q3 budget').",
+    input_schema: {
+      type: "object",
+      properties: {
+        person_name: { type: "string", description: "Who to bring it up with — free text." },
+        note: { type: "string", description: "What to bring up." },
+      },
+      required: ["person_name", "note"],
+    },
+  },
+  {
+    name: "update_agenda_item",
+    description:
+      "Update an agenda item, referenced by its UUID from the context below. Use to mark it done " +
+      "once it's been discussed, or edit the person/note.",
+    input_schema: {
+      type: "object",
+      properties: {
+        agenda_item_id: { type: "string" },
+        person_name: { type: "string" },
+        note: { type: "string" },
+        done: { type: "boolean" },
+      },
+      required: ["agenda_item_id"],
+    },
+  },
+  {
+    name: "delete_agenda_item",
+    description:
+      "Permanently delete an agenda item, referenced by its UUID. These aren't in the Trash system, " +
+      "so this can't be undone — only use it when Antoine clearly wants it gone.",
+    input_schema: {
+      type: "object",
+      properties: { agenda_item_id: { type: "string" } },
+      required: ["agenda_item_id"],
+    },
+  },
+  {
+    name: "update_horizons",
+    description:
+      "Update Antoine's GTD higher horizons — goals & objectives (1-2 yr), vision (3-5 yr), and/or " +
+      "purpose & principles. Only the fields you pass change; omitted ones keep their current value.",
+    input_schema: {
+      type: "object",
+      properties: {
+        goals: { type: "string" },
+        vision: { type: "string" },
+        purpose: { type: "string" },
+      },
+    },
+  },
 ];
 
 const BASE_SYSTEM =
   "You are Antoine's personal life coach inside his Life OS app, using the GTD (Getting Things " +
   "Done) methodology. You have read access to his domains, projects, tasks, habits, routines, " +
-  "checklists, knowledge library folders, and today's check-in, given below. Give specific, " +
-  "context-aware coaching grounded in this data — never generic advice. Keep replies " +
-  "conversational and brief.\n\n" +
+  "checklists, knowledge library folders, agenda items, higher horizons (goals/vision/purpose), " +
+  "and today's check-in, given below. Give specific, context-aware coaching grounded in this " +
+  "data — never generic advice. Keep replies conversational and brief.\n\n" +
   "You can take actions via tools: create/update/delete tasks and projects (including " +
   "subprojects), create/update domains, log/track habits, create/update/delete routines and add " +
-  "steps to them, create/update/delete/reset checklists and add items to them, and save/organize " +
-  "knowledge library items and folders. Every tool call requires the user's explicit confirmation " +
+  "steps to them, create/update/delete/reset checklists and add items to them, save/organize " +
+  "knowledge library items and folders, create/update/delete agenda items (things to bring up " +
+  "with a person), and update his higher horizons. Every tool call requires the user's explicit confirmation " +
   "before it runs — the app shows him exactly what you're proposing and he approves or declines " +
   "each one. So don't ask for confirmation in your own text, just call the tool when it's clearly " +
   "implied and let the app handle confirmation.\n\n" +
@@ -366,29 +440,41 @@ export function extractText(content: ContentBlockParam[]): string {
 }
 
 export async function buildContext(supabase: SupabaseClient, today: string, mode: string) {
-  const [domainsRes, projectsRes, tasksRes, habitsRes, checkinRes, routinesRes, checklistsRes, foldersRes] =
-    await Promise.all([
-      supabase.from("domains").select("id, name"),
-      supabase
-        .from("projects")
-        .select("id, name, status, parent_project_id")
-        .neq("status", "archived"),
-      supabase
-        .from("tasks")
-        .select(
-          "id, title, status, priority, due_date, scheduled_date, someday, waiting_for, waiting_since, domain_id, project_id",
-        )
-        .is("deleted_at", null),
-      supabase.from("habits").select("id, name, frequency, active").eq("active", true),
-      supabase
-        .from("daily_checkins")
-        .select("energy_level, focus_level, notes")
-        .eq("date", today)
-        .maybeSingle(),
-      supabase.from("routines").select("id, name, time_of_day, active").is("deleted_at", null),
-      supabase.from("checklists").select("id, name").is("deleted_at", null),
-      supabase.from("knowledge_folders").select("id, name"),
-    ]);
+  const [
+    domainsRes,
+    projectsRes,
+    tasksRes,
+    habitsRes,
+    checkinRes,
+    routinesRes,
+    checklistsRes,
+    foldersRes,
+    agendaRes,
+    horizonsRes,
+  ] = await Promise.all([
+    supabase.from("domains").select("id, name"),
+    supabase
+      .from("projects")
+      .select("id, name, status, parent_project_id")
+      .neq("status", "archived"),
+    supabase
+      .from("tasks")
+      .select(
+        "id, title, status, priority, due_date, scheduled_date, someday, waiting_for, waiting_since, domain_id, project_id",
+      )
+      .is("deleted_at", null),
+    supabase.from("habits").select("id, name, frequency, active").eq("active", true),
+    supabase
+      .from("daily_checkins")
+      .select("energy_level, focus_level, notes")
+      .eq("date", today)
+      .maybeSingle(),
+    supabase.from("routines").select("id, name, time_of_day, active").is("deleted_at", null),
+    supabase.from("checklists").select("id, name").is("deleted_at", null),
+    supabase.from("knowledge_folders").select("id, name"),
+    supabase.from("agenda_items").select("id, person_name, note, done").order("created_at"),
+    supabase.from("horizons").select("goals, vision, purpose").maybeSingle(),
+  ]);
 
   const domains = domainsRes.data ?? [];
   const projects = projectsRes.data ?? [];
@@ -398,7 +484,10 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   const routines = routinesRes.data ?? [];
   const checklists = checklistsRes.data ?? [];
   const knowledgeFolders = foldersRes.data ?? [];
+  const agendaItems = agendaRes.data ?? [];
+  const horizons = horizonsRes.data;
   const openTasks = tasks.filter((t) => t.status !== "done");
+  const openAgendaItems = agendaItems.filter((a) => !a.done);
 
   const lines: string[] = [];
   lines.push(`Today's date: ${today}`);
@@ -474,10 +563,27 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
       : "Not checked in yet today.",
   );
 
-  if (mode !== "weekly-review") return lines.join("\n");
+  lines.push("\nOpen agenda items (things to bring up with someone):");
+  lines.push(
+    openAgendaItems.length
+      ? openAgendaItems.map((a) => `- ${a.id} ${a.person_name}: ${a.note}`).join("\n")
+      : "(none)",
+  );
 
-  const agendaRes = await supabase.from("agenda_items").select("person_name, note").eq("done", false);
-  const agendaItems = agendaRes.data ?? [];
+  lines.push("\nHorizons (GTD goals/vision/purpose):");
+  lines.push(
+    horizons && (horizons.goals || horizons.vision || horizons.purpose)
+      ? [
+          horizons.goals ? `Goals: ${horizons.goals}` : null,
+          horizons.vision ? `Vision: ${horizons.vision}` : null,
+          horizons.purpose ? `Purpose: ${horizons.purpose}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : "(not set)",
+  );
+
+  if (mode !== "weekly-review") return lines.join("\n");
 
   const openTaskCountByProject = new Map<string, number>();
   for (const t of openTasks) {
@@ -521,10 +627,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     somedayTasks.length ? somedayTasks.map((t) => `- ${t.id} "${t.title}"`).join("\n") : "(none)",
   );
 
-  lines.push("\nOpen agenda items (things to bring up with someone):");
-  lines.push(
-    agendaItems.length ? agendaItems.map((a) => `- ${a.person_name}: ${a.note}`).join("\n") : "(none)",
-  );
+  // Open agenda items and horizons are already in the base context above.
 
   return lines.join("\n");
 }
@@ -540,15 +643,25 @@ export async function executeTool(
     const title = typeof input.title === "string" ? input.title.trim() : "";
     if (!title) return "Error: title is required";
 
+    const link = typeof input.link === "string" && input.link.trim() ? input.link.trim() : undefined;
+    const context =
+      typeof input.context === "string" && input.context.trim() ? input.context.trim() : undefined;
+    const waitingFor = typeof input.waiting_for === "boolean" ? input.waiting_for : undefined;
+
     const { data, error } = await supabase
       .from("tasks")
       .insert({
         user_id: userId,
         title,
+        link,
+        context,
         domain_id: typeof input.domain_id === "string" ? input.domain_id : null,
         priority: typeof input.priority === "string" ? input.priority : undefined,
         due_date: typeof input.due_date === "string" ? input.due_date : undefined,
         scheduled_date: typeof input.scheduled_date === "string" ? input.scheduled_date : undefined,
+        someday: typeof input.someday === "boolean" ? input.someday : undefined,
+        waiting_for: waitingFor,
+        waiting_since: waitingFor === true ? today : undefined,
       })
       .select()
       .single();
@@ -602,6 +715,8 @@ export async function executeTool(
       updates.completed_at = input.status === "done" ? new Date().toISOString() : null;
     }
     if (typeof input.priority === "string") updates.priority = input.priority;
+    if (typeof input.link === "string") updates.link = input.link.trim() || null;
+    if (typeof input.context === "string") updates.context = input.context.trim() || null;
     if (typeof input.due_date === "string") updates.due_date = input.due_date || null;
     if (typeof input.scheduled_date === "string") updates.scheduled_date = input.scheduled_date || null;
     if (typeof input.someday === "boolean") updates.someday = input.someday;
@@ -953,6 +1068,79 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return `Updated folder "${data.name}".`;
+  }
+
+  if (name === "create_agenda_item") {
+    const personName = typeof input.person_name === "string" ? input.person_name.trim() : "";
+    const note = typeof input.note === "string" ? input.note.trim() : "";
+    if (!personName || !note) return "Error: person_name and note are required";
+
+    const { data, error } = await supabase
+      .from("agenda_items")
+      .insert({ user_id: userId, person_name: personName, note })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Added agenda item for ${data.person_name}.`;
+  }
+
+  if (name === "update_agenda_item") {
+    const agendaItemId = typeof input.agenda_item_id === "string" ? input.agenda_item_id : "";
+    if (!agendaItemId) return "Error: agenda_item_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.person_name === "string") updates.person_name = input.person_name.trim();
+    if (typeof input.note === "string") updates.note = input.note.trim();
+    if (typeof input.done === "boolean") updates.done = input.done;
+
+    const { data, error } = await supabase
+      .from("agenda_items")
+      .update(updates)
+      .eq("id", agendaItemId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated agenda item for ${data.person_name}.`;
+  }
+
+  if (name === "delete_agenda_item") {
+    const agendaItemId = typeof input.agenda_item_id === "string" ? input.agenda_item_id : "";
+    if (!agendaItemId) return "Error: agenda_item_id is required";
+
+    const { error } = await supabase.from("agenda_items").delete().eq("id", agendaItemId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Deleted agenda item.";
+  }
+
+  if (name === "update_horizons") {
+    const hasGoals = typeof input.goals === "string";
+    const hasVision = typeof input.vision === "string";
+    const hasPurpose = typeof input.purpose === "string";
+    if (!hasGoals && !hasVision && !hasPurpose) {
+      return "Error: pass at least one of goals, vision, or purpose";
+    }
+
+    // Merge onto the existing single row so a partial update doesn't blank
+    // the other fields.
+    const { data: existing } = await supabase
+      .from("horizons")
+      .select("goals, vision, purpose")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const { error } = await supabase.from("horizons").upsert({
+      user_id: userId,
+      goals: hasGoals ? (input.goals as string) : (existing?.goals ?? ""),
+      vision: hasVision ? (input.vision as string) : (existing?.vision ?? ""),
+      purpose: hasPurpose ? (input.purpose as string) : (existing?.purpose ?? ""),
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) return `Error: ${error.message}`;
+    return "Updated horizons.";
   }
 
   return `Error: unknown tool ${name}`;
