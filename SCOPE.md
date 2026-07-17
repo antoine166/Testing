@@ -597,8 +597,8 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Claude Connector (MCP) — remote MCP server for claude.ai / Claude Desktop (3.11a), also expanded to full read/write per 3.11a
 
 ### Phase 4 — Polish
-- [ ] Supabase Realtime (live updates across tabs)
-- [ ] Mobile UX pass (sidebar/nav and most pages are responsive already; no dedicated audit pass has been done)
+- [ ] Supabase Realtime (live updates across tabs) — infra shipped (publication membership, `REPLICA IDENTITY FULL`); a cross-tab bug (edits not propagating) was root-caused to the client never forwarding its JWT to Realtime on `INITIAL_SESSION` and a fix shipped, pending live confirmation
+- [x] Mobile UX pass (touch targets, hover-only controls, wrapping fixes audited and fixed); no dedicated live-device QA pass yet
 - [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window); weekly review is covered conversationally by Coach's Weekly Review mode (3.11) rather than a separate static view
 - [x] Data export (`GET /api/export` — full JSON export of all content types)
 - [x] Trash / soft delete with 30-day recovery (3.12)
