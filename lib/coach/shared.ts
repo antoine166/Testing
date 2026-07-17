@@ -181,10 +181,17 @@ export const TOOLS: Tool[] = [
     name: "delete_task",
     description:
       "Move a task to Trash, referenced by its UUID. Only use when Antoine clearly wants it " +
-      "removed, not just completed — completing should use update_task with status done instead.",
+      "removed, not just completed — completing should use update_task with status done instead. " +
+      "If it's a generated occurrence of a recurring task and he wants to stop the series (not just " +
+      "skip this one), pass scope: \"following\" to also trash every other not-yet-done occurrence " +
+      "of the same series from this date onward, and pause the series so nothing regenerates to " +
+      "replace them.",
     input_schema: {
       type: "object",
-      properties: { task_id: { type: "string" } },
+      properties: {
+        task_id: { type: "string" },
+        scope: { type: "string", enum: ["single", "following"], description: "Defaults to single." },
+      },
       required: ["task_id"],
     },
   },
@@ -1187,6 +1194,33 @@ export async function executeTool(
   if (name === "delete_task") {
     const taskId = typeof input.task_id === "string" ? input.task_id : "";
     if (!taskId) return "Error: task_id is required";
+
+    if (input.scope === "following") {
+      const { data: task, error: taskError } = await supabase
+        .from("tasks")
+        .select("recurring_template_id, scheduled_date")
+        .eq("id", taskId)
+        .single();
+      if (taskError || !task?.recurring_template_id) {
+        return "Error: not part of a recurring series";
+      }
+
+      const { error: deleteError } = await supabase
+        .from("tasks")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("recurring_template_id", task.recurring_template_id)
+        .is("deleted_at", null)
+        .neq("status", "done")
+        .gte("scheduled_date", task.scheduled_date ?? "0000-01-01");
+      if (deleteError) return `Error: ${deleteError.message}`;
+
+      await supabase
+        .from("recurring_task_templates")
+        .update({ active: false })
+        .eq("id", task.recurring_template_id);
+
+      return "Moved this and all future occurrences to Trash, and paused the series.";
+    }
 
     const { error } = await supabase
       .from("tasks")
