@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { constantTimeEqual } from "@/lib/mcp/oauth";
 
+const ATTACHMENTS_BUCKET = "task-attachments";
+const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
+const DATA_URL_PATTERN = /^data:(image\/\w+);base64,(.+)$/;
+
 // Plain token-secured endpoint for the Chrome extension (chrome-extension/)
 // to call directly — an extension page has no way to share the app's
 // session cookie, so it authenticates with a personal access token
@@ -34,7 +38,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No account to clip to" }, { status: 500 });
   }
 
-  const { data, error } = await admin
+  const { data: task, error } = await admin
     .from("tasks")
     .insert({
       user_id: owner.id,
@@ -49,5 +53,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data, { status: 201 });
+  let attachmentError: string | undefined;
+  const screenshot = typeof body.screenshot === "string" ? body.screenshot.match(DATA_URL_PATTERN) : null;
+
+  if (screenshot) {
+    const [, contentType, base64] = screenshot;
+    const buffer = Buffer.from(base64, "base64");
+
+    if (buffer.byteLength > MAX_SCREENSHOT_BYTES) {
+      attachmentError = "Screenshot must be under 10MB";
+    } else {
+      const storagePath = `${owner.id}/${task.id}/${crypto.randomUUID()}-screenshot.png`;
+      const { error: uploadError } = await admin.storage
+        .from(ATTACHMENTS_BUCKET)
+        .upload(storagePath, buffer, { contentType });
+
+      if (uploadError) {
+        attachmentError = uploadError.message;
+      } else {
+        const { error: insertError } = await admin.from("task_attachments").insert({
+          user_id: owner.id,
+          task_id: task.id,
+          storage_path: storagePath,
+          filename: "screenshot.png",
+          content_type: contentType,
+          size: buffer.byteLength,
+        });
+
+        if (insertError) {
+          await admin.storage.from(ATTACHMENTS_BUCKET).remove([storagePath]);
+          attachmentError = insertError.message;
+        }
+      }
+    }
+  }
+
+  return NextResponse.json({ ...task, attachment_error: attachmentError }, { status: 201 });
 }

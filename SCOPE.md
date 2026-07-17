@@ -57,10 +57,10 @@ A second frictionless-capture path: forward or send an email, it becomes an inbo
 ### 3.1b Chrome Extension Capture
 A third frictionless-capture path, for web content specifically: clip the current page without leaving the browser.
 
-- `chrome-extension/` (minimal v1 — see its README for setup): a browser popup that saves the current tab's title, URL, and any selected text as a task, landing in the Inbox exactly like Quick Capture or Email Capture with no domain set — filing it into a project, the Knowledge Library, etc. happens from there, same as any other inbox item
+- `chrome-extension/` (see its README for setup): a browser popup that saves the current tab's title, URL, selected text (or, if nothing's selected, the full article text via Mozilla's Readability), and a viewport screenshot as a task, landing in the Inbox exactly like Quick Capture or Email Capture with no domain set — filing it into a project, the Knowledge Library, etc. happens from there, same as any other inbox item
 - Not part of the Next.js build — a separate, unpacked (not Chrome Web Store-published) extension living in the same repo, plain HTML/JS, no build step
-- Authenticates via a personal access token (`POST /api/clip`, `Authorization: Bearer <EXTENSION_ACCESS_TOKEN>`) rather than the app's session cookie, since an extension page can't read that — same pattern as the digest endpoint (3.11a)
-- No folder/project picker, no tags, no full-page or readability capture, no screenshot clipping yet — intentionally minimal pending a decision on whether to build toward full Evernote-Clipper-style parity
+- Authenticates via a personal access token (`POST /api/clip`, `Authorization: Bearer <EXTENSION_ACCESS_TOKEN>`) rather than the app's session cookie, since an extension page can't read that — same pattern as the digest endpoint (3.11a). The screenshot rides along as a base64 data URL in the same request and is stored as a `task_attachments` row, reusing the existing image-attachment infrastructure (3.4) rather than a new table
+- Deliberately Inbox-only, no folder/project picker: capture-first GTD principle wins over Evernote-Clipper-style destination choice at capture time (decided explicitly — see 3.1)
 
 ### 3.2 Domains
 Top-level buckets for life areas (e.g., Health, Work, Business, Personal, Finance, Learning).

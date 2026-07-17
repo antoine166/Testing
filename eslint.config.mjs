@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Not part of the Next.js build — a standalone, buildless browser
+    // extension (see chrome-extension/README.md), including a vendored
+    // third-party file (vendor/readability.js) we shouldn't be reformatting
+    // or holding to this project's lint rules.
+    "chrome-extension/**",
   ]),
 ]);
 
