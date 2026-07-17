@@ -50,6 +50,78 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "save_checkin",
+    description:
+      "Record Antoine's daily capacity check-in — energy and focus level (1-5 each). One entry " +
+      "per day; saving again overwrites that day's entry.",
+    input_schema: {
+      type: "object",
+      properties: {
+        energy_level: { type: "number", description: "1-5" },
+        focus_level: { type: "number", description: "1-5" },
+        notes: { type: "string" },
+        date: { type: "string", description: "YYYY-MM-DD, defaults to today" },
+      },
+      required: ["energy_level", "focus_level"],
+    },
+  },
+  {
+    name: "create_habit",
+    description: "Start tracking a new habit for Antoine.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        frequency: {
+          type: "string",
+          enum: ["daily", "specific_days", "times_per_week"],
+          description: "Defaults to daily",
+        },
+        frequency_days: {
+          type: "array",
+          items: { type: "number" },
+          description: "Days of week (0=Sunday) — only for frequency: specific_days",
+        },
+        target_count: { type: "number", description: "Times per week — only for frequency: times_per_week" },
+        icon: { type: "string" },
+        domain_id: {
+          type: "string",
+          description:
+            "Habits are colored by their domain in the UI — file it under a domain rather than " +
+            "setting a color directly.",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_habit",
+    description: "Update an existing habit's name, schedule, icon, domain, or active state.",
+    input_schema: {
+      type: "object",
+      properties: {
+        habit_id: { type: "string", description: "The habit's UUID from the context below" },
+        name: { type: "string" },
+        frequency: { type: "string", enum: ["daily", "specific_days", "times_per_week"] },
+        frequency_days: { type: "array", items: { type: "number" }, description: "Empty array clears it" },
+        target_count: { type: "number" },
+        icon: { type: "string" },
+        active: { type: "boolean" },
+        domain_id: { type: "string", description: "Empty string clears it" },
+      },
+      required: ["habit_id"],
+    },
+  },
+  {
+    name: "delete_habit",
+    description: "Move a habit (and its log history) to Trash, referenced by its UUID. Recoverable for 30 days.",
+    input_schema: {
+      type: "object",
+      properties: { habit_id: { type: "string" } },
+      required: ["habit_id"],
+    },
+  },
+  {
     name: "log_habit",
     description:
       "Log that Antoine completed a habit today. Use this when he mentions doing a habit " +
@@ -261,6 +333,18 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "list_routine_items",
+    description:
+      "List the ordered steps of a routine, referenced by its UUID from the context below — call " +
+      "this before updating or deleting a specific step, since individual steps aren't listed in " +
+      "the context, only the routine itself.",
+    input_schema: {
+      type: "object",
+      properties: { routine_id: { type: "string" } },
+      required: ["routine_id"],
+    },
+  },
+  {
     name: "add_routine_item",
     description: "Append a new step to the end of an existing routine.",
     input_schema: {
@@ -271,6 +355,43 @@ export const TOOLS: Tool[] = [
         duration_minutes: { type: "number" },
       },
       required: ["routine_id", "title"],
+    },
+  },
+  {
+    name: "update_routine_item",
+    description: "Update a routine step's title, duration, or order, referenced by its UUID from the context below.",
+    input_schema: {
+      type: "object",
+      properties: {
+        routine_item_id: { type: "string" },
+        title: { type: "string" },
+        duration_minutes: { type: "number", description: "0 clears it" },
+        sort_order: { type: "number" },
+      },
+      required: ["routine_item_id"],
+    },
+  },
+  {
+    name: "delete_routine_item",
+    description:
+      "Remove a single step from a routine, referenced by its UUID. Not recoverable — routine " +
+      "steps aren't trashed individually.",
+    input_schema: {
+      type: "object",
+      properties: { routine_item_id: { type: "string" } },
+      required: ["routine_item_id"],
+    },
+  },
+  {
+    name: "list_checklist_items",
+    description:
+      "List the items on a checklist, in order, with their checked state, referenced by its UUID " +
+      "from the context below — call this before updating or deleting a specific item, since " +
+      "individual items aren't listed in the context, only the checklist itself.",
+    input_schema: {
+      type: "object",
+      properties: { checklist_id: { type: "string" } },
+      required: ["checklist_id"],
     },
   },
   {
@@ -324,6 +445,46 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "update_checklist_item",
+    description: "Check/uncheck a checklist item, rename it, or change its order, referenced by its UUID.",
+    input_schema: {
+      type: "object",
+      properties: {
+        checklist_item_id: { type: "string" },
+        title: { type: "string" },
+        checked: { type: "boolean" },
+        sort_order: { type: "number" },
+      },
+      required: ["checklist_item_id"],
+    },
+  },
+  {
+    name: "delete_checklist_item",
+    description:
+      "Remove a single item from a checklist, referenced by its UUID. Not recoverable — checklist " +
+      "items aren't trashed individually.",
+    input_schema: {
+      type: "object",
+      properties: { checklist_item_id: { type: "string" } },
+      required: ["checklist_item_id"],
+    },
+  },
+  {
+    name: "list_knowledge_items",
+    description:
+      "List Antoine's saved notes, articles, books, quotes, and resources — call this before " +
+      "updating or deleting a specific item, since individual items aren't listed in the context, " +
+      "only the folders are. Optionally filter by type, folder, or tag.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["note", "article", "book", "quote", "resource"] },
+        folder_id: { type: "string", description: "Optional folder UUID from the context below" },
+        tag: { type: "string", description: "Only return items with this tag" },
+      },
+    },
+  },
+  {
     name: "create_knowledge_item",
     description:
       "Save a new note, article, book, quote, or resource to Antoine's knowledge library. Use " +
@@ -339,6 +500,32 @@ export const TOOLS: Tool[] = [
         folder_id: { type: "string", description: "Optional folder UUID from the context below" },
       },
       required: ["title"],
+    },
+  },
+  {
+    name: "update_knowledge_item",
+    description: "Update an existing knowledge library item, referenced by its UUID from the context below.",
+    input_schema: {
+      type: "object",
+      properties: {
+        knowledge_item_id: { type: "string" },
+        title: { type: "string" },
+        content: { type: "string" },
+        url: { type: "string", description: "Empty string clears it" },
+        type: { type: "string", enum: ["note", "article", "book", "quote", "resource"] },
+        tags: { type: "array", items: { type: "string" }, description: "Empty array clears it" },
+        folder_id: { type: "string", description: "Empty string clears it (moves to top level)" },
+      },
+      required: ["knowledge_item_id"],
+    },
+  },
+  {
+    name: "delete_knowledge_item",
+    description: "Move a knowledge library item to Trash, referenced by its UUID. Recoverable for 30 days.",
+    input_schema: {
+      type: "object",
+      properties: { knowledge_item_id: { type: "string" } },
+      required: ["knowledge_item_id"],
     },
   },
   {
@@ -517,6 +704,14 @@ export const TOOLS: Tool[] = [
       required: ["recurring_task_id"],
     },
   },
+  {
+    name: "generate_recurring_tasks",
+    description:
+      "Top up every active recurring task template's pre-generated occurrences back up to its " +
+      "horizon. Safe to call any time — idempotent, a template with no deficit generates nothing. " +
+      "Use if Antoine asks to generate recurring tasks now rather than waiting for the daily job.",
+    input_schema: { type: "object", properties: {} },
+  },
 ];
 
 const BASE_SYSTEM =
@@ -526,12 +721,15 @@ const BASE_SYSTEM =
   "recurring task templates, and today's check-in, given below. Give specific, context-aware " +
   "coaching grounded in this data — never generic advice. Keep replies conversational and brief.\n\n" +
   "You can take actions via tools: create/update/delete tasks and projects (including " +
-  "subprojects), create/update domains, log/track habits, create/update/delete routines and add " +
-  "steps to them, create/update/delete/reset checklists and add items to them, save/organize " +
-  "knowledge library items and folders, create/update/delete agenda items (things to bring up " +
-  "with a person), update his higher horizons, create/update/delete recurring task templates " +
-  "(these generate ordinary tasks ahead of time, bounded by a horizon — not created lazily on " +
-  "completion), and restore soft-deleted items from Trash. Every " +
+  "subprojects), create/update domains, save daily check-ins, create/update/delete/log/track " +
+  "habits, create/update/delete routines and their individual steps (list_routine_items first if " +
+  "you need an existing step's id), create/update/delete/reset checklists and their individual " +
+  "items (list_checklist_items first if you need an existing item's id), save/update/delete/organize " +
+  "knowledge library items (list_knowledge_items first if you need an existing item's id) and " +
+  "folders, create/update/delete agenda items (things to bring up with a person), update his " +
+  "higher horizons, create/update/delete recurring task templates (these generate ordinary tasks " +
+  "ahead of time, bounded by a horizon — not created lazily on completion) and top them up on " +
+  "demand, and restore soft-deleted items from Trash. Every " +
   "tool call requires the user's explicit confirmation " +
   "before it runs — the app shows him exactly what you're proposing and he approves or declines " +
   "each one. So don't ask for confirmation in your own text, just call the tool when it's clearly " +
@@ -539,10 +737,7 @@ const BASE_SYSTEM =
   "Deleting tasks/projects/habits/routines/checklists/knowledge-items sends them to Trash (30-day " +
   "recovery), and you can restore them with restore_from_trash. A few actions are deliberately " +
   "app-only and out of your reach: deleting a domain, deleting a knowledge-library folder, " +
-  "permanently purging trashed items (bypassing the recovery window), and Gmail/account settings. " +
-  "Some finer-grained edits (one routine step, one checklist item, one saved knowledge item) also " +
-  "go through the app or the Claude connector (claude.ai / Claude Desktop), which can list existing " +
-  "items before acting on them.";
+  "permanently purging trashed items (bypassing the recovery window), and Gmail/account settings.";
 
 const WEEKLY_REVIEW_SYSTEM =
   BASE_SYSTEM +
@@ -825,6 +1020,93 @@ export async function executeTool(
     return `Created task "${data.title}" (${data.domain_id ? "processed" : "in Inbox"}).`;
   }
 
+  if (name === "save_checkin") {
+    const energyLevel = typeof input.energy_level === "number" ? input.energy_level : null;
+    const focusLevel = typeof input.focus_level === "number" ? input.focus_level : null;
+    if (energyLevel === null || focusLevel === null) {
+      return "Error: energy_level and focus_level are required";
+    }
+
+    const { error } = await supabase.from("daily_checkins").upsert(
+      {
+        user_id: userId,
+        date: typeof input.date === "string" ? input.date : today,
+        energy_level: energyLevel,
+        focus_level: focusLevel,
+        notes: typeof input.notes === "string" ? input.notes : undefined,
+      },
+      { onConflict: "user_id,date" },
+    );
+
+    if (error) return `Error: ${error.message}`;
+    return "Check-in saved.";
+  }
+
+  if (name === "create_habit") {
+    const habitName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!habitName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("habits")
+      .insert({
+        user_id: userId,
+        name: habitName,
+        frequency: typeof input.frequency === "string" ? input.frequency : undefined,
+        frequency_days: Array.isArray(input.frequency_days) ? input.frequency_days.map(Number) : null,
+        target_count: typeof input.target_count === "number" ? input.target_count : null,
+        icon: typeof input.icon === "string" ? input.icon : undefined,
+        domain_id: typeof input.domain_id === "string" ? input.domain_id : null,
+      })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Created habit "${data.name}".`;
+  }
+
+  if (name === "update_habit") {
+    const habitId = typeof input.habit_id === "string" ? input.habit_id : "";
+    if (!habitId) return "Error: habit_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.name === "string") {
+      const trimmed = input.name.trim();
+      if (!trimmed) return "Error: name cannot be empty";
+      updates.name = trimmed;
+    }
+    if (typeof input.frequency === "string") updates.frequency = input.frequency;
+    if (Array.isArray(input.frequency_days)) {
+      updates.frequency_days = input.frequency_days.length ? input.frequency_days.map(Number) : null;
+    }
+    if (typeof input.target_count === "number") updates.target_count = input.target_count;
+    if (typeof input.icon === "string") updates.icon = input.icon;
+    if (typeof input.active === "boolean") updates.active = input.active;
+    if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
+
+    const { data, error } = await supabase
+      .from("habits")
+      .update(updates)
+      .eq("id", habitId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated habit "${data.name}".`;
+  }
+
+  if (name === "delete_habit") {
+    const habitId = typeof input.habit_id === "string" ? input.habit_id : "";
+    if (!habitId) return "Error: habit_id is required";
+
+    const { error } = await supabase
+      .from("habits")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", habitId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Moved to Trash.";
+  }
+
   if (name === "log_habit") {
     const habitId = typeof input.habit_id === "string" ? input.habit_id : "";
     if (!habitId) return "Error: habit_id is required";
@@ -1098,6 +1380,23 @@ export async function executeTool(
     return "Moved to Trash.";
   }
 
+  if (name === "list_routine_items") {
+    const routineId = typeof input.routine_id === "string" ? input.routine_id : "";
+    if (!routineId) return "Error: routine_id is required";
+
+    const { data, error } = await supabase
+      .from("routine_items")
+      .select("id, title, duration_minutes")
+      .eq("routine_id", routineId)
+      .order("sort_order");
+
+    if (error) return `Error: ${error.message}`;
+    if (!data.length) return "This routine has no steps yet.";
+    return data
+      .map((item) => `- ${item.id} ${item.title}${item.duration_minutes ? ` (${item.duration_minutes} min)` : ""}`)
+      .join("\n");
+  }
+
   if (name === "add_routine_item") {
     const routineId = typeof input.routine_id === "string" ? input.routine_id : "";
     const title = typeof input.title === "string" ? input.title.trim() : "";
@@ -1127,6 +1426,57 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return `Added "${data.title}" to the routine.`;
+  }
+
+  if (name === "update_routine_item") {
+    const routineItemId = typeof input.routine_item_id === "string" ? input.routine_item_id : "";
+    if (!routineItemId) return "Error: routine_item_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.title === "string") {
+      const trimmed = input.title.trim();
+      if (!trimmed) return "Error: title cannot be empty";
+      updates.title = trimmed;
+    }
+    if (typeof input.duration_minutes === "number") {
+      updates.duration_minutes = input.duration_minutes || null;
+    }
+    if (typeof input.sort_order === "number") updates.sort_order = input.sort_order;
+
+    const { data, error } = await supabase
+      .from("routine_items")
+      .update(updates)
+      .eq("id", routineItemId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated "${data.title}".`;
+  }
+
+  if (name === "delete_routine_item") {
+    const routineItemId = typeof input.routine_item_id === "string" ? input.routine_item_id : "";
+    if (!routineItemId) return "Error: routine_item_id is required";
+
+    const { error } = await supabase.from("routine_items").delete().eq("id", routineItemId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Removed from the routine.";
+  }
+
+  if (name === "list_checklist_items") {
+    const checklistId = typeof input.checklist_id === "string" ? input.checklist_id : "";
+    if (!checklistId) return "Error: checklist_id is required";
+
+    const { data, error } = await supabase
+      .from("checklist_items")
+      .select("id, title, checked")
+      .eq("checklist_id", checklistId)
+      .order("sort_order");
+
+    if (error) return `Error: ${error.message}`;
+    if (!data.length) return "This checklist has no items yet.";
+    return data.map((item) => `- ${item.id} [${item.checked ? "x" : " "}] ${item.title}`).join("\n");
   }
 
   if (name === "create_checklist") {
@@ -1215,6 +1565,52 @@ export async function executeTool(
     return `Added "${data.title}" to the checklist.`;
   }
 
+  if (name === "update_checklist_item") {
+    const checklistItemId = typeof input.checklist_item_id === "string" ? input.checklist_item_id : "";
+    if (!checklistItemId) return "Error: checklist_item_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.title === "string") {
+      const trimmed = input.title.trim();
+      if (!trimmed) return "Error: title cannot be empty";
+      updates.title = trimmed;
+    }
+    if (typeof input.checked === "boolean") updates.checked = input.checked;
+    if (typeof input.sort_order === "number") updates.sort_order = input.sort_order;
+
+    const { data, error } = await supabase
+      .from("checklist_items")
+      .update(updates)
+      .eq("id", checklistItemId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated "${data.title}".`;
+  }
+
+  if (name === "delete_checklist_item") {
+    const checklistItemId = typeof input.checklist_item_id === "string" ? input.checklist_item_id : "";
+    if (!checklistItemId) return "Error: checklist_item_id is required";
+
+    const { error } = await supabase.from("checklist_items").delete().eq("id", checklistItemId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Removed from the checklist.";
+  }
+
+  if (name === "list_knowledge_items") {
+    let query = supabase.from("knowledge_items").select("id, title, type").is("deleted_at", null);
+    if (typeof input.type === "string") query = query.eq("type", input.type);
+    if (typeof input.folder_id === "string") query = query.eq("folder_id", input.folder_id);
+    if (typeof input.tag === "string") query = query.contains("tags", [input.tag]);
+
+    const { data, error } = await query.order("created_at", { ascending: false });
+    if (error) return `Error: ${error.message}`;
+    if (!data.length) return "No matching knowledge library items.";
+    return data.map((item) => `- ${item.id} ${item.title} (${item.type})`).join("\n");
+  }
+
   if (name === "create_knowledge_item") {
     const title = typeof input.title === "string" ? input.title.trim() : "";
     if (!title) return "Error: title is required";
@@ -1235,6 +1631,46 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return `Saved "${data.title}" to the knowledge library.`;
+  }
+
+  if (name === "update_knowledge_item") {
+    const knowledgeItemId = typeof input.knowledge_item_id === "string" ? input.knowledge_item_id : "";
+    if (!knowledgeItemId) return "Error: knowledge_item_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.title === "string") {
+      const trimmed = input.title.trim();
+      if (!trimmed) return "Error: title cannot be empty";
+      updates.title = trimmed;
+    }
+    if (typeof input.content === "string") updates.content = input.content;
+    if (typeof input.url === "string") updates.url = input.url || null;
+    if (typeof input.type === "string") updates.type = input.type;
+    if (Array.isArray(input.tags)) updates.tags = input.tags.length ? input.tags : null;
+    if (typeof input.folder_id === "string") updates.folder_id = input.folder_id || null;
+
+    const { data, error } = await supabase
+      .from("knowledge_items")
+      .update(updates)
+      .eq("id", knowledgeItemId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated "${data.title}".`;
+  }
+
+  if (name === "delete_knowledge_item") {
+    const knowledgeItemId = typeof input.knowledge_item_id === "string" ? input.knowledge_item_id : "";
+    if (!knowledgeItemId) return "Error: knowledge_item_id is required";
+
+    const { error } = await supabase
+      .from("knowledge_items")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", knowledgeItemId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Moved to Trash.";
   }
 
   if (name === "create_knowledge_folder") {
@@ -1469,6 +1905,22 @@ export async function executeTool(
     const { error } = await supabase.from("recurring_task_templates").delete().eq("id", recurringTaskId);
     if (error) return `Error: ${error.message}`;
     return "Deleted recurring task template.";
+  }
+
+  if (name === "generate_recurring_tasks") {
+    const { data: templates, error } = await supabase
+      .from("recurring_task_templates")
+      .select("*")
+      .eq("active", true);
+    if (error) return `Error: ${error.message}`;
+
+    const results = await Promise.all(
+      (templates as StoredTemplate[]).map((template) => topUpTemplate(supabase, template)),
+    );
+    const generatedTotal = results.reduce((sum, r) => sum + r.generated, 0);
+    return generatedTotal > 0
+      ? `Generated ${generatedTotal} task(s) across ${templates.length} template(s).`
+      : "Everything's already topped up — nothing to generate.";
   }
 
   return `Error: unknown tool ${name}`;
