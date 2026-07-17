@@ -136,5 +136,6 @@ export function useTaskList() {
     handleDelete,
     createTask,
     handleConvertToProject,
+    loadAll,
   };
 }

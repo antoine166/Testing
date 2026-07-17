@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import SmartListHeader from "@/components/smart-list-header";
 import TaskRow, { type TaskPriority } from "@/components/task-row";
+import RecurrenceFields from "@/components/recurrence-fields";
+import { type RecurrenceType } from "@/lib/recurring-tasks/types";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
@@ -19,6 +21,7 @@ export default function InboxPage() {
     handleDelete,
     createTask,
     handleConvertToProject,
+    loadAll,
   } = useTaskList();
 
   const [captureMode, setCaptureMode] = useState<"task" | "project">("task");
@@ -33,6 +36,11 @@ export default function InboxPage() {
   const [image, setImage] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("weekly");
+  const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<number[]>([]);
+  const [recurrenceDayOfMonth, setRecurrenceDayOfMonth] = useState(1);
+  const [recurrenceIntervalDays, setRecurrenceIntervalDays] = useState(7);
 
   const inboxTasks = tasks.filter(
     (t) => !t.domain_id && !t.someday && t.status !== "done",
@@ -48,6 +56,11 @@ export default function InboxPage() {
     setDueDate("");
     setScheduledDate("");
     setImage(null);
+    setIsRecurring(false);
+    setRecurrenceType("weekly");
+    setRecurrenceDaysOfWeek([]);
+    setRecurrenceDayOfMonth(1);
+    setRecurrenceIntervalDays(7);
   }
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -55,6 +68,42 @@ export default function InboxPage() {
     if (!title.trim() || submitting) return;
     setSubmitting(true);
     setCreateError(null);
+
+    if (isRecurring) {
+      if (recurrenceType === "weekly" && recurrenceDaysOfWeek.length === 0) {
+        setSubmitting(false);
+        setCreateError("Pick at least one day for a weekly recurring task.");
+        return;
+      }
+
+      const res = await fetch("/api/recurring-task-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          link: link || undefined,
+          notes: notes || undefined,
+          domain_id: domainId || null,
+          project_id: projectId || null,
+          priority,
+          recurrence_type: recurrenceType,
+          days_of_week: recurrenceType === "weekly" ? recurrenceDaysOfWeek : undefined,
+          day_of_month: recurrenceType === "monthly" ? recurrenceDayOfMonth : undefined,
+          interval_days: recurrenceType === "interval" ? recurrenceIntervalDays : undefined,
+        }),
+      });
+
+      setSubmitting(false);
+      if (!res.ok) {
+        const body = await res.json();
+        setCreateError(body.error ?? "Failed to create recurring task");
+        return;
+      }
+
+      resetForm();
+      await loadAll();
+      return;
+    }
 
     if (captureMode === "project") {
       const res = await fetch("/api/projects", {
@@ -255,81 +304,85 @@ export default function InboxPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label
-              htmlFor="due_date"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Due date
-            </label>
-            <input
-              id="due_date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => {
-                const value = e.target.value;
-                setDueDate(value);
-                if (value && !scheduledDate) setScheduledDate(value);
-              }}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="scheduled_date"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Scheduled
-            </label>
-            <input
-              id="scheduled_date"
-              type="date"
-              value={scheduledDate}
-              onChange={(e) => {
-                const value = e.target.value;
-                setScheduledDate(value);
-                if (value && !dueDate) setDueDate(value);
-              }}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          {captureMode === "task" && (
-            <label
-              aria-label="Add image"
-              title={image ? image.name : "Add image"}
-              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <circle cx="9" cy="10.5" r="1.5" />
-                <path d="M3 16l5-4 4 3 4-3 5 4" />
-                <path d="M15 6h4M17 4v4" />
-              </svg>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-                className="hidden"
-              />
-            </label>
-          )}
-          {image && (
-            <button
-              type="button"
-              onClick={() => setImage(null)}
-              title="Remove image"
-              className="flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
-            >
-              {image.name} ✕
-            </button>
+          {!isRecurring && (
+            <>
+              <div>
+                <label
+                  htmlFor="due_date"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Due date
+                </label>
+                <input
+                  id="due_date"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setDueDate(value);
+                    if (value && !scheduledDate) setScheduledDate(value);
+                  }}
+                  className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="scheduled_date"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Scheduled
+                </label>
+                <input
+                  id="scheduled_date"
+                  type="date"
+                  value={scheduledDate}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setScheduledDate(value);
+                    if (value && !dueDate) setDueDate(value);
+                  }}
+                  className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </div>
+              {captureMode === "task" && (
+                <label
+                  aria-label="Add image"
+                  title={image ? image.name : "Add image"}
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <circle cx="9" cy="10.5" r="1.5" />
+                    <path d="M3 16l5-4 4 3 4-3 5 4" />
+                    <path d="M15 6h4M17 4v4" />
+                  </svg>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                    className="hidden"
+                  />
+                </label>
+              )}
+              {image && (
+                <button
+                  type="button"
+                  onClick={() => setImage(null)}
+                  title="Remove image"
+                  className="flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+                >
+                  {image.name} ✕
+                </button>
+              )}
+            </>
           )}
           <button
             type="submit"
@@ -339,6 +392,34 @@ export default function InboxPage() {
             Add
           </button>
         </div>
+        {captureMode === "task" && (
+          <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+              <input
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+              />
+              Make this recurring
+            </label>
+            {isRecurring && (
+              <RecurrenceFields
+                recurrenceType={recurrenceType}
+                onRecurrenceTypeChange={setRecurrenceType}
+                daysOfWeek={recurrenceDaysOfWeek}
+                onToggleDay={(day) =>
+                  setRecurrenceDaysOfWeek((prev) =>
+                    prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+                  )
+                }
+                dayOfMonth={recurrenceDayOfMonth}
+                onDayOfMonthChange={setRecurrenceDayOfMonth}
+                intervalDays={recurrenceIntervalDays}
+                onIntervalDaysChange={setRecurrenceIntervalDays}
+              />
+            )}
+          </div>
+        )}
       </form>
 
       {loading ? (
