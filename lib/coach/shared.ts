@@ -1,6 +1,6 @@
 import type { ContentBlockParam, Tool } from "@anthropic-ai/sdk/resources/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { TRASH_CONFIG, type TrashType } from "@/lib/trash";
+import { TRASH_CONFIG, TRASH_TYPES, type TrashType } from "@/lib/trash";
 import { topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
 
 // Domain restore stays app-only alongside domain deletion.
@@ -609,6 +609,15 @@ export const TOOLS: Tool[] = [
         purpose: { type: "string" },
       },
     },
+  },
+  {
+    name: "list_trash",
+    description:
+      "List items currently in Trash — soft-deleted and recoverable for 30 days. Call this when " +
+      "Antoine wants to restore something from an earlier session (if it was deleted earlier in " +
+      "this conversation, you already have its id from that tool call). Trashed domains appear for " +
+      "reference, but restoring one stays app-only.",
+    input_schema: { type: "object", properties: {} },
   },
   {
     name: "restore_from_trash",
@@ -1781,6 +1790,34 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return "Updated horizons.";
+  }
+
+  if (name === "list_trash") {
+    const results = await Promise.all(
+      TRASH_TYPES.map((type) => {
+        const { table, nameField } = TRASH_CONFIG[type];
+        return supabase.from(table).select(`id, ${nameField}, deleted_at`).not("deleted_at", "is", null);
+      }),
+    );
+
+    const items: { id: string; type: TrashType; name: string; deleted_at: string }[] = [];
+    results.forEach((res, i) => {
+      const type = TRASH_TYPES[i];
+      const { nameField } = TRASH_CONFIG[type];
+      if (res.error || !res.data) return;
+      for (const row of res.data as unknown as Record<string, unknown>[]) {
+        items.push({
+          id: row.id as string,
+          type,
+          name: (row[nameField] as string) || "(untitled)",
+          deleted_at: row.deleted_at as string,
+        });
+      }
+    });
+    items.sort((a, b) => b.deleted_at.localeCompare(a.deleted_at));
+
+    if (!items.length) return "Trash is empty.";
+    return items.map((item) => `- ${item.id} [${item.type}] ${item.name}`).join("\n");
   }
 
   if (name === "restore_from_trash") {
