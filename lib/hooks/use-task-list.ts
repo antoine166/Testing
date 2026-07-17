@@ -82,9 +82,14 @@ export function useTaskList() {
     await handleUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Move this task to trash? You can restore it within 30 days.")) return;
-    const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+  async function handleDelete(id: string, scope?: "following") {
+    const message =
+      scope === "following"
+        ? "Move this and all future occurrences to trash, and stop this recurring task? You can restore them within 30 days."
+        : "Move this task to trash? You can restore it within 30 days.";
+    if (!confirm(message)) return;
+    const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
+    const res = await fetch(url, { method: "DELETE" });
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to delete task");

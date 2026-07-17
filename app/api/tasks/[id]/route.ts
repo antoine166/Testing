@@ -113,12 +113,51 @@ export async function PUT(request: Request, { params }: RouteParams) {
   return NextResponse.json(data);
 }
 
-export async function DELETE(_request: Request, { params }: RouteParams) {
+export async function DELETE(request: Request, { params }: RouteParams) {
   const { id } = await params;
   const { supabase, user } = await requireUser();
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const scope = new URL(request.url).searchParams.get("scope");
+
+  if (scope === "following") {
+    const { data: task, error: taskError } = await supabase
+      .from("tasks")
+      .select("recurring_template_id, scheduled_date")
+      .eq("id", id)
+      .single();
+
+    if (taskError || !task?.recurring_template_id) {
+      return NextResponse.json(
+        { error: "Not part of a recurring series" },
+        { status: 400 },
+      );
+    }
+
+    const { error: deleteError } = await supabase
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("recurring_template_id", task.recurring_template_id)
+      .is("deleted_at", null)
+      .neq("status", "done")
+      .gte("scheduled_date", task.scheduled_date ?? "0000-01-01");
+
+    if (deleteError) {
+      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    }
+
+    // Otherwise the next top-up run just sees a deficit against the
+    // template's horizon and regenerates replacements for what was just
+    // deleted, silently undoing this.
+    await supabase
+      .from("recurring_task_templates")
+      .update({ active: false })
+      .eq("id", task.recurring_template_id);
+
+    return new NextResponse(null, { status: 204 });
   }
 
   const { error } = await supabase
