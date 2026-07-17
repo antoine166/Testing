@@ -22,32 +22,39 @@ export function useRealtimeRefresh(tables: string[], onChange: () => void) {
 
     const supabase = createClient();
     let timeout: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
     const scheduleRefresh = () => {
       if (timeout) clearTimeout(timeout);
       timeout = setTimeout(() => onChangeRef.current(), 400);
     };
 
-    let channel = supabase.channel(
-      `db-changes-${tablesKey}-${Math.random().toString(36).slice(2)}`,
-    );
-    for (const table of tablesKey.split(",")) {
-      channel = channel.on(
-        "postgres_changes",
-        { event: "*", schema: "public", table },
-        (payload) => {
-          console.log("[realtime] change received", table, payload.eventType);
-          scheduleRefresh();
-        },
+    // supabase-js only re-sends the JWT to Realtime on TOKEN_REFRESHED/SIGNED_IN,
+    // not on INITIAL_SESSION (an already-logged-in tab restoring its session on
+    // load) — so without this, Realtime authenticates as anon and RLS silently
+    // drops every postgres_changes event.
+    supabase.realtime.setAuth().then(() => {
+      if (cancelled) return;
+
+      let ch = supabase.channel(
+        `db-changes-${tablesKey}-${Math.random().toString(36).slice(2)}`,
       );
-    }
-    channel.subscribe((status, err) => {
-      console.log("[realtime] subscribe status", tablesKey, status, err ?? "");
+      for (const table of tablesKey.split(",")) {
+        ch = ch.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table },
+          () => scheduleRefresh(),
+        );
+      }
+      channel = ch;
+      ch.subscribe();
     });
 
     return () => {
+      cancelled = true;
       if (timeout) clearTimeout(timeout);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [tablesKey]);
 }
