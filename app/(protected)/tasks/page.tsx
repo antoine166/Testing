@@ -10,13 +10,12 @@ import TaskRow, {
   type TaskPriority,
 } from "@/components/task-row";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import RecurrenceFields from "@/components/recurrence-fields";
+import { DAY_LABELS, type RecurrenceType } from "@/lib/recurring-tasks/types";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 type ProjectWithDomain = TaskProject & { domain_id: string | null };
-
-type RecurrenceType = "weekly" | "monthly" | "interval";
 
 type RecurringTemplate = {
   id: string;
@@ -617,75 +616,20 @@ export default function TasksPage() {
           </label>
 
           {isRecurring && (
-            <div className="mt-3 space-y-3">
-              <div className="flex flex-wrap gap-3">
-                <select
-                  value={recurrenceType}
-                  onChange={(e) => setRecurrenceType(e.target.value as RecurrenceType)}
-                  className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="interval">Every N days</option>
-                </select>
-
-                {recurrenceType === "weekly" && (
-                  <div className="flex flex-wrap gap-2">
-                    {DAY_LABELS.map((label, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() =>
-                          setRecurrenceDaysOfWeek((prev) =>
-                            prev.includes(i) ? prev.filter((d) => d !== i) : [...prev, i],
-                          )
-                        }
-                        className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                          recurrenceDaysOfWeek.includes(i)
-                            ? "border-zinc-950 bg-zinc-950 text-white dark:border-zinc-50 dark:bg-zinc-50 dark:text-zinc-950"
-                            : "border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {recurrenceType === "monthly" && (
-                  <label className="flex items-center gap-2 text-sm text-zinc-500">
-                    Day of month
-                    <input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={recurrenceDayOfMonth}
-                      onChange={(e) => setRecurrenceDayOfMonth(Number(e.target.value))}
-                      className="w-20 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                    />
-                  </label>
-                )}
-
-                {recurrenceType === "interval" && (
-                  <label className="flex items-center gap-2 text-sm text-zinc-500">
-                    Every
-                    <input
-                      type="number"
-                      min={1}
-                      value={recurrenceIntervalDays}
-                      onChange={(e) => setRecurrenceIntervalDays(Number(e.target.value))}
-                      className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                    />
-                    days
-                  </label>
-                )}
-              </div>
-              {recurrenceType === "weekly" && recurrenceDaysOfWeek.length === 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Pick at least one day.
-                </p>
-              )}
-            </div>
+            <RecurrenceFields
+              recurrenceType={recurrenceType}
+              onRecurrenceTypeChange={setRecurrenceType}
+              daysOfWeek={recurrenceDaysOfWeek}
+              onToggleDay={(day) =>
+                setRecurrenceDaysOfWeek((prev) =>
+                  prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+                )
+              }
+              dayOfMonth={recurrenceDayOfMonth}
+              onDayOfMonthChange={setRecurrenceDayOfMonth}
+              intervalDays={recurrenceIntervalDays}
+              onIntervalDaysChange={setRecurrenceIntervalDays}
+            />
           )}
         </div>
       </form>
