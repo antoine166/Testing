@@ -497,11 +497,49 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     "delete_task",
     {
       title: "Delete task",
-      description: "Move a task to trash. Recoverable for 30 days.",
-      inputSchema: { id: z.string().uuid() },
+      description:
+        "Move a task to trash. Recoverable for 30 days. If it's a generated occurrence of a " +
+        "recurring task, pass scope: \"following\" to also trash every other not-yet-done " +
+        "occurrence of the same series scheduled on or after this one, and pause the series so " +
+        "nothing regenerates to replace them — otherwise only this single occurrence is deleted " +
+        "and the series continues.",
+      inputSchema: {
+        id: z.string().uuid(),
+        scope: z.enum(["single", "following"]).optional().describe("Defaults to single."),
+      },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
-    async ({ id }) => {
+    async ({ id, scope }) => {
+      if (scope === "following") {
+        const { data: task, error: taskError } = await admin
+          .from("tasks")
+          .select("recurring_template_id, scheduled_date")
+          .eq("id", id)
+          .eq("user_id", userId)
+          .single();
+        if (taskError || !task?.recurring_template_id) {
+          return fail("Not part of a recurring series");
+        }
+
+        const { error: deleteError } = await admin
+          .from("tasks")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("recurring_template_id", task.recurring_template_id)
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .neq("status", "done")
+          .gte("scheduled_date", task.scheduled_date ?? "0000-01-01");
+        if (deleteError) return fail(deleteError.message);
+
+        await admin
+          .from("recurring_task_templates")
+          .update({ active: false })
+          .eq("id", task.recurring_template_id)
+          .eq("user_id", userId);
+
+        return ok({ deleted_series_from: id });
+      }
+
       const { error } = await admin
         .from("tasks")
         .update({ deleted_at: new Date().toISOString() })

@@ -21,6 +21,7 @@ export type Task = {
   waiting_for: boolean;
   waiting_since: string | null;
   completed_at?: string | null;
+  recurring_template_id?: string | null;
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
@@ -225,7 +226,7 @@ export default function TaskRow({
   projects: TaskProject[];
   onToggleDone: (task: Task) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, scope?: "following") => void;
   onConvertToProject?: (id: string) => void;
   /** Shows a selection checkbox for bulk actions (e.g. filing multiple Inbox tasks at once). */
   selectable?: boolean;
@@ -233,6 +234,7 @@ export default function TaskRow({
   onSelectChange?: (checked: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const attachmentRef = useRef<AttachmentStripHandle>(null);
   const [title, setTitle] = useState(task.title);
   const [link, setLink] = useState(task.link ?? "");
@@ -524,71 +526,106 @@ export default function TaskRow({
           <AttachmentStrip ref={attachmentRef} taskId={task.id} hideAddButton />
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          onClick={() => attachmentRef.current?.openPicker()}
-          aria-label="Add image"
-          title="Add image"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 sm:h-7 sm:w-7 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+      {confirmingDelete ? (
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <p className="text-xs text-zinc-500">Delete just this one, or this and future ones?</p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingDelete(false);
+                onDelete(task.id);
+              }}
+              className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
+            >
+              Just this one
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingDelete(false);
+                onDelete(task.id, "following");
+              }}
+              className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+            >
+              This + future
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => attachmentRef.current?.openPicker()}
+            aria-label="Add image"
+            title="Add image"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 sm:h-7 sm:w-7 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
           >
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <circle cx="9" cy="10.5" r="1.5" />
-            <path d="M3 16l5-4 4 3 4-3 5 4" />
-            <path d="M15 6h4M17 4v4" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          onClick={startEdit}
-          aria-label="Edit task"
-          title="Edit task"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 sm:h-7 sm:w-7 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <circle cx="9" cy="10.5" r="1.5" />
+              <path d="M3 16l5-4 4 3 4-3 5 4" />
+              <path d="M15 6h4M17 4v4" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={startEdit}
+            aria-label="Edit task"
+            title="Edit task"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 sm:h-7 sm:w-7 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
           >
-            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          onClick={() => onDelete(task.id)}
-          aria-label="Delete task"
-          title="Delete task"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 sm:h-7 sm:w-7 dark:hover:bg-red-950 dark:hover:text-red-400"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => (task.recurring_template_id ? setConfirmingDelete(true) : onDelete(task.id))}
+            aria-label="Delete task"
+            title="Delete task"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 sm:h-7 sm:w-7 dark:hover:bg-red-950 dark:hover:text-red-400"
           >
-            <path d="M3 6h18" />
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            <path d="M10 11v6M14 11v6" />
-          </svg>
-        </button>
-      </div>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18" />
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+            </svg>
+          </button>
+        </div>
+      )}
     </li>
   );
 }
