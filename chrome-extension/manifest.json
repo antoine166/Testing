@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Life OS Clipper",
-  "version": "1.0.0",
-  "description": "Save the current page (or a selection) to your Life OS Knowledge Library.",
+  "version": "1.1.0",
+  "description": "Save the current page — with full article text and a screenshot — to your Life OS Inbox.",
   "action": {
     "default_popup": "popup.html"
   },
