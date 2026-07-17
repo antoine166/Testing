@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { todayLocal } from "@/lib/date";
-import { isAtRisk, isHabitDueToday, isPendingToday } from "@/lib/habits/streaks";
+import { isAtRisk, isPendingToday } from "@/lib/habits/streaks";
 import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
 import LevelPicker from "@/components/level-picker";
 import HabitRow, { type Habit, type HabitLogRow } from "@/components/habit-row";
@@ -419,16 +419,16 @@ export default function TodayDashboard() {
   const dueRoutines = routines.filter(
     (r) => r.active && (r.time_of_day === currentTimeOfDay() || r.time_of_day === "custom"),
   );
+  // Today page only ever shows habits still needing attention — done for
+  // today (or, for times_per_week habits, the week's target already hit)
+  // drops them from here entirely, though they stay visible on /habits.
   const dueHabits = habits
-    .filter((h) => h.active && isHabitDueToday(h, today))
+    .filter((h) => h.active && isPendingToday(h, logs.filter((l) => l.habit_id === h.id), today))
     .sort((a, b) => {
-      // Not-done-yet-today habits rise above ones already checked off, and
-      // at-risk ones ("don't break it twice") surface first within that.
-      const aLogs = logs.filter((l) => l.habit_id === a.id);
-      const bLogs = logs.filter((l) => l.habit_id === b.id);
-      const rank = (h: Habit, hLogs: HabitLogRow[]) =>
-        !isPendingToday(h, hLogs, today) ? 2 : isAtRisk(h, hLogs, today) ? 0 : 1;
-      return rank(a, aLogs) - rank(b, bLogs);
+      // At-risk ones ("don't break it twice") surface first.
+      const aAtRisk = isAtRisk(a, logs.filter((l) => l.habit_id === a.id), today);
+      const bAtRisk = isAtRisk(b, logs.filter((l) => l.habit_id === b.id), today);
+      return (bAtRisk ? 1 : 0) - (aAtRisk ? 1 : 0);
     });
   const atRiskCount = dueHabits.filter((h) =>
     isAtRisk(h, logs.filter((l) => l.habit_id === h.id), today),
@@ -500,6 +500,28 @@ export default function TodayDashboard() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {overdueTasks.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-semibold text-red-600 dark:text-red-400">
+            Overdue ({overdueTasks.length})
+          </h2>
+          <ul className="space-y-2">
+            {overdueTasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                domains={domains}
+                projects={projects}
+                onToggleDone={toggleTask}
+                onUpdate={handleUpdateTask}
+                onDelete={handleDeleteTask}
+                onConvertToProject={handleConvertTaskToProject}
+              />
+            ))}
+          </ul>
         </div>
       )}
 
@@ -783,28 +805,6 @@ export default function TodayDashboard() {
           </ul>
         )}
       </details>
-
-      {overdueTasks.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-sm font-semibold text-red-600 dark:text-red-400">
-            Overdue ({overdueTasks.length})
-          </h2>
-          <ul className="space-y-2">
-            {overdueTasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                domains={domains}
-                projects={projects}
-                onToggleDone={toggleTask}
-                onUpdate={handleUpdateTask}
-                onDelete={handleDeleteTask}
-                onConvertToProject={handleConvertTaskToProject}
-              />
-            ))}
-          </ul>
-        </div>
-      )}
 
       <div className="pt-4 text-center">
         <Link
