@@ -56,6 +56,7 @@ export async function POST(request: Request) {
       waiting_since: body.waiting_for === true ? new Date().toISOString().slice(0, 10) : undefined,
       estimated_minutes: typeof body.estimated_minutes === "number" ? body.estimated_minutes : undefined,
       energy_level: typeof body.energy_level === "string" ? body.energy_level : undefined,
+      revisit_date: body.someday === true && typeof body.revisit_date === "string" ? body.revisit_date : undefined,
     })
     .select()
     .single();
