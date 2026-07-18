@@ -1,7 +1,9 @@
 "use client";
 
 import SmartListHeader from "@/components/smart-list-header";
-import TaskRow, { type Task } from "@/components/task-row";
+import { type Task } from "@/components/task-row";
+import { renderGroupedEntries } from "@/components/recurring-task-group";
+import { groupRecurringTasks, type GroupedEntry } from "@/lib/recurring-tasks/group";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { todayLocal } from "@/lib/date";
 
@@ -17,6 +19,11 @@ function formatDateHeader(dateStr: string, today: string): string {
 
   const weekday = parseLocalDate(dateStr).toLocaleDateString(undefined, { weekday: "long" });
   return dateStr === tomorrowStr ? `Tomorrow` : weekday;
+}
+
+/** A group's "date" for header-bucketing purposes is its earliest occurrence's date (groupRecurringTasks always sorts a group's own tasks so index 0 is earliest). */
+function entryDate(entry: GroupedEntry<Task>): string {
+  return entry.type === "single" ? entry.task.scheduled_date! : entry.tasks[0].scheduled_date!;
 }
 
 export default function UpcomingPage() {
@@ -37,11 +44,16 @@ export default function UpcomingPage() {
     (t) => t.scheduled_date && t.scheduled_date > today && t.status !== "done",
   );
 
-  const byDate = new Map<string, Task[]>();
-  for (const task of upcomingTasks) {
-    const date = task.scheduled_date!;
+  // Grouped once across the whole set (not per-date) so a recurring
+  // series' later occurrences collapse into its first one's date header
+  // instead of each getting their own separate header entry.
+  const groupedEntries = groupRecurringTasks(upcomingTasks);
+
+  const byDate = new Map<string, GroupedEntry<Task>[]>();
+  for (const entry of groupedEntries) {
+    const date = entryDate(entry);
     if (!byDate.has(date)) byDate.set(date, []);
-    byDate.get(date)!.push(task);
+    byDate.get(date)!.push(entry);
   }
   const sortedDates = [...byDate.keys()].sort();
 
@@ -70,18 +82,14 @@ export default function UpcomingPage() {
                 <span className="text-sm text-zinc-500">{formatDateHeader(date, today)}</span>
               </div>
               <ul className="space-y-2">
-                {byDate.get(date)!.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    domains={domains}
-                    projects={projects}
-                    onToggleDone={toggleDone}
-                    onUpdate={handleUpdate}
-                    onDelete={handleDelete}
-                    onConvertToProject={handleConvertToProject}
-                  />
-                ))}
+                {renderGroupedEntries(byDate.get(date)!, {
+                  domains,
+                  projects,
+                  onToggleDone: toggleDone,
+                  onUpdate: handleUpdate,
+                  onDelete: handleDelete,
+                  onConvertToProject: handleConvertToProject,
+                })}
               </ul>
             </div>
           ))}

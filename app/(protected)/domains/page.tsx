@@ -3,7 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
-import TaskRow, { type Task } from "@/components/task-row";
+import { type Task } from "@/components/task-row";
+import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type Domain = {
@@ -443,18 +444,14 @@ export default function DomainsPage() {
                             All tasks ({domainTasks.length})
                           </summary>
                           <ul className="mt-1.5 space-y-1.5 pl-4">
-                            {domainTasks.map((task) => (
-                              <TaskRow
-                                key={task.id}
-                                task={task}
-                                domains={domains}
-                                projects={projects}
-                                onToggleDone={toggleTaskDone}
-                                onUpdate={handleTaskUpdate}
-                                onDelete={handleTaskDelete}
-                                onConvertToProject={handleTaskConvertToProject}
-                              />
-                            ))}
+                            {renderGroupedTaskRows(domainTasks, {
+                              domains,
+                              projects,
+                              onToggleDone: toggleTaskDone,
+                              onUpdate: handleTaskUpdate,
+                              onDelete: handleTaskDelete,
+                              onConvertToProject: handleTaskConvertToProject,
+                            })}
                           </ul>
                         </details>
                       )}
@@ -480,18 +477,14 @@ export default function DomainsPage() {
                               <p className="mt-1 pl-4 text-xs text-zinc-500">No open tasks.</p>
                             ) : (
                               <ul className="mt-1.5 space-y-1.5 pl-4">
-                                {projectTasks.map((task) => (
-                                  <TaskRow
-                                    key={task.id}
-                                    task={task}
-                                    domains={domains}
-                                    projects={projects}
-                                    onToggleDone={toggleTaskDone}
-                                    onUpdate={handleTaskUpdate}
-                                    onDelete={handleTaskDelete}
-                                    onConvertToProject={handleTaskConvertToProject}
-                                  />
-                                ))}
+                                {renderGroupedTaskRows(projectTasks, {
+                                  domains,
+                                  projects,
+                                  onToggleDone: toggleTaskDone,
+                                  onUpdate: handleTaskUpdate,
+                                  onDelete: handleTaskDelete,
+                                  onConvertToProject: handleTaskConvertToProject,
+                                })}
                               </ul>
                             )}
                           </details>
