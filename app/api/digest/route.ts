@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { constantTimeEqual } from "@/lib/mcp/oauth";
-import { todayLocal } from "@/lib/date";
+import { todayLocal, daysSince } from "@/lib/date";
 import { isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
 
 // Plain token-secured endpoint for the scheduled daily-digest routine to
@@ -63,6 +63,10 @@ export async function GET(request: Request) {
   const tasks = tasksRes.data;
   const scheduledToday = tasks.filter((t) => t.scheduled_date === today);
   const overdue = tasks.filter((t) => t.scheduled_date && t.scheduled_date < today);
+  // GTD's Waiting For is only useful if it prompts an actual follow-up, not
+  // just a passive elapsed-days counter in the UI — surface anything
+  // stalled a week or more so the daily nudge can actually ask about it.
+  const staleWaitingFor = tasks.filter((t) => t.waiting_for && t.waiting_since && daysSince(t.waiting_since) >= 7);
 
   return NextResponse.json({
     date: today,
@@ -70,5 +74,10 @@ export async function GET(request: Request) {
     habits_due_today: dueHabits,
     tasks_scheduled_today: scheduledToday.map((t) => ({ title: t.title, priority: t.priority })),
     overdue_tasks: overdue.map((t) => ({ title: t.title, scheduled_date: t.scheduled_date })),
+    stale_waiting_for: staleWaitingFor.map((t) => ({
+      title: t.title,
+      waiting_since: t.waiting_since,
+      days_waiting: daysSince(t.waiting_since),
+    })),
   });
 }

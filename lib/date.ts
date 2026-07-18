@@ -4,6 +4,16 @@ export function todayLocal(): string {
   return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
 }
 
+/** Whole days between `date` (YYYY-MM-DD) and today, local time. */
+export function daysSince(date: string): number {
+  const [year, month, day] = date.split("-").map(Number);
+  const then = new Date(year, month - 1, day);
+  const now = new Date();
+  const nowLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const ms = nowLocal.getTime() - then.getTime();
+  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
+}
+
 /** Last N local calendar dates (YYYY-MM-DD), oldest first, including today. */
 export function lastNDays(n: number): string[] {
   const today = todayLocal();
