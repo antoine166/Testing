@@ -122,7 +122,7 @@ export default function SomedayPage() {
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
-      <SmartListHeader icon="📦" color="#d97706" title="Someday" count={somedayTasks.length} />
+      <SmartListHeader icon="📦" color="#d97706" title="Someday / Tickler" count={somedayTasks.length} />
 
       {error && (
         <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import SmartListHeader from "@/components/smart-list-header";
 import TaskRow, { type TaskPriority } from "@/components/task-row";
 import RecurrenceFields from "@/components/recurrence-fields";
+import WaitingForFields from "@/components/waiting-for-fields";
 import { type RecurrenceType } from "@/lib/recurring-tasks/types";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
@@ -34,6 +35,8 @@ export default function InboxPage() {
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [image, setImage] = useState<File | null>(null);
+  const [waitingFor, setWaitingFor] = useState(false);
+  const [followUpDate, setFollowUpDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -56,6 +59,8 @@ export default function InboxPage() {
     setDueDate("");
     setScheduledDate("");
     setImage(null);
+    setWaitingFor(false);
+    setFollowUpDate("");
     setIsRecurring(false);
     setRecurrenceType("weekly");
     setRecurrenceDaysOfWeek([]);
@@ -138,6 +143,8 @@ export default function InboxPage() {
       priority,
       due_date: dueDate || undefined,
       scheduled_date: scheduledDate || undefined,
+      waiting_for: waitingFor || undefined,
+      follow_up_date: waitingFor && followUpDate ? followUpDate : undefined,
     });
     if (!created) {
       setSubmitting(false);
@@ -344,6 +351,14 @@ export default function InboxPage() {
                   className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
               </div>
+              {captureMode === "task" && (
+                <WaitingForFields
+                  waitingFor={waitingFor}
+                  onWaitingForChange={setWaitingFor}
+                  followUpDate={followUpDate}
+                  onFollowUpDateChange={setFollowUpDate}
+                />
+              )}
               {captureMode === "task" && (
                 <label
                   aria-label="Add image"
