@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import Link from "next/link";
 import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
 import { todayLocal } from "@/lib/date";
 
@@ -334,6 +335,14 @@ export default function TaskRow({
               </button>
             </div>
           </div>
+          {task.recurring_template_id && (
+            <Link
+              href={`/tasks?editTemplate=${task.recurring_template_id}`}
+              className="block text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+            >
+              ↻ Edit the recurring pattern for this series →
+            </Link>
+          )}
           <input
             type="url"
             value={link}

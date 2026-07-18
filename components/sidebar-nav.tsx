@@ -20,7 +20,7 @@ const SMART_LISTS = [
   { href: "/do-now", label: "Do Now", icon: "🎯", iconBg: "#22c55e" },
   { href: "/upcoming", label: "Upcoming", icon: "📅", iconBg: "#ef4444" },
   { href: "/anytime", label: "Anytime", icon: "📚", iconBg: "#14b8a6" },
-  { href: "/someday", label: "Someday", icon: "📦", iconBg: "#d97706" },
+  { href: "/someday", label: "Someday / Tickler", icon: "📦", iconBg: "#d97706" },
   { href: "/logbook", label: "Logbook", icon: "✓", iconBg: "#22c55e" },
   { href: "/trash", label: "Trash", icon: "🗑️", iconBg: "#71717a" },
   { href: "/waiting-for", label: "Waiting For", icon: "⏳", iconBg: "#f97316" },

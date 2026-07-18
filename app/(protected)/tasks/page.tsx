@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import TaskRow, {
@@ -11,6 +11,7 @@ import TaskRow, {
 } from "@/components/task-row";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import RecurrenceFields from "@/components/recurrence-fields";
+import WaitingForFields from "@/components/waiting-for-fields";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import { describeRecurrence, type RecurrenceType } from "@/lib/recurring-tasks/types";
 
@@ -39,6 +40,9 @@ export default function TasksPage() {
   const domainFilter = searchParams.get("domain");
   const projectFilter = searchParams.get("project");
   const searchQuery = searchParams.get("q");
+  const editTemplateId = searchParams.get("editTemplate");
+  const recurringDetailsRef = useRef<HTMLDetailsElement>(null);
+  const openedEditTemplateRef = useRef(false);
 
   const [domains, setDomains] = useState<TaskDomain[]>([]);
   const [projects, setProjects] = useState<ProjectWithDomain[]>([]);
@@ -55,6 +59,8 @@ export default function TasksPage() {
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [image, setImage] = useState<File | null>(null);
+  const [waitingFor, setWaitingFor] = useState(false);
+  const [followUpDate, setFollowUpDate] = useState("");
 
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("weekly");
@@ -164,6 +170,21 @@ export default function TasksPage() {
   useRealtimeRefresh(["tasks", "domains", "projects"], () => loadAll());
   useRealtimeRefresh(["recurring_task_templates"], () => loadRecurringTemplates());
 
+  // Deep-link from a recurring task's own edit form ("Edit the recurring
+  // pattern for this series") — auto-opens the otherwise-collapsed
+  // "Recurring tasks" list and jumps straight into editing the right one,
+  // instead of leaving the user to find it themselves.
+  useEffect(() => {
+    if (!editTemplateId || openedEditTemplateRef.current) return;
+    const template = recurringTemplates.find((t) => t.id === editTemplateId);
+    if (!template) return;
+
+    openedEditTemplateRef.current = true;
+    if (recurringDetailsRef.current) recurringDetailsRef.current.open = true;
+    startEditTemplate(template);
+    recurringDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [editTemplateId, recurringTemplates]);
+
   function resetCreateForm() {
     setTitle("");
     setLink("");
@@ -174,6 +195,8 @@ export default function TasksPage() {
     setDueDate("");
     setScheduledDate("");
     setImage(null);
+    setWaitingFor(false);
+    setFollowUpDate("");
     setIsRecurring(false);
     setRecurrenceType("weekly");
     setRecurrenceDaysOfWeek([]);
@@ -232,6 +255,8 @@ export default function TasksPage() {
         priority,
         due_date: dueDate || undefined,
         scheduled_date: scheduledDate || undefined,
+        waiting_for: waitingFor || undefined,
+        follow_up_date: waitingFor && followUpDate ? followUpDate : undefined,
       }),
     });
 
@@ -676,6 +701,12 @@ export default function TasksPage() {
                   className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
               </div>
+              <WaitingForFields
+                waitingFor={waitingFor}
+                onWaitingForChange={setWaitingFor}
+                followUpDate={followUpDate}
+                onFollowUpDateChange={setFollowUpDate}
+              />
               <label
                 aria-label="Add image"
                 title={image ? image.name : "Add image"}
@@ -752,7 +783,7 @@ export default function TasksPage() {
       </form>
 
       {recurringTemplates.length > 0 && (
-        <details className="mb-8 group">
+        <details ref={recurringDetailsRef} className="mb-8 group">
           <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
             <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
             Recurring tasks ({recurringTemplates.length})

@@ -16,6 +16,7 @@ import TaskRow, {
 import { type Routine } from "@/components/routine-card";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import RecurrenceFields from "@/components/recurrence-fields";
+import WaitingForFields from "@/components/waiting-for-fields";
 import { type RecurrenceType } from "@/lib/recurring-tasks/types";
 
 type Checkin = {
@@ -114,6 +115,8 @@ export default function TodayDashboard() {
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskScheduledDate, setNewTaskScheduledDate] = useState(today);
   const [newTaskImage, setNewTaskImage] = useState<File | null>(null);
+  const [newTaskWaitingFor, setNewTaskWaitingFor] = useState(false);
+  const [newTaskFollowUpDate, setNewTaskFollowUpDate] = useState("");
   const [addingTask, setAddingTask] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("weekly");
@@ -356,6 +359,8 @@ export default function TodayDashboard() {
     setNewTaskDueDate("");
     setNewTaskScheduledDate(today);
     setNewTaskImage(null);
+    setNewTaskWaitingFor(false);
+    setNewTaskFollowUpDate("");
     setIsRecurring(false);
     setRecurrenceType("weekly");
     setRecurrenceDaysOfWeek([]);
@@ -441,6 +446,8 @@ export default function TodayDashboard() {
         priority: newTaskPriority,
         due_date: newTaskDueDate || undefined,
         scheduled_date: newTaskScheduledDate || undefined,
+        waiting_for: newTaskWaitingFor || undefined,
+        follow_up_date: newTaskWaitingFor && newTaskFollowUpDate ? newTaskFollowUpDate : undefined,
       }),
     });
 
@@ -792,6 +799,14 @@ export default function TodayDashboard() {
                     className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
                 </div>
+                {captureMode === "task" && (
+                  <WaitingForFields
+                    waitingFor={newTaskWaitingFor}
+                    onWaitingForChange={setNewTaskWaitingFor}
+                    followUpDate={newTaskFollowUpDate}
+                    onFollowUpDateChange={setNewTaskFollowUpDate}
+                  />
+                )}
                 {captureMode === "task" && (
                   <label
                     aria-label="Add image"
