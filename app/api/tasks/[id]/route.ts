@@ -160,10 +160,14 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     // Otherwise the next top-up run just sees a deficit against the
     // template's horizon and regenerates replacements for what was just
-    // deleted, silently undoing this.
+    // deleted, silently undoing this. Also reset last_generated_date: it
+    // was left pointing at the (now-deleted) last occurrence, so without
+    // this, resuming later would resume generation *after* that stale
+    // future date instead of from today — a silent gap of up to
+    // horizon_count cycles before anything reappears.
     await supabase
       .from("recurring_task_templates")
-      .update({ active: false })
+      .update({ active: false, last_generated_date: null })
       .eq("id", task.recurring_template_id);
 
     return new NextResponse(null, { status: 204 });
