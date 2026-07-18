@@ -38,7 +38,7 @@ type Checkin = {
   focus_level: number;
 };
 
-const WINDOW_DAYS = 28;
+const WINDOW_OPTIONS = [28, 90, 365] as const;
 
 export default function AnalyticsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -48,13 +48,14 @@ export default function AnalyticsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [windowDays, setWindowDays] = useState<(typeof WINDOW_OPTIONS)[number]>(28);
 
   function domainColor(habit: Habit): string {
     return domains.find((d) => d.id === habit.domain_id)?.color ?? "#d4d4d8";
   }
 
   const today = todayLocal();
-  const days = lastNDays(WINDOW_DAYS);
+  const days = lastNDays(windowDays);
   const last7 = lastNDays(7);
 
   async function loadAll(signal?: AbortSignal) {
@@ -227,9 +228,22 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-        Habit consistency (last {WINDOW_DAYS} days)
-      </h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          Habit consistency (last {windowDays} days)
+        </h2>
+        <select
+          value={windowDays}
+          onChange={(e) => setWindowDays(Number(e.target.value) as (typeof WINDOW_OPTIONS)[number])}
+          className="rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+        >
+          {WINDOW_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n} days
+            </option>
+          ))}
+        </select>
+      </div>
 
       {habits.filter((h) => h.active).length === 0 ? (
         <p className="text-sm text-zinc-500">No active habits yet.</p>
@@ -252,7 +266,7 @@ export default function AnalyticsPage() {
               const loggedRequiredDays = requiredDays.filter((d) => loggedDates.has(d));
               const denominator =
                 habit.frequency === "times_per_week"
-                  ? (habit.target_count ?? 1) * (WINDOW_DAYS / 7)
+                  ? (habit.target_count ?? 1) * (windowDays / 7)
                   : requiredDays.length;
               const rate = denominator
                 ? Math.round((loggedRequiredDays.length / denominator) * 100)
@@ -277,17 +291,21 @@ export default function AnalyticsPage() {
                       {rate}% · streak {current} · best {longest} · {habitLogs.length} all-time
                     </p>
                   </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {days.map((d) => (
-                      <div
-                        key={d}
-                        title={d}
-                        className={`h-4 w-4 rounded-sm sm:h-5 sm:w-5 ${
-                          loggedDates.has(d) ? "" : "bg-zinc-100 dark:bg-zinc-900"
-                        }`}
-                        style={loggedDates.has(d) ? { backgroundColor: domainColor(habit) } : undefined}
-                      />
-                    ))}
+                  <div className="overflow-x-auto">
+                    <div
+                      className={`grid grid-flow-col grid-rows-7 gap-1 ${windowDays > 90 ? "w-max" : ""}`}
+                    >
+                      {days.map((d) => (
+                        <div
+                          key={d}
+                          title={d}
+                          className={`rounded-sm ${windowDays > 90 ? "h-2.5 w-2.5" : "h-4 w-4 sm:h-5 sm:w-5"} ${
+                            loggedDates.has(d) ? "" : "bg-zinc-100 dark:bg-zinc-900"
+                          }`}
+                          style={loggedDates.has(d) ? { backgroundColor: domainColor(habit) } : undefined}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </li>
               );
