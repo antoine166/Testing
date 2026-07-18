@@ -232,7 +232,7 @@ export default function TaskRow({
   projects: TaskProject[];
   onToggleDone: (task: Task) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
-  onDelete: (id: string, scope?: "following") => void;
+  onDelete: (id: string, scope?: "skip" | "following") => void;
   onConvertToProject?: (id: string) => void;
   /** Shows a selection checkbox for bulk actions (e.g. filing multiple Inbox tasks at once). */
   selectable?: boolean;
@@ -578,17 +578,17 @@ export default function TaskRow({
       </div>
       {confirmingDelete ? (
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <p className="text-xs text-zinc-500">Delete just this one, or this and future ones?</p>
+          <p className="text-xs text-zinc-500">Skip just this one, or stop the whole series?</p>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
                 setConfirmingDelete(false);
-                onDelete(task.id);
+                onDelete(task.id, "skip");
               }}
               className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
             >
-              Just this one
+              Skip this one
             </button>
             <button
               type="button"
