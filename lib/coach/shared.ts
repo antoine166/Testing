@@ -1264,9 +1264,13 @@ export async function executeTool(
         .gte("scheduled_date", task.scheduled_date ?? "0000-01-01");
       if (deleteError) return `Error: ${deleteError.message}`;
 
+      // Reset last_generated_date too — it points at the (now-deleted)
+      // last occurrence, so without this, resuming the series later would
+      // resume generation after that stale future date instead of from
+      // today.
       await supabase
         .from("recurring_task_templates")
-        .update({ active: false })
+        .update({ active: false, last_generated_date: null })
         .eq("id", task.recurring_template_id);
 
       return "Moved this and all future occurrences to Trash, and paused the series.";

@@ -598,9 +598,13 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .gte("scheduled_date", task.scheduled_date ?? "0000-01-01");
         if (deleteError) return fail(deleteError.message);
 
+        // Reset last_generated_date too — it points at the (now-deleted)
+        // last occurrence, so without this, resuming the series later
+        // would resume generation after that stale future date instead of
+        // from today.
         await admin
           .from("recurring_task_templates")
-          .update({ active: false })
+          .update({ active: false, last_generated_date: null })
           .eq("id", task.recurring_template_id)
           .eq("user_id", userId);
 
