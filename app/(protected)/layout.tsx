@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import QuickCapture from "@/components/quick-capture";
 import SidebarNav from "@/components/sidebar-nav";
 import RealtimeLayoutRefresher from "@/components/realtime-layout-refresher";
+import RealtimeIndicator from "@/components/realtime-indicator";
 import { todayLocal } from "@/lib/date";
 
 export default async function ProtectedLayout({
@@ -79,6 +80,7 @@ export default async function ProtectedLayout({
       </datalist>
       <QuickCapture />
       <RealtimeLayoutRefresher />
+      <RealtimeIndicator />
     </>
   );
 }

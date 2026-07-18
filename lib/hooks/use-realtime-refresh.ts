@@ -27,7 +27,13 @@ export function useRealtimeRefresh(tables: string[], onChange: () => void) {
 
     const scheduleRefresh = () => {
       if (timeout) clearTimeout(timeout);
-      timeout = setTimeout(() => onChangeRef.current(), 400);
+      timeout = setTimeout(() => {
+        onChangeRef.current();
+        // Fires only in response to an actual postgres_changes event (never
+        // on initial mount), so this is a reliable "a change from elsewhere
+        // just landed" signal for the RealtimeIndicator badge.
+        window.dispatchEvent(new Event("life-os:realtime-sync"));
+      }, 400);
     };
 
     // supabase-js only re-sends the JWT to Realtime on TOKEN_REFRESHED/SIGNED_IN,
