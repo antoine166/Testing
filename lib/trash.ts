@@ -5,7 +5,8 @@ export type TrashType =
   | "habit"
   | "routine"
   | "checklist"
-  | "knowledge-item";
+  | "knowledge-item"
+  | "tickler-item";
 
 export const TRASH_TYPES: TrashType[] = [
   "domain",
@@ -15,6 +16,7 @@ export const TRASH_TYPES: TrashType[] = [
   "routine",
   "checklist",
   "knowledge-item",
+  "tickler-item",
 ];
 
 type TrashConfig = {
@@ -49,6 +51,7 @@ export const TRASH_CONFIG: Record<TrashType, TrashConfig> = {
   routine: { table: "routines", nameField: "name" },
   checklist: { table: "checklists", nameField: "name" },
   "knowledge-item": { table: "knowledge_items", nameField: "title" },
+  "tickler-item": { table: "tickler_items", nameField: "note" },
 };
 
 export function isTrashType(value: string): value is TrashType {

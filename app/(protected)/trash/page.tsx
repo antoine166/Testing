@@ -17,6 +17,7 @@ const TYPE_LABELS: Record<string, string> = {
   routine: "Routine",
   checklist: "Checklist",
   "knowledge-item": "Library item",
+  "tickler-item": "Tickler",
 };
 
 const RETENTION_DAYS = 30;
