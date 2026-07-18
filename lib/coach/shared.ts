@@ -277,6 +277,11 @@ export const TOOLS: Tool[] = [
           type: "string",
           description: "GTD Natural Planning Model — what \"done\" looks like. Empty string clears it.",
         },
+        brainstorm: {
+          type: "string",
+          description:
+            "GTD Natural Planning Model — ideas, approaches, things to consider. Empty string clears it.",
+        },
       },
       required: ["project_id"],
     },
@@ -305,6 +310,11 @@ export const TOOLS: Tool[] = [
         outcome_vision: {
           type: "string",
           description: "GTD Natural Planning Model — what \"done\" looks like, if worth capturing upfront.",
+        },
+        brainstorm: {
+          type: "string",
+          description:
+            "GTD Natural Planning Model — ideas, approaches, things to consider, if worth capturing upfront.",
         },
         priority: { type: "string", enum: ["none", "low", "medium", "high"] },
         due_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
@@ -1364,6 +1374,7 @@ export async function executeTool(
     }
     if (typeof input.purpose === "string") updates.purpose = input.purpose || null;
     if (typeof input.outcome_vision === "string") updates.outcome_vision = input.outcome_vision || null;
+    if (typeof input.brainstorm === "string") updates.brainstorm = input.brainstorm || null;
 
     const { data, error } = await supabase
       .from("projects")
@@ -1393,6 +1404,7 @@ export async function executeTool(
         description: typeof input.description === "string" ? input.description : undefined,
         purpose: typeof input.purpose === "string" ? input.purpose : undefined,
         outcome_vision: typeof input.outcome_vision === "string" ? input.outcome_vision : undefined,
+        brainstorm: typeof input.brainstorm === "string" ? input.brainstorm : undefined,
         priority: typeof input.priority === "string" ? input.priority : undefined,
         due_date: typeof input.due_date === "string" ? input.due_date : undefined,
         scheduled_date: typeof input.scheduled_date === "string" ? input.scheduled_date : undefined,

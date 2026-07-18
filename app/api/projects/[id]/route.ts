@@ -52,6 +52,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if (typeof body.outcome_vision === "string") {
     updates.outcome_vision = body.outcome_vision;
   }
+  if (typeof body.brainstorm === "string") {
+    updates.brainstorm = body.brainstorm;
+  }
   if ("domain_id" in body) {
     updates.domain_id = typeof body.domain_id === "string" ? body.domain_id : null;
   }

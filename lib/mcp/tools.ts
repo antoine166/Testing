@@ -168,6 +168,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .string()
           .optional()
           .describe("GTD Natural Planning Model — what \"done\" looks like."),
+        brainstorm: z
+          .string()
+          .optional()
+          .describe("GTD Natural Planning Model — ideas, approaches, things to consider."),
         domain_id: z.string().uuid().optional(),
         parent_project_id: z
           .string()
@@ -187,6 +191,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       description,
       purpose,
       outcome_vision,
+      brainstorm,
       domain_id,
       parent_project_id,
       status,
@@ -206,6 +211,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           description,
           purpose,
           outcome_vision,
+          brainstorm,
           domain_id: domain_id ?? null,
           parent_project_id: parent_project_id ?? null,
           status,
@@ -242,6 +248,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .string()
           .optional()
           .describe("GTD Natural Planning Model — what \"done\" looks like. Empty string clears it."),
+        brainstorm: z
+          .string()
+          .optional()
+          .describe(
+            "GTD Natural Planning Model — ideas, approaches, things to consider. Empty string clears it.",
+          ),
         domain_id: z.string().uuid().nullable().optional(),
         parent_project_id: z.string().uuid().nullable().optional(),
         status: z.enum(PROJECT_STATUSES).optional(),
