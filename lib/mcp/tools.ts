@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { todayLocal } from "@/lib/date";
+import { todayLocal, daysSince } from "@/lib/date";
 import { computeStreak, isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
 import { TRASH_CONFIG, TRASH_TYPES, type TrashType } from "@/lib/trash";
 import { topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
@@ -1990,7 +1990,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     {
       title: "Get today's summary",
       description:
-        "Everything relevant to coaching Antoine right now: today's check-in, habits due today, tasks scheduled today, and overdue tasks. Use this first for \"what should I focus on today\" style questions.",
+        "Everything relevant to coaching Antoine right now: today's check-in, habits due today, tasks scheduled today, overdue tasks, and anything Waiting For that's stalled a week or more. Use this first for \"what should I focus on today\" style questions.",
       annotations: { readOnlyHint: true },
     },
     async () => {
@@ -2031,6 +2031,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       const tasks = tasksRes.data;
       const scheduledToday = tasks.filter((t) => t.scheduled_date === today);
       const overdue = tasks.filter((t) => t.scheduled_date && t.scheduled_date < today);
+      // GTD's Waiting For is only useful if it prompts an actual follow-up,
+      // not just a passive elapsed-days counter in the UI.
+      const staleWaitingFor = tasks.filter(
+        (t) => t.waiting_for && t.waiting_since && daysSince(t.waiting_since) >= 7,
+      );
 
       return ok({
         date: today,
@@ -2038,6 +2043,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         habits_due_today: dueHabits,
         tasks_scheduled_today: scheduledToday,
         overdue_tasks: overdue,
+        stale_waiting_for: staleWaitingFor.map((t) => ({
+          id: t.id,
+          title: t.title,
+          waiting_since: t.waiting_since,
+          days_waiting: daysSince(t.waiting_since),
+        })),
       });
     },
   );
