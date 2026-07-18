@@ -79,7 +79,8 @@ export default function TasksPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDomainId, setBulkDomainId] = useState("");
-  const [bulkFiling, setBulkFiling] = useState(false);
+  const [bulkScheduleDate, setBulkScheduleDate] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Re-sync the create form's domain/project whenever the URL filter
   // changes — e.g. clicking from one domain's task view to another reuses
@@ -397,6 +398,7 @@ export default function TasksPage() {
     setSelectMode((v) => !v);
     setSelectedIds(new Set());
     setBulkDomainId("");
+    setBulkScheduleDate("");
   }
 
   function toggleSelected(id: string, checked: boolean) {
@@ -408,29 +410,76 @@ export default function TasksPage() {
     });
   }
 
-  async function handleBulkFile() {
-    if (!bulkDomainId || selectedIds.size === 0) return;
+  async function runBulkAction(
+    action: (id: string) => Promise<Response>,
+    errorMessage: string,
+  ) {
+    if (selectedIds.size === 0) return;
 
-    setBulkFiling(true);
-    const results = await Promise.all(
-      [...selectedIds].map((id) =>
+    setBulkBusy(true);
+    const results = await Promise.all([...selectedIds].map(action));
+    setBulkBusy(false);
+
+    if (results.some((res) => !res.ok)) {
+      setError(errorMessage);
+    }
+
+    setSelectedIds(new Set());
+    setBulkDomainId("");
+    setBulkScheduleDate("");
+    setSelectMode(false);
+    await loadAll();
+  }
+
+  async function handleBulkFile() {
+    if (!bulkDomainId) return;
+    await runBulkAction(
+      (id) =>
         fetch(`/api/tasks/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ domain_id: bulkDomainId }),
         }),
-      ),
+      "Some tasks couldn't be filed — try again.",
     );
-    setBulkFiling(false);
+  }
 
-    if (results.some((res) => !res.ok)) {
-      setError("Some tasks couldn't be filed — try again.");
-    }
+  async function handleBulkComplete() {
+    await runBulkAction(
+      (id) =>
+        fetch(`/api/tasks/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "done" }),
+        }),
+      "Some tasks couldn't be completed — try again.",
+    );
+  }
 
-    setSelectedIds(new Set());
-    setBulkDomainId("");
-    setSelectMode(false);
-    await loadAll();
+  async function handleBulkSchedule() {
+    if (!bulkScheduleDate) return;
+    await runBulkAction(
+      (id) =>
+        fetch(`/api/tasks/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduled_date: bulkScheduleDate }),
+        }),
+      "Some tasks couldn't be scheduled — try again.",
+    );
+  }
+
+  async function handleBulkDelete() {
+    if (
+      !confirm(
+        `Move ${selectedIds.size} task${selectedIds.size === 1 ? "" : "s"} to trash? You can restore them within 30 days.`,
+      )
+    )
+      return;
+    await runBulkAction(
+      (id) => fetch(`/api/tasks/${id}`, { method: "DELETE" }),
+      "Some tasks couldn't be deleted — try again.",
+    );
   }
 
   const inboxTasks = tasks.filter((t) => !t.domain_id && t.status !== "done");
@@ -930,11 +979,39 @@ export default function TasksPage() {
                 </select>
                 <button
                   onClick={handleBulkFile}
-                  disabled={!bulkDomainId || selectedIds.size === 0 || bulkFiling}
+                  disabled={!bulkDomainId || selectedIds.size === 0 || bulkBusy}
                   className="rounded-md bg-zinc-950 px-3 py-1 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
                 >
-                  {bulkFiling ? "Filing..." : `File ${selectedIds.size || ""}`}
+                  File {selectedIds.size || ""}
                 </button>
+                <input
+                  type="date"
+                  value={bulkScheduleDate}
+                  onChange={(e) => setBulkScheduleDate(e.target.value)}
+                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+                <button
+                  onClick={handleBulkSchedule}
+                  disabled={!bulkScheduleDate || selectedIds.size === 0 || bulkBusy}
+                  className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:border-zinc-400 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+                >
+                  Schedule {selectedIds.size || ""}
+                </button>
+                <button
+                  onClick={handleBulkComplete}
+                  disabled={selectedIds.size === 0 || bulkBusy}
+                  className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:border-zinc-400 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+                >
+                  Complete {selectedIds.size || ""}
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={selectedIds.size === 0 || bulkBusy}
+                  className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-red-600 hover:border-red-400 disabled:opacity-50 dark:border-zinc-700 dark:text-red-400"
+                >
+                  Delete {selectedIds.size || ""}
+                </button>
+                {bulkBusy && <span className="text-sm text-zinc-500">Working...</span>}
               </div>
             )}
 
