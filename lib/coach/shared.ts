@@ -45,6 +45,17 @@ export const TOOLS: Tool[] = [
           type: "boolean",
           description: "Optional. GTD Waiting For — delegated/blocked on someone else. Starts the days-waiting clock.",
         },
+        estimated_minutes: {
+          type: "number",
+          description: "Optional. GTD's 'time available' criterion — rough estimate of how long this takes.",
+        },
+        energy_required: {
+          type: "string",
+          enum: ["low", "medium", "high"],
+          description:
+            "Optional. GTD's 'resources available' criterion — how much energy this realistically " +
+            "takes. Distinct from save_checkin's energy_level, which is Antoine's own daily capacity.",
+        },
       },
       required: ["title"],
     },
@@ -173,6 +184,12 @@ export const TOOLS: Tool[] = [
         waiting_for: { type: "boolean" },
         domain_id: { type: "string", description: "Empty string clears it" },
         project_id: { type: "string", description: "Empty string clears it" },
+        estimated_minutes: { type: "number", description: "Empty/0 clears it" },
+        energy_required: {
+          type: "string",
+          enum: ["low", "medium", "high"],
+          description: "Empty string clears it. Distinct from save_checkin's energy_level.",
+        },
       },
       required: ["task_id"],
     },
@@ -1028,6 +1045,8 @@ export async function executeTool(
         someday: typeof input.someday === "boolean" ? input.someday : undefined,
         waiting_for: waitingFor,
         waiting_since: waitingFor === true ? today : undefined,
+        estimated_minutes: typeof input.estimated_minutes === "number" ? input.estimated_minutes : undefined,
+        energy_level: typeof input.energy_required === "string" ? input.energy_required : undefined,
       })
       .select()
       .single();
@@ -1179,6 +1198,8 @@ export async function executeTool(
     }
     if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
     if (typeof input.project_id === "string") updates.project_id = input.project_id || null;
+    if (typeof input.estimated_minutes === "number") updates.estimated_minutes = input.estimated_minutes || null;
+    if (typeof input.energy_required === "string") updates.energy_level = input.energy_required || null;
 
     const { data, error } = await supabase
       .from("tasks")

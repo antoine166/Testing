@@ -54,6 +54,8 @@ export async function POST(request: Request) {
       someday: typeof body.someday === "boolean" ? body.someday : undefined,
       waiting_for: typeof body.waiting_for === "boolean" ? body.waiting_for : undefined,
       waiting_since: body.waiting_for === true ? new Date().toISOString().slice(0, 10) : undefined,
+      estimated_minutes: typeof body.estimated_minutes === "number" ? body.estimated_minutes : undefined,
+      energy_level: typeof body.energy_level === "string" ? body.energy_level : undefined,
     })
     .select()
     .single();

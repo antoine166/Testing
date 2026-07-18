@@ -34,7 +34,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 
   const body = await request.json();
-  const updates: Record<string, string | boolean | null> = {};
+  const updates: Record<string, string | boolean | number | null> = {};
 
   if (typeof body.title === "string") {
     const title = body.title.trim();
@@ -71,6 +71,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
   if (typeof body.someday === "boolean") {
     updates.someday = body.someday;
+  }
+  if ("estimated_minutes" in body) {
+    updates.estimated_minutes = typeof body.estimated_minutes === "number" ? body.estimated_minutes : null;
+  }
+  if ("energy_level" in body) {
+    updates.energy_level = typeof body.energy_level === "string" ? body.energy_level : null;
   }
   if (typeof body.waiting_for === "boolean") {
     const { data: existing } = await supabase

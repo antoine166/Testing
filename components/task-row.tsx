@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
+export type TaskEnergy = "low" | "medium" | "high";
 
 export type Task = {
   id: string;
@@ -22,6 +23,8 @@ export type Task = {
   waiting_since: string | null;
   completed_at?: string | null;
   recurring_template_id?: string | null;
+  estimated_minutes?: number | null;
+  energy_level?: TaskEnergy | null;
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
@@ -248,6 +251,8 @@ export default function TaskRow({
   const [someday, setSomeday] = useState(task.someday);
   const [waitingFor, setWaitingFor] = useState(task.waiting_for);
   const [context, setContext] = useState(task.context ?? "");
+  const [estimatedMinutes, setEstimatedMinutes] = useState(task.estimated_minutes?.toString() ?? "");
+  const [energyLevel, setEnergyLevel] = useState<TaskEnergy | "">(task.energy_level ?? "");
 
   function startEdit() {
     setTitle(task.title);
@@ -262,6 +267,8 @@ export default function TaskRow({
     setSomeday(task.someday);
     setWaitingFor(task.waiting_for);
     setContext(task.context ?? "");
+    setEstimatedMinutes(task.estimated_minutes?.toString() ?? "");
+    setEnergyLevel(task.energy_level ?? "");
     setEditing(true);
   }
 
@@ -280,6 +287,8 @@ export default function TaskRow({
       due_date: dueDate || null,
       scheduled_date: scheduledDate || null,
       someday,
+      estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
+      energy_level: energyLevel || null,
     });
     setEditing(false);
   }
@@ -425,6 +434,26 @@ export default function TaskRow({
               placeholder="Context (optional) — e.g. Errands, Deep Work"
               className="min-w-40 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
+            <input
+              type="number"
+              min={1}
+              value={estimatedMinutes}
+              onChange={(e) => setEstimatedMinutes(e.target.value)}
+              placeholder="Est. min"
+              title="Estimated minutes"
+              className="w-24 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <select
+              value={energyLevel}
+              onChange={(e) => setEnergyLevel(e.target.value as TaskEnergy | "")}
+              title="Energy required"
+              className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">Energy...</option>
+              <option value="low">Low energy</option>
+              <option value="medium">Medium energy</option>
+              <option value="high">High energy</option>
+            </select>
           </div>
           <AttachmentStrip taskId={task.id} />
           {onConvertToProject && (
@@ -511,6 +540,8 @@ export default function TaskRow({
             {task.due_date ? ` · due ${task.due_date}` : ""}
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
             {task.someday ? " · someday" : ""}
+            {task.estimated_minutes ? ` · ~${task.estimated_minutes}min` : ""}
+            {task.energy_level ? ` · ${task.energy_level} energy` : ""}
           </p>
           {task.waiting_for && (
             <p
