@@ -22,6 +22,7 @@ const RESTORABLE_TRASH_TYPES = [
 
 const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
 const TASK_PRIORITIES = ["none", "low", "medium", "high"] as const;
+const TASK_ENERGY_LEVELS = ["low", "medium", "high"] as const;
 const HABIT_FREQUENCIES = ["daily", "specific_days", "times_per_week"] as const;
 const PROJECT_STATUSES = ["active", "someday", "completed", "archived"] as const;
 const RECURRENCE_TYPES = ["weekly", "monthly", "interval"] as const;
@@ -348,6 +349,19 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .boolean()
           .optional()
           .describe("GTD Waiting For: delegated/blocked on someone else. Starts the days-waiting clock."),
+        estimated_minutes: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("GTD's 'time available' criterion — rough estimate of how long this takes."),
+        energy_required: z
+          .enum(TASK_ENERGY_LEVELS)
+          .optional()
+          .describe(
+            "GTD's 'resources available' criterion — how much energy this realistically takes. " +
+              "Distinct from save_checkin's energy_level, which is Antoine's own daily capacity, not a task property.",
+          ),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
@@ -363,6 +377,8 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       scheduled_date,
       someday,
       waiting_for,
+      estimated_minutes,
+      energy_required,
     }) => {
       const trimmed = title.trim();
       if (!trimmed) return fail("Title is required");
@@ -383,6 +399,8 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           someday,
           waiting_for,
           waiting_since: waiting_for === true ? todayLocal() : undefined,
+          estimated_minutes,
+          energy_level: energy_required,
         })
         .select()
         .single();
@@ -420,10 +438,25 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
             "GTD Waiting For. Turning it on starts the days-waiting clock; turning it off clears it. " +
               "Leaving an already-waiting task waiting doesn't reset the clock.",
           ),
+        estimated_minutes: z
+          .number()
+          .int()
+          .min(1)
+          .nullable()
+          .optional()
+          .describe("GTD's 'time available' criterion, or null to clear."),
+        energy_required: z
+          .enum(TASK_ENERGY_LEVELS)
+          .nullable()
+          .optional()
+          .describe(
+            "GTD's 'resources available' criterion, or null to clear. Distinct from save_checkin's " +
+              "energy_level, which is Antoine's own daily capacity, not a task property.",
+          ),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ id, title, link, context, waiting_for, ...rest }) => {
+    async ({ id, title, link, context, waiting_for, energy_required, ...rest }) => {
       const updates: Record<string, unknown> = { ...rest };
       if (title !== undefined) {
         const trimmed = title.trim();
@@ -435,6 +468,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       }
       if (context !== undefined) {
         updates.context = context && context.trim() ? context.trim() : null;
+      }
+      if (energy_required !== undefined) {
+        updates.energy_level = energy_required;
       }
 
       if (rest.status !== undefined) {
