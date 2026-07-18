@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -23,6 +24,7 @@ export type Task = {
   waiting_since: string | null;
   completed_at?: string | null;
   recurring_template_id?: string | null;
+  recurring_task_templates?: RecurrencePattern | null;
   estimated_minutes?: number | null;
   energy_level?: TaskEnergy | null;
   revisit_date?: string | null;
@@ -545,7 +547,9 @@ export default function TaskRow({
           )}
           {task.notes && <NotesText notes={task.notes} />}
           <p className="mt-1 text-xs text-zinc-500">
-            {task.recurring_template_id ? "↻ " : ""}
+            {task.recurring_template_id
+              ? `↻ ${task.recurring_task_templates ? describeRecurrence(task.recurring_task_templates) : "recurring"} · `
+              : ""}
             {task.status} · {task.priority} priority
             {task.context ? ` · @${task.context}` : ""}
             {domain ? ` · ${domain.name}` : ""}
