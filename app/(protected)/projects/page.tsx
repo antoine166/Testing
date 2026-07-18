@@ -20,6 +20,8 @@ type Project = {
   parent_project_id: string | null;
   name: string;
   description: string | null;
+  purpose: string | null;
+  outcome_vision: string | null;
   status: ProjectStatus;
   priority: ProjectPriority;
   due_date: string | null;
@@ -54,6 +56,8 @@ export default function ProjectsPage() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [outcomeVision, setOutcomeVision] = useState("");
   const [domainId, setDomainId] = useState(domainFilter ?? "");
   const [parentProjectId, setParentProjectId] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("active");
@@ -65,6 +69,8 @@ export default function ProjectsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editPurpose, setEditPurpose] = useState("");
+  const [editOutcomeVision, setEditOutcomeVision] = useState("");
   const [editDomainId, setEditDomainId] = useState("");
   const [editParentProjectId, setEditParentProjectId] = useState("");
   const [editStatus, setEditStatus] = useState<ProjectStatus>("active");
@@ -137,6 +143,8 @@ export default function ProjectsPage() {
       body: JSON.stringify({
         name,
         description: description || undefined,
+        purpose: purpose || undefined,
+        outcome_vision: outcomeVision || undefined,
         domain_id: domainId || null,
         parent_project_id: parentProjectId || null,
         status,
@@ -155,6 +163,8 @@ export default function ProjectsPage() {
 
     setName("");
     setDescription("");
+    setPurpose("");
+    setOutcomeVision("");
     setDomainId("");
     setParentProjectId("");
     setStatus("active");
@@ -185,6 +195,8 @@ export default function ProjectsPage() {
     setEditingId(project.id);
     setEditName(project.name);
     setEditDescription(project.description ?? "");
+    setEditPurpose(project.purpose ?? "");
+    setEditOutcomeVision(project.outcome_vision ?? "");
     setEditDomainId(project.domain_id ?? "");
     setEditParentProjectId(project.parent_project_id ?? "");
     setEditStatus(project.status);
@@ -203,6 +215,8 @@ export default function ProjectsPage() {
       body: JSON.stringify({
         name: editName,
         description: editDescription,
+        purpose: editPurpose,
+        outcome_vision: editOutcomeVision,
         domain_id: editDomainId || null,
         parent_project_id: editParentProjectId || null,
         status: editStatus,
@@ -357,6 +371,44 @@ export default function ProjectsPage() {
             className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
+            Define this project (GTD Natural Planning)
+          </summary>
+          <div className="mt-2 space-y-3 pl-4">
+            <div>
+              <label
+                htmlFor="purpose"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Purpose — why does this matter?
+              </label>
+              <textarea
+                id="purpose"
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value)}
+                rows={2}
+                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="outcome_vision"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Outcome vision — what does &ldquo;done&rdquo; look like?
+              </label>
+              <textarea
+                id="outcome_vision"
+                value={outcomeVision}
+                onChange={(e) => setOutcomeVision(e.target.value)}
+                rows={2}
+                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            </div>
+          </div>
+        </details>
         <div>
           <label
             htmlFor="link"
@@ -569,6 +621,28 @@ export default function ProjectsPage() {
                 rows={2}
                 className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
+              <details className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
+                  GTD Natural Planning
+                </summary>
+                <div className="mt-2 space-y-2 pl-4">
+                  <textarea
+                    value={editPurpose}
+                    onChange={(e) => setEditPurpose(e.target.value)}
+                    placeholder="Purpose — why does this matter?"
+                    rows={2}
+                    className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                  <textarea
+                    value={editOutcomeVision}
+                    onChange={(e) => setEditOutcomeVision(e.target.value)}
+                    placeholder="Outcome vision — what does &quot;done&quot; look like?"
+                    rows={2}
+                    className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </div>
+              </details>
               <input
                 type="url"
                 value={editLink}
@@ -678,6 +752,16 @@ export default function ProjectsPage() {
                 {project.description && (
                   <p className="mt-0.5 text-sm text-zinc-500">
                     {project.description}
+                  </p>
+                )}
+                {project.purpose && (
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    <span className="font-medium">Purpose:</span> {project.purpose}
+                  </p>
+                )}
+                {project.outcome_vision && (
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    <span className="font-medium">Done looks like:</span> {project.outcome_vision}
                   </p>
                 )}
                 {project.link && (

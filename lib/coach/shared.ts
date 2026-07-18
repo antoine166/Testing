@@ -257,6 +257,14 @@ export const TOOLS: Tool[] = [
             "UUID of another top-level project to nest this one under. Empty string clears it, " +
             "promoting it back to top-level.",
         },
+        purpose: {
+          type: "string",
+          description: "GTD Natural Planning Model — why this project matters. Empty string clears it.",
+        },
+        outcome_vision: {
+          type: "string",
+          description: "GTD Natural Planning Model — what \"done\" looks like. Empty string clears it.",
+        },
       },
       required: ["project_id"],
     },
@@ -278,6 +286,14 @@ export const TOOLS: Tool[] = [
           description: "UUID of a top-level project to nest this new project under, if any.",
         },
         description: { type: "string" },
+        purpose: {
+          type: "string",
+          description: "GTD Natural Planning Model — why this project matters, if worth capturing upfront.",
+        },
+        outcome_vision: {
+          type: "string",
+          description: "GTD Natural Planning Model — what \"done\" looks like, if worth capturing upfront.",
+        },
         priority: { type: "string", enum: ["none", "low", "medium", "high"] },
         due_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
         scheduled_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
@@ -1318,6 +1334,8 @@ export async function executeTool(
     if (typeof input.parent_project_id === "string") {
       updates.parent_project_id = input.parent_project_id || null;
     }
+    if (typeof input.purpose === "string") updates.purpose = input.purpose || null;
+    if (typeof input.outcome_vision === "string") updates.outcome_vision = input.outcome_vision || null;
 
     const { data, error } = await supabase
       .from("projects")
@@ -1345,6 +1363,8 @@ export async function executeTool(
         parent_project_id:
           typeof input.parent_project_id === "string" ? input.parent_project_id : null,
         description: typeof input.description === "string" ? input.description : undefined,
+        purpose: typeof input.purpose === "string" ? input.purpose : undefined,
+        outcome_vision: typeof input.outcome_vision === "string" ? input.outcome_vision : undefined,
         priority: typeof input.priority === "string" ? input.priority : undefined,
         due_date: typeof input.due_date === "string" ? input.due_date : undefined,
         scheduled_date: typeof input.scheduled_date === "string" ? input.scheduled_date : undefined,

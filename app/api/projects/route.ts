@@ -42,6 +42,8 @@ export async function POST(request: Request) {
       name,
       description:
         typeof body.description === "string" ? body.description : undefined,
+      purpose: typeof body.purpose === "string" ? body.purpose : undefined,
+      outcome_vision: typeof body.outcome_vision === "string" ? body.outcome_vision : undefined,
       domain_id: typeof body.domain_id === "string" ? body.domain_id : null,
       parent_project_id:
         typeof body.parent_project_id === "string" ? body.parent_project_id : null,
