@@ -22,6 +22,7 @@ type Project = {
   description: string | null;
   purpose: string | null;
   outcome_vision: string | null;
+  brainstorm: string | null;
   status: ProjectStatus;
   priority: ProjectPriority;
   due_date: string | null;
@@ -58,6 +59,8 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [purpose, setPurpose] = useState("");
   const [outcomeVision, setOutcomeVision] = useState("");
+  const [brainstorm, setBrainstorm] = useState("");
+  const [nextAction, setNextAction] = useState("");
   const [domainId, setDomainId] = useState(domainFilter ?? "");
   const [parentProjectId, setParentProjectId] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("active");
@@ -71,6 +74,7 @@ export default function ProjectsPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editPurpose, setEditPurpose] = useState("");
   const [editOutcomeVision, setEditOutcomeVision] = useState("");
+  const [editBrainstorm, setEditBrainstorm] = useState("");
   const [editDomainId, setEditDomainId] = useState("");
   const [editParentProjectId, setEditParentProjectId] = useState("");
   const [editStatus, setEditStatus] = useState<ProjectStatus>("active");
@@ -145,6 +149,7 @@ export default function ProjectsPage() {
         description: description || undefined,
         purpose: purpose || undefined,
         outcome_vision: outcomeVision || undefined,
+        brainstorm: brainstorm || undefined,
         domain_id: domainId || null,
         parent_project_id: parentProjectId || null,
         status,
@@ -161,10 +166,26 @@ export default function ProjectsPage() {
       return;
     }
 
+    const project = await res.json();
+
+    if (nextAction.trim()) {
+      await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: nextAction,
+          project_id: project.id,
+          domain_id: domainId || null,
+        }),
+      });
+    }
+
     setName("");
     setDescription("");
     setPurpose("");
     setOutcomeVision("");
+    setBrainstorm("");
+    setNextAction("");
     setDomainId("");
     setParentProjectId("");
     setStatus("active");
@@ -197,6 +218,7 @@ export default function ProjectsPage() {
     setEditDescription(project.description ?? "");
     setEditPurpose(project.purpose ?? "");
     setEditOutcomeVision(project.outcome_vision ?? "");
+    setEditBrainstorm(project.brainstorm ?? "");
     setEditDomainId(project.domain_id ?? "");
     setEditParentProjectId(project.parent_project_id ?? "");
     setEditStatus(project.status);
@@ -217,6 +239,7 @@ export default function ProjectsPage() {
         description: editDescription,
         purpose: editPurpose,
         outcome_vision: editOutcomeVision,
+        brainstorm: editBrainstorm,
         domain_id: editDomainId || null,
         parent_project_id: editParentProjectId || null,
         status: editStatus,
@@ -406,6 +429,39 @@ export default function ProjectsPage() {
                 rows={2}
                 className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
+            </div>
+            <div>
+              <label
+                htmlFor="brainstorm"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Brainstorm — ideas, approaches, things to consider
+              </label>
+              <textarea
+                id="brainstorm"
+                value={brainstorm}
+                onChange={(e) => setBrainstorm(e.target.value)}
+                rows={3}
+                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="next_action"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Next action — the very next physical step
+              </label>
+              <input
+                id="next_action"
+                value={nextAction}
+                onChange={(e) => setNextAction(e.target.value)}
+                placeholder="e.g. Draft the outline"
+                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                If filled in, creates this as the first task in the project.
+              </p>
             </div>
           </div>
         </details>
@@ -641,6 +697,13 @@ export default function ProjectsPage() {
                     rows={2}
                     className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
+                  <textarea
+                    value={editBrainstorm}
+                    onChange={(e) => setEditBrainstorm(e.target.value)}
+                    placeholder="Brainstorm — ideas, approaches, things to consider"
+                    rows={3}
+                    className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
                 </div>
               </details>
               <input
@@ -762,6 +825,11 @@ export default function ProjectsPage() {
                 {project.outcome_vision && (
                   <p className="mt-0.5 text-xs text-zinc-500">
                     <span className="font-medium">Done looks like:</span> {project.outcome_vision}
+                  </p>
+                )}
+                {project.brainstorm && (
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    <span className="font-medium">Brainstorm:</span> {project.brainstorm}
                   </p>
                 )}
                 {project.link && (
