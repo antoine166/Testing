@@ -21,5 +21,18 @@ export default function manifest(): MetadataRoute.Manifest {
         type: "image/png",
       },
     ],
+    // GTD's capture must be ubiquitous — this lets Android/Chrome's native
+    // "Share" sheet send a link/selection from any app straight into the
+    // Inbox, once Life OS is installed as a PWA. iOS Safari doesn't support
+    // the Web Share Target API, so this only helps on Android for now.
+    share_target: {
+      action: "/share-capture",
+      method: "GET",
+      params: {
+        title: "title",
+        text: "text",
+        url: "url",
+      },
+    },
   };
 }
