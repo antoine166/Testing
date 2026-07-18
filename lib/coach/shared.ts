@@ -11,6 +11,7 @@ const COACH_RESTORABLE_TRASH_TYPES = [
   "routine",
   "checklist",
   "knowledge-item",
+  "tickler-item",
 ] as const satisfies readonly TrashType[];
 
 export const MODEL = "claude-sonnet-5";
@@ -542,6 +543,56 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "create_tickler_item",
+    description:
+      "Create a GTD tickler-file note (the 43-folders concept) — a bare \"show me this again on " +
+      "X date\" reminder for something that isn't a task yet, with nothing actionable to track " +
+      "until then (e.g. 'don't think about this until March'). Distinct from a Someday/Maybe " +
+      "task's revisit_date, which applies to an already-existing task. If it's already " +
+      "actionable, use create_task instead.",
+    input_schema: {
+      type: "object",
+      properties: {
+        note: { type: "string" },
+        revisit_date: { type: "string", description: "YYYY-MM-DD — the date this should resurface." },
+      },
+      required: ["note", "revisit_date"],
+    },
+  },
+  {
+    name: "update_tickler_item",
+    description: "Update a tickler item's note or revisit date, referenced by its UUID from the context below.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tickler_item_id: { type: "string" },
+        note: { type: "string" },
+        revisit_date: { type: "string", description: "YYYY-MM-DD" },
+      },
+      required: ["tickler_item_id"],
+    },
+  },
+  {
+    name: "delete_tickler_item",
+    description: "Move a tickler item to Trash, referenced by its UUID from the context below. Recoverable for 30 days.",
+    input_schema: {
+      type: "object",
+      properties: { tickler_item_id: { type: "string" } },
+      required: ["tickler_item_id"],
+    },
+  },
+  {
+    name: "convert_tickler_item_to_task",
+    description:
+      "The tickler item's date arrived and it turns out to be actionable now: creates a real " +
+      "task from its note (lands in Inbox) and trashes the tickler item.",
+    input_schema: {
+      type: "object",
+      properties: { tickler_item_id: { type: "string" } },
+      required: ["tickler_item_id"],
+    },
+  },
+  {
     name: "list_knowledge_items",
     description:
       "List Antoine's saved notes, articles, books, quotes, and resources — call this before " +
@@ -810,15 +861,18 @@ const BASE_SYSTEM =
   "folders, create/update/delete agenda items (things to bring up with a person), update his " +
   "higher horizons, create/update/delete recurring task templates (these generate ordinary tasks " +
   "ahead of time, bounded by a horizon — not created lazily on completion) and top them up on " +
-  "demand, and restore soft-deleted items from Trash. Every " +
+  "demand, create/update/delete tickler-file items (a bare 'resurface on this date' note for " +
+  "something that isn't a task yet — convert_tickler_item_to_task turns it into one once it's " +
+  "actionable), and restore soft-deleted items from Trash. Every " +
   "tool call requires the user's explicit confirmation " +
   "before it runs — the app shows him exactly what you're proposing and he approves or declines " +
   "each one. So don't ask for confirmation in your own text, just call the tool when it's clearly " +
   "implied and let the app handle confirmation.\n\n" +
-  "Deleting tasks/projects/habits/routines/checklists/knowledge-items sends them to Trash (30-day " +
-  "recovery), and you can restore them with restore_from_trash. A few actions are deliberately " +
-  "app-only and out of your reach: deleting a domain, deleting a knowledge-library folder, " +
-  "permanently purging trashed items (bypassing the recovery window), and Gmail/account settings.";
+  "Deleting tasks/projects/habits/routines/checklists/knowledge-items/tickler-items sends them to " +
+  "Trash (30-day recovery), and you can restore them with restore_from_trash. A few actions are " +
+  "deliberately app-only and out of your reach: deleting a domain, deleting a knowledge-library " +
+  "folder, permanently purging trashed items (bypassing the recovery window), and Gmail/account " +
+  "settings.";
 
 const WEEKLY_REVIEW_SYSTEM =
   BASE_SYSTEM +
@@ -859,6 +913,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     agendaRes,
     horizonsRes,
     recurringRes,
+    ticklerRes,
   ] = await Promise.all([
     supabase.from("domains").select("id, name"),
     supabase
@@ -886,6 +941,11 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
       .from("recurring_task_templates")
       .select("id, title, recurrence_type, days_of_week, day_of_month, interval_days, active")
       .order("created_at"),
+    supabase
+      .from("tickler_items")
+      .select("id, note, revisit_date")
+      .is("deleted_at", null)
+      .order("revisit_date"),
   ]);
 
   const domains = domainsRes.data ?? [];
@@ -899,6 +959,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   const agendaItems = agendaRes.data ?? [];
   const horizons = horizonsRes.data;
   const recurringTemplates = recurringRes.data ?? [];
+  const ticklerItems = ticklerRes.data ?? [];
   const openTasks = tasks.filter((t) => t.status !== "done");
   const openAgendaItems = agendaItems.filter((a) => !a.done);
 
@@ -940,6 +1001,13 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
               }]`,
           )
           .join("\n")
+      : "(none)",
+  );
+
+  lines.push("\nTickler file (notes that aren't tasks yet, resurface on their date):");
+  lines.push(
+    ticklerItems.length
+      ? ticklerItems.map((t) => `- ${t.id} "${t.note}" (revisit ${t.revisit_date})`).join("\n")
       : "(none)",
   );
 
@@ -1734,6 +1802,80 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return "Removed from the checklist.";
+  }
+
+  if (name === "create_tickler_item") {
+    const note = typeof input.note === "string" ? input.note.trim() : "";
+    if (!note) return "Error: note is required";
+    const revisitDate = typeof input.revisit_date === "string" ? input.revisit_date : "";
+    if (!revisitDate) return "Error: revisit_date is required";
+
+    const { error } = await supabase
+      .from("tickler_items")
+      .insert({ user_id: userId, note, revisit_date: revisitDate });
+
+    if (error) return `Error: ${error.message}`;
+    return "Added to the tickler file.";
+  }
+
+  if (name === "update_tickler_item") {
+    const ticklerItemId = typeof input.tickler_item_id === "string" ? input.tickler_item_id : "";
+    if (!ticklerItemId) return "Error: tickler_item_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.note === "string") {
+      const trimmed = input.note.trim();
+      if (!trimmed) return "Error: note cannot be empty";
+      updates.note = trimmed;
+    }
+    if (typeof input.revisit_date === "string") updates.revisit_date = input.revisit_date;
+
+    const { error } = await supabase.from("tickler_items").update(updates).eq("id", ticklerItemId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Updated tickler item.";
+  }
+
+  if (name === "delete_tickler_item") {
+    const ticklerItemId = typeof input.tickler_item_id === "string" ? input.tickler_item_id : "";
+    if (!ticklerItemId) return "Error: tickler_item_id is required";
+
+    const { error } = await supabase
+      .from("tickler_items")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", ticklerItemId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Moved tickler item to Trash.";
+  }
+
+  if (name === "convert_tickler_item_to_task") {
+    const ticklerItemId = typeof input.tickler_item_id === "string" ? input.tickler_item_id : "";
+    if (!ticklerItemId) return "Error: tickler_item_id is required";
+
+    const { data: ticklerItem, error: ticklerError } = await supabase
+      .from("tickler_items")
+      .select("note")
+      .eq("id", ticklerItemId)
+      .single();
+    if (ticklerError || !ticklerItem) return "Error: tickler item not found";
+
+    const { data: task, error: taskError } = await supabase
+      .from("tasks")
+      .insert({ user_id: userId, title: ticklerItem.note })
+      .select()
+      .single();
+    if (taskError) return `Error: ${taskError.message}`;
+
+    const { error: trashError } = await supabase
+      .from("tickler_items")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", ticklerItemId);
+    if (trashError) {
+      return `Created task "${task.title}", but couldn't trash the tickler item: ${trashError.message}`;
+    }
+
+    return `Converted to task "${task.title}".`;
   }
 
   if (name === "list_knowledge_items") {
