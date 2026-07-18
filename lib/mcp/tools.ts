@@ -163,6 +163,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       inputSchema: {
         name: z.string().min(1),
         description: z.string().optional(),
+        purpose: z.string().optional().describe("GTD Natural Planning Model — why this project matters."),
+        outcome_vision: z
+          .string()
+          .optional()
+          .describe("GTD Natural Planning Model — what \"done\" looks like."),
         domain_id: z.string().uuid().optional(),
         parent_project_id: z
           .string()
@@ -180,6 +185,8 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     async ({
       name,
       description,
+      purpose,
+      outcome_vision,
       domain_id,
       parent_project_id,
       status,
@@ -197,6 +204,8 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           user_id: userId,
           name: trimmed,
           description,
+          purpose,
+          outcome_vision,
           domain_id: domain_id ?? null,
           parent_project_id: parent_project_id ?? null,
           status,
@@ -225,6 +234,14 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         id: z.string().uuid(),
         name: z.string().min(1).optional(),
         description: z.string().optional(),
+        purpose: z
+          .string()
+          .optional()
+          .describe("GTD Natural Planning Model — why this project matters. Empty string clears it."),
+        outcome_vision: z
+          .string()
+          .optional()
+          .describe("GTD Natural Planning Model — what \"done\" looks like. Empty string clears it."),
         domain_id: z.string().uuid().nullable().optional(),
         parent_project_id: z.string().uuid().nullable().optional(),
         status: z.enum(PROJECT_STATUSES).optional(),
