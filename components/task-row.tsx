@@ -25,6 +25,7 @@ export type Task = {
   recurring_template_id?: string | null;
   estimated_minutes?: number | null;
   energy_level?: TaskEnergy | null;
+  revisit_date?: string | null;
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
@@ -253,6 +254,7 @@ export default function TaskRow({
   const [context, setContext] = useState(task.context ?? "");
   const [estimatedMinutes, setEstimatedMinutes] = useState(task.estimated_minutes?.toString() ?? "");
   const [energyLevel, setEnergyLevel] = useState<TaskEnergy | "">(task.energy_level ?? "");
+  const [revisitDate, setRevisitDate] = useState(task.revisit_date ?? "");
 
   function startEdit() {
     setTitle(task.title);
@@ -269,6 +271,7 @@ export default function TaskRow({
     setContext(task.context ?? "");
     setEstimatedMinutes(task.estimated_minutes?.toString() ?? "");
     setEnergyLevel(task.energy_level ?? "");
+    setRevisitDate(task.revisit_date ?? "");
     setEditing(true);
   }
 
@@ -287,6 +290,7 @@ export default function TaskRow({
       due_date: dueDate || null,
       scheduled_date: scheduledDate || null,
       someday,
+      revisit_date: someday && revisitDate ? revisitDate : null,
       estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       energy_level: energyLevel || null,
     });
@@ -419,6 +423,15 @@ export default function TaskRow({
               />
               Someday
             </label>
+            {someday && (
+              <input
+                type="date"
+                value={revisitDate}
+                onChange={(e) => setRevisitDate(e.target.value)}
+                title="Revisit date — resurface this for reconsideration on this date (GTD tickler file)"
+                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            )}
             <label className="flex items-center gap-1.5 text-xs text-zinc-500">
               <input
                 type="checkbox"
@@ -540,6 +553,7 @@ export default function TaskRow({
             {task.due_date ? ` · due ${task.due_date}` : ""}
             {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
             {task.someday ? " · someday" : ""}
+            {task.someday && task.revisit_date ? ` · 🔔 revisit ${task.revisit_date}` : ""}
             {task.estimated_minutes ? ` · ~${task.estimated_minutes}min` : ""}
             {task.energy_level ? ` · ${task.energy_level} energy` : ""}
           </p>

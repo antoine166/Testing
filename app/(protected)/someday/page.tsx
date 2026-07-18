@@ -3,6 +3,7 @@
 import SmartListHeader from "@/components/smart-list-header";
 import TaskRow from "@/components/task-row";
 import { useTaskList } from "@/lib/hooks/use-task-list";
+import { todayLocal } from "@/lib/date";
 
 export default function SomedayPage() {
   const {
@@ -17,7 +18,21 @@ export default function SomedayPage() {
     handleConvertToProject,
   } = useTaskList();
 
+  const today = todayLocal();
   const somedayTasks = tasks.filter((t) => t.someday && t.status !== "done");
+  // GTD's tickler file: a date-specific trigger that's arrived means this
+  // is due for reconsideration, not just sitting in the pile indefinitely.
+  const readyToRevisit = somedayTasks.filter((t) => t.revisit_date && t.revisit_date <= today);
+  const rest = somedayTasks.filter((t) => !(t.revisit_date && t.revisit_date <= today));
+
+  const rowProps = {
+    domains,
+    projects,
+    onToggleDone: toggleDone,
+    onUpdate: handleUpdate,
+    onDelete: handleDelete,
+    onConvertToProject: handleConvertToProject,
+  };
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
@@ -36,20 +51,27 @@ export default function SomedayPage() {
           Nothing deferred — mark a task &ldquo;Someday&rdquo; from its edit form to stash it here.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {somedayTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              domains={domains}
-              projects={projects}
-              onToggleDone={toggleDone}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              onConvertToProject={handleConvertToProject}
-            />
-          ))}
-        </ul>
+        <>
+          {readyToRevisit.length > 0 && (
+            <div className="mb-6">
+              <h2 className="mb-2 text-sm font-semibold text-amber-700 dark:text-amber-500">
+                🔔 Ready to revisit ({readyToRevisit.length})
+              </h2>
+              <ul className="space-y-2">
+                {readyToRevisit.map((task) => (
+                  <TaskRow key={task.id} task={task} {...rowProps} />
+                ))}
+              </ul>
+            </div>
+          )}
+          {rest.length > 0 && (
+            <ul className="space-y-2">
+              {rest.map((task) => (
+                <TaskRow key={task.id} task={task} {...rowProps} />
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );

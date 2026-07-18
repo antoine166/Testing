@@ -78,6 +78,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("energy_level" in body) {
     updates.energy_level = typeof body.energy_level === "string" ? body.energy_level : null;
   }
+  if ("revisit_date" in body) {
+    updates.revisit_date = typeof body.revisit_date === "string" ? body.revisit_date : null;
+  }
   if (typeof body.waiting_for === "boolean") {
     const { data: existing } = await supabase
       .from("tasks")

@@ -492,6 +492,11 @@ export default function TodayDashboard() {
   const overdueTasks = [...tasks]
     .filter((t) => t.scheduled_date && t.scheduled_date < today && t.status !== "done")
     .sort((a, b) => (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? ""));
+  // GTD's tickler file: a Someday/Maybe item whose date-specific trigger
+  // has arrived should actually surface, not just wait to be noticed.
+  const readyToRevisitCount = tasks.filter(
+    (t) => t.someday && t.status !== "done" && t.revisit_date && t.revisit_date <= today,
+  ).length;
 
   return (
     <div className="space-y-8">
@@ -526,6 +531,16 @@ export default function TodayDashboard() {
             Edit
           </Link>
         </p>
+      )}
+
+      {readyToRevisitCount > 0 && (
+        <Link
+          href="/someday"
+          className="block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+        >
+          🔔 {readyToRevisitCount} Someday {readyToRevisitCount === 1 ? "item" : "items"} ready to
+          revisit →
+        </Link>
       )}
 
       {dueRoutines.length > 0 && (

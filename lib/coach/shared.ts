@@ -56,6 +56,12 @@ export const TOOLS: Tool[] = [
             "Optional. GTD's 'resources available' criterion — how much energy this realistically " +
             "takes. Distinct from save_checkin's energy_level, which is Antoine's own daily capacity.",
         },
+        revisit_date: {
+          type: "string",
+          description:
+            "Optional, only meaningful when someday is true. GTD tickler file: a date (YYYY-MM-DD) " +
+            "this Someday/Maybe item should resurface for reconsideration.",
+        },
       },
       required: ["title"],
     },
@@ -189,6 +195,10 @@ export const TOOLS: Tool[] = [
           type: "string",
           enum: ["low", "medium", "high"],
           description: "Empty string clears it. Distinct from save_checkin's energy_level.",
+        },
+        revisit_date: {
+          type: "string",
+          description: "GTD tickler file date. Empty string clears it. Only meaningful when someday is true.",
         },
       },
       required: ["task_id"],
@@ -1047,6 +1057,8 @@ export async function executeTool(
         waiting_since: waitingFor === true ? today : undefined,
         estimated_minutes: typeof input.estimated_minutes === "number" ? input.estimated_minutes : undefined,
         energy_level: typeof input.energy_required === "string" ? input.energy_required : undefined,
+        revisit_date:
+          input.someday === true && typeof input.revisit_date === "string" ? input.revisit_date : undefined,
       })
       .select()
       .single();
@@ -1200,6 +1212,7 @@ export async function executeTool(
     if (typeof input.project_id === "string") updates.project_id = input.project_id || null;
     if (typeof input.estimated_minutes === "number") updates.estimated_minutes = input.estimated_minutes || null;
     if (typeof input.energy_required === "string") updates.energy_level = input.energy_required || null;
+    if (typeof input.revisit_date === "string") updates.revisit_date = input.revisit_date || null;
 
     const { data, error } = await supabase
       .from("tasks")

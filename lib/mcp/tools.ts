@@ -362,6 +362,13 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
             "GTD's 'resources available' criterion — how much energy this realistically takes. " +
               "Distinct from save_checkin's energy_level, which is Antoine's own daily capacity, not a task property.",
           ),
+        revisit_date: z
+          .string()
+          .optional()
+          .describe(
+            "GTD tickler file: only meaningful when someday is true. A date (YYYY-MM-DD) this " +
+              "Someday/Maybe item should resurface for reconsideration.",
+          ),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
@@ -379,6 +386,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       waiting_for,
       estimated_minutes,
       energy_required,
+      revisit_date,
     }) => {
       const trimmed = title.trim();
       if (!trimmed) return fail("Title is required");
@@ -401,6 +409,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           waiting_since: waiting_for === true ? todayLocal() : undefined,
           estimated_minutes,
           energy_level: energy_required,
+          revisit_date: someday === true ? revisit_date : undefined,
         })
         .select()
         .single();
@@ -453,6 +462,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
             "GTD's 'resources available' criterion, or null to clear. Distinct from save_checkin's " +
               "energy_level, which is Antoine's own daily capacity, not a task property.",
           ),
+        revisit_date: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("GTD tickler file date (YYYY-MM-DD), or null to clear. Only meaningful when someday is true."),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
