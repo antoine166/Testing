@@ -57,15 +57,19 @@ export default function DoNowPage() {
   );
 
   const contexts = [...new Set(actionableTasks.map((t) => t.context).filter((c): c is string => !!c))].sort();
+  // If the selected context no longer exists (its last task was completed,
+  // reassigned, etc.), fall back to "Any" rather than silently filtering
+  // everything out while the <select> shows no matching option.
+  const effectiveContextFilter = contexts.includes(contextFilter) ? contextFilter : "";
 
   const filteredTasks = actionableTasks.filter((t) => {
-    if (contextFilter && t.context !== contextFilter) return false;
+    if (effectiveContextFilter && t.context !== effectiveContextFilter) return false;
     if (timeFilter && t.estimated_minutes && t.estimated_minutes > Number(timeFilter)) return false;
     if (energyFilter && t.energy_level && ENERGY_RANK[t.energy_level] > ENERGY_RANK[energyFilter]) return false;
     return true;
   });
 
-  const anyFilterActive = contextFilter || timeFilter || energyFilter;
+  const anyFilterActive = effectiveContextFilter || timeFilter || energyFilter;
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
@@ -78,7 +82,7 @@ export default function DoNowPage() {
 
       <div className="mb-4 flex flex-wrap gap-2">
         <select
-          value={contextFilter}
+          value={effectiveContextFilter}
           onChange={(e) => setContextFilter(e.target.value)}
           className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         >
