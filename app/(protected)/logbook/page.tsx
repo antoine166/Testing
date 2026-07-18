@@ -1,7 +1,9 @@
 "use client";
 
 import SmartListHeader from "@/components/smart-list-header";
-import TaskRow, { type Task } from "@/components/task-row";
+import { type Task } from "@/components/task-row";
+import { renderGroupedEntries } from "@/components/recurring-task-group";
+import { groupRecurringTasks } from "@/lib/recurring-tasks/group";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
 function monthLabel(dateStr: string): string {
@@ -49,17 +51,13 @@ export default function LogbookPage() {
                 {label}
               </h2>
               <ul className="space-y-2">
-                {monthTasks.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    domains={domains}
-                    projects={projects}
-                    onToggleDone={toggleDone}
-                    onUpdate={handleUpdate}
-                    onDelete={handleDelete}
-                  />
-                ))}
+                {renderGroupedEntries(groupRecurringTasks(monthTasks), {
+                  domains,
+                  projects,
+                  onToggleDone: toggleDone,
+                  onUpdate: handleUpdate,
+                  onDelete: handleDelete,
+                })}
               </ul>
             </div>
           ))}

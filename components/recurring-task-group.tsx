@@ -84,7 +84,7 @@ export default function RecurringTaskGroup({
           onClick={() => setExpanded(true)}
           className="w-full rounded-md border border-dashed border-zinc-300 px-4 py-2 text-left text-xs font-medium text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
         >
-          ↻ +{rest.length} more upcoming
+          ↻ +{rest.length} more
         </button>
       </li>
     </>
