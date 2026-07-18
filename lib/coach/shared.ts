@@ -62,6 +62,12 @@ export const TOOLS: Tool[] = [
             "Optional, only meaningful when someday is true. GTD tickler file: a date (YYYY-MM-DD) " +
             "this Someday/Maybe item should resurface for reconsideration.",
         },
+        follow_up_date: {
+          type: "string",
+          description:
+            "Optional, only meaningful when waiting_for is true. A date (YYYY-MM-DD) to actively " +
+            "prompt a follow-up nudge, instead of only tracking passive days-elapsed.",
+        },
       },
       required: ["title"],
     },
@@ -199,6 +205,12 @@ export const TOOLS: Tool[] = [
         revisit_date: {
           type: "string",
           description: "GTD tickler file date. Empty string clears it. Only meaningful when someday is true.",
+        },
+        follow_up_date: {
+          type: "string",
+          description:
+            "Date to actively prompt a follow-up nudge. Empty string clears it. Only meaningful " +
+            "when waiting_for is true — automatically cleared if waiting_for is set to false.",
         },
       },
       required: ["task_id"],
@@ -846,7 +858,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     supabase
       .from("tasks")
       .select(
-        "id, title, status, priority, due_date, scheduled_date, someday, waiting_for, waiting_since, domain_id, project_id",
+        "id, title, status, priority, due_date, scheduled_date, someday, revisit_date, waiting_for, waiting_since, follow_up_date, domain_id, project_id",
       )
       .is("deleted_at", null),
     supabase.from("habits").select("id, name, frequency, active").eq("active", true),
@@ -912,7 +924,9 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
               `- ${t.id} "${t.title}" [${t.status}, ${t.priority} priority${
                 t.scheduled_date ? `, scheduled ${t.scheduled_date}` : ""
               }${t.due_date ? `, due ${t.due_date}` : ""}${t.someday ? ", someday" : ""}${
-                t.waiting_for ? `, waiting for since ${t.waiting_since}` : ""
+                t.someday && t.revisit_date ? `, revisit ${t.revisit_date}` : ""
+              }${t.waiting_for ? `, waiting for since ${t.waiting_since}` : ""}${
+                t.waiting_for && t.follow_up_date ? `, follow up ${t.follow_up_date}` : ""
               }]`,
           )
           .join("\n")
@@ -1026,7 +1040,12 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   lines.push(
     waitingFor.length
       ? waitingFor
-          .map((t) => `- ${t.id} "${t.title}" waiting since ${t.waiting_since}`)
+          .map(
+            (t) =>
+              `- ${t.id} "${t.title}" waiting since ${t.waiting_since}${
+                t.follow_up_date ? `, follow up ${t.follow_up_date}` : ""
+              }`,
+          )
           .join("\n")
       : "(none)",
   );
@@ -1075,6 +1094,8 @@ export async function executeTool(
         energy_level: typeof input.energy_required === "string" ? input.energy_required : undefined,
         revisit_date:
           input.someday === true && typeof input.revisit_date === "string" ? input.revisit_date : undefined,
+        follow_up_date:
+          waitingFor === true && typeof input.follow_up_date === "string" ? input.follow_up_date : undefined,
       })
       .select()
       .single();
@@ -1220,9 +1241,12 @@ export async function executeTool(
     if (typeof input.due_date === "string") updates.due_date = input.due_date || null;
     if (typeof input.scheduled_date === "string") updates.scheduled_date = input.scheduled_date || null;
     if (typeof input.someday === "boolean") updates.someday = input.someday;
+    if (typeof input.follow_up_date === "string") updates.follow_up_date = input.follow_up_date || null;
     if (typeof input.waiting_for === "boolean") {
       updates.waiting_for = input.waiting_for;
       updates.waiting_since = input.waiting_for ? today : null;
+      // Wins over follow_up_date above if both are in the same call.
+      if (!input.waiting_for) updates.follow_up_date = null;
     }
     if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
     if (typeof input.project_id === "string") updates.project_id = input.project_id || null;

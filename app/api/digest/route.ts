@@ -67,6 +67,10 @@ export async function GET(request: Request) {
   // just a passive elapsed-days counter in the UI — surface anything
   // stalled a week or more so the daily nudge can actually ask about it.
   const staleWaitingFor = tasks.filter((t) => t.waiting_for && t.waiting_since && daysSince(t.waiting_since) >= 7);
+  // An explicit follow_up_date is a stronger, deliberate version of the
+  // same prompt — surfaced separately since it's a "the user asked for
+  // this specific nudge today" signal, not just a passive age heuristic.
+  const dueFollowUps = tasks.filter((t) => t.waiting_for && t.follow_up_date && t.follow_up_date <= today);
 
   return NextResponse.json({
     date: today,
@@ -79,5 +83,6 @@ export async function GET(request: Request) {
       waiting_since: t.waiting_since,
       days_waiting: daysSince(t.waiting_since),
     })),
+    due_follow_ups: dueFollowUps.map((t) => ({ title: t.title, follow_up_date: t.follow_up_date })),
   });
 }

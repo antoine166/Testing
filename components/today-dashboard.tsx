@@ -496,6 +496,12 @@ export default function TodayDashboard() {
   const readyToRevisitCount = tasks.filter(
     (t) => t.someday && t.status !== "done" && t.revisit_date && t.revisit_date <= today,
   ).length;
+  // GTD's Waiting For is only useful if it prompts an actual follow-up —
+  // an explicit follow_up_date is that active nudge, surfaced the same
+  // way the tickler file surfaces a Someday item that's come due.
+  const readyToFollowUpCount = tasks.filter(
+    (t) => t.waiting_for && t.status !== "done" && t.follow_up_date && t.follow_up_date <= today,
+  ).length;
 
   return (
     <div className="space-y-8">
@@ -539,6 +545,16 @@ export default function TodayDashboard() {
         >
           🔔 {readyToRevisitCount} Someday {readyToRevisitCount === 1 ? "item" : "items"} ready to
           revisit →
+        </Link>
+      )}
+
+      {readyToFollowUpCount > 0 && (
+        <Link
+          href="/waiting-for"
+          className="block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+        >
+          🔔 {readyToFollowUpCount} Waiting For {readyToFollowUpCount === 1 ? "item" : "items"} due
+          for a follow-up →
         </Link>
       )}
 
