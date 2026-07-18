@@ -82,12 +82,11 @@ export function useTaskList() {
     await handleUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
   }
 
-  async function handleDelete(id: string, scope?: "following") {
-    const message =
-      scope === "following"
-        ? "Move this and all future occurrences to trash, and stop this recurring task? You can restore them within 30 days."
-        : "Move this task to trash? You can restore it within 30 days.";
-    if (!confirm(message)) return;
+  async function handleDelete(id: string, scope?: "skip" | "following") {
+    // Recurring tasks route through TaskRow's own "Skip this one" / "This +
+    // future" picker, which is itself the confirmation step — a plain
+    // (non-recurring) delete never shows that picker and still needs one.
+    if (!scope && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
     const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
     const res = await fetch(url, { method: "DELETE" });
     if (!res.ok) {

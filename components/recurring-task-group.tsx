@@ -9,7 +9,7 @@ type CommonRowProps = {
   projects: TaskProject[];
   onToggleDone: (task: Task) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
-  onDelete: (id: string, scope?: "following") => void;
+  onDelete: (id: string, scope?: "skip" | "following") => void;
   onConvertToProject?: (id: string) => void;
 };
 
