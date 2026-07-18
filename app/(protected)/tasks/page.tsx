@@ -767,7 +767,12 @@ export default function TasksPage() {
                 Nothing unprocessed — inbox is clear.
               </p>
             ) : (
-              <ul className="space-y-2">
+              <>
+                <p className="mb-3 text-xs text-zinc-500">
+                  💡 GTD&apos;s two-minute rule: if something here takes less than two minutes,
+                  just do it now instead of filing it.
+                </p>
+                <ul className="space-y-2">
                 {selectMode
                   ? inboxTasks.map((task) => (
                       <TaskRow
@@ -792,7 +797,8 @@ export default function TasksPage() {
                       onDelete: handleDelete,
                       onConvertToProject: handleConvertToProject,
                     })}
-              </ul>
+                </ul>
+              </>
             )}
           </div>
 

@@ -427,20 +427,26 @@ export default function InboxPage() {
       ) : inboxTasks.length === 0 ? (
         <p className="text-sm text-zinc-500">Nothing unprocessed — inbox is clear.</p>
       ) : (
-        <ul className="space-y-2">
-          {inboxTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              domains={domains}
-              projects={projects}
-              onToggleDone={toggleDone}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              onConvertToProject={handleConvertToProject}
-            />
-          ))}
-        </ul>
+        <>
+          <p className="mb-3 text-xs text-zinc-500">
+            💡 GTD&apos;s two-minute rule: if something here takes less than two minutes, just do
+            it now instead of filing it.
+          </p>
+          <ul className="space-y-2">
+            {inboxTasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                domains={domains}
+                projects={projects}
+                onToggleDone={toggleDone}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+                onConvertToProject={handleConvertToProject}
+              />
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
