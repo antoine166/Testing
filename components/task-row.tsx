@@ -503,6 +503,7 @@ export default function TaskRow({
           )}
           {task.notes && <NotesText notes={task.notes} />}
           <p className="mt-1 text-xs text-zinc-500">
+            {task.recurring_template_id ? "↻ " : ""}
             {task.status} · {task.priority} priority
             {task.context ? ` · @${task.context}` : ""}
             {domain ? ` · ${domain.name}` : ""}

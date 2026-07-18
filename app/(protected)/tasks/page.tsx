@@ -11,6 +11,7 @@ import TaskRow, {
 } from "@/components/task-row";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import RecurrenceFields from "@/components/recurrence-fields";
+import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import { DAY_LABELS, type RecurrenceType } from "@/lib/recurring-tasks/types";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
@@ -698,18 +699,14 @@ export default function TasksPage() {
             <p className="text-sm text-zinc-500">No tasks here yet.</p>
           ) : (
             <ul className="space-y-2">
-              {filteredTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  domains={domains}
-                  projects={projects}
-                  onToggleDone={toggleDone}
-                  onUpdate={handleUpdate}
-                  onDelete={handleDelete}
-                  onConvertToProject={handleConvertToProject}
-                />
-              ))}
+              {renderGroupedTaskRows(filteredTasks, {
+                domains,
+                projects,
+                onToggleDone: toggleDone,
+                onUpdate: handleUpdate,
+                onDelete: handleDelete,
+                onConvertToProject: handleConvertToProject,
+              })}
             </ul>
           )}
         </div>
@@ -771,21 +768,30 @@ export default function TasksPage() {
               </p>
             ) : (
               <ul className="space-y-2">
-                {inboxTasks.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    domains={domains}
-                    projects={projects}
-                    onToggleDone={toggleDone}
-                    onUpdate={handleUpdate}
-                    onDelete={handleDelete}
-                    onConvertToProject={handleConvertToProject}
-                    selectable={selectMode}
-                    selected={selectedIds.has(task.id)}
-                    onSelectChange={(checked) => toggleSelected(task.id, checked)}
-                  />
-                ))}
+                {selectMode
+                  ? inboxTasks.map((task) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        domains={domains}
+                        projects={projects}
+                        onToggleDone={toggleDone}
+                        onUpdate={handleUpdate}
+                        onDelete={handleDelete}
+                        onConvertToProject={handleConvertToProject}
+                        selectable
+                        selected={selectedIds.has(task.id)}
+                        onSelectChange={(checked) => toggleSelected(task.id, checked)}
+                      />
+                    ))
+                  : renderGroupedTaskRows(inboxTasks, {
+                      domains,
+                      projects,
+                      onToggleDone: toggleDone,
+                      onUpdate: handleUpdate,
+                      onDelete: handleDelete,
+                      onConvertToProject: handleConvertToProject,
+                    })}
               </ul>
             )}
           </div>
@@ -854,18 +860,14 @@ export default function TasksPage() {
                                   <p className="text-sm text-zinc-500">No tasks yet.</p>
                                 ) : (
                                   <ul className="space-y-2">
-                                    {projectTasks.map((task) => (
-                                      <TaskRow
-                                        key={task.id}
-                                        task={task}
-                                        domains={domains}
-                                        projects={projects}
-                                        onToggleDone={toggleDone}
-                                        onUpdate={handleUpdate}
-                                        onDelete={handleDelete}
-                                        onConvertToProject={handleConvertToProject}
-                                      />
-                                    ))}
+                                    {renderGroupedTaskRows(projectTasks, {
+                                      domains,
+                                      projects,
+                                      onToggleDone: toggleDone,
+                                      onUpdate: handleUpdate,
+                                      onDelete: handleDelete,
+                                      onConvertToProject: handleConvertToProject,
+                                    })}
                                   </ul>
                                 )}
                               </div>
@@ -880,18 +882,14 @@ export default function TasksPage() {
                                 </p>
                               )}
                               <ul className="space-y-2">
-                                {unfiledDomainTasks.map((task) => (
-                                  <TaskRow
-                                    key={task.id}
-                                    task={task}
-                                    domains={domains}
-                                    projects={projects}
-                                    onToggleDone={toggleDone}
-                                    onUpdate={handleUpdate}
-                                    onDelete={handleDelete}
-                                    onConvertToProject={handleConvertToProject}
-                                  />
-                                ))}
+                                {renderGroupedTaskRows(unfiledDomainTasks, {
+                                  domains,
+                                  projects,
+                                  onToggleDone: toggleDone,
+                                  onUpdate: handleUpdate,
+                                  onDelete: handleDelete,
+                                  onConvertToProject: handleConvertToProject,
+                                })}
                               </ul>
                             </div>
                           )}
