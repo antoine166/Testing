@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
+import { todayLocal } from "@/lib/date";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -22,6 +23,7 @@ export type Task = {
   context: string | null;
   waiting_for: boolean;
   waiting_since: string | null;
+  follow_up_date?: string | null;
   completed_at?: string | null;
   recurring_template_id?: string | null;
   recurring_task_templates?: RecurrencePattern | null;
@@ -253,6 +255,7 @@ export default function TaskRow({
   const [scheduledDate, setScheduledDate] = useState(task.scheduled_date ?? "");
   const [someday, setSomeday] = useState(task.someday);
   const [waitingFor, setWaitingFor] = useState(task.waiting_for);
+  const [followUpDate, setFollowUpDate] = useState(task.follow_up_date ?? "");
   const [context, setContext] = useState(task.context ?? "");
   const [estimatedMinutes, setEstimatedMinutes] = useState(task.estimated_minutes?.toString() ?? "");
   const [energyLevel, setEnergyLevel] = useState<TaskEnergy | "">(task.energy_level ?? "");
@@ -270,6 +273,7 @@ export default function TaskRow({
     setScheduledDate(task.scheduled_date ?? "");
     setSomeday(task.someday);
     setWaitingFor(task.waiting_for);
+    setFollowUpDate(task.follow_up_date ?? "");
     setContext(task.context ?? "");
     setEstimatedMinutes(task.estimated_minutes?.toString() ?? "");
     setEnergyLevel(task.energy_level ?? "");
@@ -284,6 +288,7 @@ export default function TaskRow({
       link: link.trim() || null,
       notes,
       waiting_for: waitingFor,
+      follow_up_date: waitingFor && followUpDate ? followUpDate : null,
       context: context.trim() || null,
       domain_id: domainId || null,
       project_id: projectId || null,
@@ -442,6 +447,15 @@ export default function TaskRow({
               />
               Waiting for
             </label>
+            {waitingFor && (
+              <input
+                type="date"
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+                title="Follow up date — actively prompt a nudge on this date instead of just tracking elapsed days"
+                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            )}
             <input
               value={context}
               onChange={(e) => setContext(e.target.value)}
@@ -564,13 +578,19 @@ export default function TaskRow({
           {task.waiting_for && (
             <p
               className={`mt-0.5 text-xs font-medium ${
-                task.waiting_since && daysSince(task.waiting_since) >= 7
+                (task.follow_up_date && task.follow_up_date <= todayLocal()) ||
+                (task.waiting_since && daysSince(task.waiting_since) >= 7)
                   ? "text-amber-600 dark:text-amber-400"
                   : "text-zinc-500"
               }`}
             >
               ⏳ Waiting For
               {task.waiting_since ? ` · ${daysSince(task.waiting_since)}d` : ""}
+              {task.follow_up_date
+                ? task.follow_up_date <= todayLocal()
+                  ? " · 🔔 follow up now"
+                  : ` · follow up ${task.follow_up_date}`
+                : ""}
             </p>
           )}
           <AttachmentStrip ref={attachmentRef} taskId={task.id} hideAddButton />

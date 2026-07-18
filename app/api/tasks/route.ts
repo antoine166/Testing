@@ -57,6 +57,10 @@ export async function POST(request: Request) {
       estimated_minutes: typeof body.estimated_minutes === "number" ? body.estimated_minutes : undefined,
       energy_level: typeof body.energy_level === "string" ? body.energy_level : undefined,
       revisit_date: body.someday === true && typeof body.revisit_date === "string" ? body.revisit_date : undefined,
+      follow_up_date:
+        body.waiting_for === true && typeof body.follow_up_date === "string"
+          ? body.follow_up_date
+          : undefined,
     })
     .select()
     .single();

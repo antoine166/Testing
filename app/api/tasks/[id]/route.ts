@@ -81,6 +81,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("revisit_date" in body) {
     updates.revisit_date = typeof body.revisit_date === "string" ? body.revisit_date : null;
   }
+  if ("follow_up_date" in body) {
+    updates.follow_up_date = typeof body.follow_up_date === "string" ? body.follow_up_date : null;
+  }
   if (typeof body.waiting_for === "boolean") {
     const { data: existing } = await supabase
       .from("tasks")
@@ -92,7 +95,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
     if (!existing?.waiting_for && body.waiting_for) {
       updates.waiting_since = new Date().toISOString().slice(0, 10);
     } else if (!body.waiting_for) {
+      // Wins over any follow_up_date in the same payload — a task that's
+      // no longer Waiting For can't have a follow-up date, same as
+      // revisit_date being someday-gated above.
       updates.waiting_since = null;
+      updates.follow_up_date = null;
     }
   }
   if (typeof body.status === "string") {

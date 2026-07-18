@@ -386,6 +386,13 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
             "GTD tickler file: only meaningful when someday is true. A date (YYYY-MM-DD) this " +
               "Someday/Maybe item should resurface for reconsideration.",
           ),
+        follow_up_date: z
+          .string()
+          .optional()
+          .describe(
+            "Only meaningful when waiting_for is true. A date (YYYY-MM-DD) to actively prompt a " +
+              "follow-up nudge, instead of only tracking passive days-elapsed.",
+          ),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
@@ -404,6 +411,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       estimated_minutes,
       energy_required,
       revisit_date,
+      follow_up_date,
     }) => {
       const trimmed = title.trim();
       if (!trimmed) return fail("Title is required");
@@ -427,6 +435,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           estimated_minutes,
           energy_level: energy_required,
           revisit_date: someday === true ? revisit_date : undefined,
+          follow_up_date: waiting_for === true ? follow_up_date : undefined,
         })
         .select()
         .single();
@@ -484,6 +493,14 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .nullable()
           .optional()
           .describe("GTD tickler file date (YYYY-MM-DD), or null to clear. Only meaningful when someday is true."),
+        follow_up_date: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "Date to actively prompt a follow-up nudge, or null to clear. Only meaningful when " +
+              "waiting_for is true — automatically cleared if waiting_for is set to false.",
+          ),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
@@ -523,7 +540,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
             .maybeSingle();
           if (!existing?.waiting_for) updates.waiting_since = todayLocal();
         } else {
+          // Wins over any follow_up_date in the same call (already applied
+          // via the ...rest spread above).
           updates.waiting_since = null;
+          updates.follow_up_date = null;
         }
       }
 
@@ -2107,6 +2127,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       const staleWaitingFor = tasks.filter(
         (t) => t.waiting_for && t.waiting_since && daysSince(t.waiting_since) >= 7,
       );
+      // An explicit follow_up_date is a stronger, deliberate version of the
+      // same prompt — "the user asked for this specific nudge today."
+      const dueFollowUps = tasks.filter(
+        (t) => t.waiting_for && t.follow_up_date && t.follow_up_date <= today,
+      );
 
       return ok({
         date: today,
@@ -2119,6 +2144,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           title: t.title,
           waiting_since: t.waiting_since,
           days_waiting: daysSince(t.waiting_since),
+        })),
+        due_follow_ups: dueFollowUps.map((t) => ({
+          id: t.id,
+          title: t.title,
+          follow_up_date: t.follow_up_date,
         })),
       });
     },

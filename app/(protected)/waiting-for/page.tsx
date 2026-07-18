@@ -3,6 +3,7 @@
 import SmartListHeader from "@/components/smart-list-header";
 import TaskRow from "@/components/task-row";
 import { useTaskList } from "@/lib/hooks/use-task-list";
+import { todayLocal } from "@/lib/date";
 
 export default function WaitingForPage() {
   const {
@@ -17,9 +18,23 @@ export default function WaitingForPage() {
     handleConvertToProject,
   } = useTaskList();
 
+  const today = todayLocal();
   const waitingTasks = tasks
     .filter((t) => t.waiting_for && t.status !== "done")
     .sort((a, b) => (a.waiting_since ?? "").localeCompare(b.waiting_since ?? ""));
+  // An explicit follow_up_date is an active prompt ("nudge me on this
+  // date"), distinct from the passive elapsed-days sort below it.
+  const readyToFollowUp = waitingTasks.filter((t) => t.follow_up_date && t.follow_up_date <= today);
+  const rest = waitingTasks.filter((t) => !(t.follow_up_date && t.follow_up_date <= today));
+
+  const rowProps = {
+    domains,
+    projects,
+    onToggleDone: toggleDone,
+    onUpdate: handleUpdate,
+    onDelete: handleDelete,
+    onConvertToProject: handleConvertToProject,
+  };
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
@@ -44,20 +59,27 @@ export default function WaitingForPage() {
           when you hand something off to someone else.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {waitingTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              domains={domains}
-              projects={projects}
-              onToggleDone={toggleDone}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              onConvertToProject={handleConvertToProject}
-            />
-          ))}
-        </ul>
+        <>
+          {readyToFollowUp.length > 0 && (
+            <div className="mb-6">
+              <h2 className="mb-2 text-sm font-semibold text-amber-700 dark:text-amber-500">
+                🔔 Follow up now ({readyToFollowUp.length})
+              </h2>
+              <ul className="space-y-2">
+                {readyToFollowUp.map((task) => (
+                  <TaskRow key={task.id} task={task} {...rowProps} />
+                ))}
+              </ul>
+            </div>
+          )}
+          {rest.length > 0 && (
+            <ul className="space-y-2">
+              {rest.map((task) => (
+                <TaskRow key={task.id} task={task} {...rowProps} />
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );
