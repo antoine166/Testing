@@ -12,7 +12,7 @@ import TaskRow, {
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import RecurrenceFields from "@/components/recurrence-fields";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
-import { DAY_LABELS, type RecurrenceType } from "@/lib/recurring-tasks/types";
+import { describeRecurrence, type RecurrenceType } from "@/lib/recurring-tasks/types";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
@@ -21,6 +21,8 @@ type ProjectWithDomain = TaskProject & { domain_id: string | null };
 type RecurringTemplate = {
   id: string;
   title: string;
+  notes: string | null;
+  link: string | null;
   domain_id: string | null;
   project_id: string | null;
   priority: TaskPriority;
@@ -28,18 +30,9 @@ type RecurringTemplate = {
   days_of_week: number[] | null;
   day_of_month: number | null;
   interval_days: number | null;
+  horizon_count: number;
   active: boolean;
 };
-
-function describeRecurrence(t: RecurringTemplate): string {
-  if (t.recurrence_type === "weekly") {
-    return `Weekly on ${(t.days_of_week ?? []).map((d) => DAY_LABELS[d]).join(", ")}`;
-  }
-  if (t.recurrence_type === "monthly") {
-    return `Monthly on day ${t.day_of_month}`;
-  }
-  return `Every ${t.interval_days} day${t.interval_days === 1 ? "" : "s"}`;
-}
 
 export default function TasksPage() {
   const searchParams = useSearchParams();
@@ -69,6 +62,19 @@ export default function TasksPage() {
   const [recurrenceDayOfMonth, setRecurrenceDayOfMonth] = useState(1);
   const [recurrenceIntervalDays, setRecurrenceIntervalDays] = useState(7);
   const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>([]);
+
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editLink, setEditLink] = useState("");
+  const [editDomainId, setEditDomainId] = useState("");
+  const [editProjectId, setEditProjectId] = useState("");
+  const [editPriority, setEditPriority] = useState<TaskPriority>("none");
+  const [editHorizonCount, setEditHorizonCount] = useState(12);
+  const [editRecurrenceType, setEditRecurrenceType] = useState<RecurrenceType>("weekly");
+  const [editDaysOfWeek, setEditDaysOfWeek] = useState<number[]>([]);
+  const [editDayOfMonth, setEditDayOfMonth] = useState(1);
+  const [editIntervalDays, setEditIntervalDays] = useState(7);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -257,6 +263,62 @@ export default function TasksPage() {
       setError(body.error ?? "Failed to update recurring task");
       return;
     }
+    await loadRecurringTemplates();
+  }
+
+  function startEditTemplate(t: RecurringTemplate) {
+    setEditingTemplateId(t.id);
+    setEditTitle(t.title);
+    setEditNotes(t.notes ?? "");
+    setEditLink(t.link ?? "");
+    setEditDomainId(t.domain_id ?? "");
+    setEditProjectId(t.project_id ?? "");
+    setEditPriority(t.priority);
+    setEditHorizonCount(t.horizon_count);
+    setEditRecurrenceType(t.recurrence_type);
+    setEditDaysOfWeek(t.days_of_week ?? []);
+    setEditDayOfMonth(t.day_of_month ?? 1);
+    setEditIntervalDays(t.interval_days ?? 7);
+  }
+
+  function cancelEditTemplate() {
+    setEditingTemplateId(null);
+  }
+
+  async function handleUpdateTemplate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingTemplateId || !editTitle.trim()) return;
+
+    if (editRecurrenceType === "weekly" && editDaysOfWeek.length === 0) {
+      setError("Pick at least one day for a weekly recurring task.");
+      return;
+    }
+
+    const res = await fetch(`/api/recurring-task-templates/${editingTemplateId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: editTitle,
+        notes: editNotes || null,
+        link: editLink || null,
+        domain_id: editDomainId || null,
+        project_id: editProjectId || null,
+        priority: editPriority,
+        horizon_count: editHorizonCount,
+        recurrence_type: editRecurrenceType,
+        days_of_week: editRecurrenceType === "weekly" ? editDaysOfWeek : undefined,
+        day_of_month: editRecurrenceType === "monthly" ? editDayOfMonth : undefined,
+        interval_days: editRecurrenceType === "interval" ? editIntervalDays : undefined,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to update recurring task");
+      return;
+    }
+
+    setEditingTemplateId(null);
     await loadRecurringTemplates();
   }
 
@@ -648,42 +710,157 @@ export default function TasksPage() {
             Recurring tasks ({recurringTemplates.length})
           </summary>
           <ul className="space-y-2">
-            {recurringTemplates.map((t) => (
-              <li
-                key={t.id}
-                className={`flex items-center justify-between gap-3 rounded-md border px-4 py-3 ${
-                  t.active
-                    ? "border-zinc-200 dark:border-zinc-800"
-                    : "border-zinc-200 opacity-50 dark:border-zinc-800"
-                }`}
-              >
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {t.title}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    {describeRecurrence(t)}
-                    {!t.active ? " · paused" : ""}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTemplateActive(t.id, !t.active)}
-                    className="text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-                  >
-                    {t.active ? "Pause" : "Resume"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteTemplate(t.id)}
-                    className="text-sm font-medium text-zinc-500 hover:text-red-600 dark:hover:text-red-400"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
+            {recurringTemplates.map((t) =>
+              editingTemplateId === t.id ? (
+                <li
+                  key={t.id}
+                  className="space-y-3 rounded-md border border-zinc-300 px-4 py-3 dark:border-zinc-700"
+                >
+                  <form onSubmit={handleUpdateTemplate} className="space-y-3">
+                    <input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Title"
+                      required
+                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <input
+                      value={editLink}
+                      onChange={(e) => setEditLink(e.target.value)}
+                      placeholder="Link (optional)"
+                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <textarea
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      placeholder="Notes (optional)"
+                      rows={2}
+                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <div className="flex flex-wrap items-end gap-3">
+                      <select
+                        value={editDomainId}
+                        onChange={(e) => setEditDomainId(e.target.value)}
+                        className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      >
+                        <option value="">Inbox</option>
+                        {domains.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={editProjectId}
+                        onChange={(e) => setEditProjectId(e.target.value)}
+                        className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      >
+                        <option value="">No project</option>
+                        {projects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={editPriority}
+                        onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
+                        className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      >
+                        {PRIORITIES.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="flex items-center gap-2 text-sm text-zinc-500">
+                        Keep
+                        <input
+                          type="number"
+                          min={1}
+                          max={52}
+                          value={editHorizonCount}
+                          onChange={(e) => setEditHorizonCount(Number(e.target.value))}
+                          className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                        />
+                        upcoming
+                      </label>
+                    </div>
+                    <RecurrenceFields
+                      recurrenceType={editRecurrenceType}
+                      onRecurrenceTypeChange={setEditRecurrenceType}
+                      daysOfWeek={editDaysOfWeek}
+                      onToggleDay={(day) =>
+                        setEditDaysOfWeek((prev) =>
+                          prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+                        )
+                      }
+                      dayOfMonth={editDayOfMonth}
+                      onDayOfMonthChange={setEditDayOfMonth}
+                      intervalDays={editIntervalDays}
+                      onIntervalDaysChange={setEditIntervalDays}
+                    />
+                    <div className="flex gap-3">
+                      <button
+                        type="submit"
+                        className="rounded-md bg-zinc-950 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEditTemplate}
+                        className="rounded-md px-3 py-1.5 text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </li>
+              ) : (
+                <li
+                  key={t.id}
+                  className={`flex items-center justify-between gap-3 rounded-md border px-4 py-3 ${
+                    t.active
+                      ? "border-zinc-200 dark:border-zinc-800"
+                      : "border-zinc-200 opacity-50 dark:border-zinc-800"
+                  }`}
+                >
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {t.title}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {describeRecurrence(t)} · keeps {t.horizon_count} upcoming
+                      {!t.active ? " · paused" : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => startEditTemplate(t)}
+                      className="text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTemplateActive(t.id, !t.active)}
+                      className="text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    >
+                      {t.active ? "Pause" : "Resume"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTemplate(t.id)}
+                      className="text-sm font-medium text-zinc-500 hover:text-red-600 dark:hover:text-red-400"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ),
+            )}
           </ul>
         </details>
       )}

@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("tasks")
-    .select("*")
+    .select("*, recurring_task_templates(recurrence_type, days_of_week, day_of_month, interval_days)")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
