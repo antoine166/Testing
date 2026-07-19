@@ -4,6 +4,10 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import Link from "next/link";
 import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
 import { todayLocal } from "@/lib/date";
+import RecurrenceFields, {
+  DEFAULT_RECURRENCE_PATTERN,
+  type RecurrencePatternDraft,
+} from "@/components/recurrence-fields";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -226,6 +230,7 @@ export default function TaskRow({
   onUpdate,
   onDelete,
   onConvertToProject,
+  onConvertToRecurring,
   selectable = false,
   selected = false,
   onSelectChange,
@@ -237,6 +242,8 @@ export default function TaskRow({
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string, scope?: "skip" | "following") => void;
   onConvertToProject?: (id: string) => void;
+  /** Seeds a new recurring template from this plain task, then trashes it — the "Repeat..." action Things 3 exposes on any to-do. Omitted (or the task is already part of a series) hides the action. */
+  onConvertToRecurring?: (id: string, pattern: RecurrencePatternDraft) => void;
   /** Shows a selection checkbox for bulk actions (e.g. filing multiple Inbox tasks at once). */
   selectable?: boolean;
   selected?: boolean;
@@ -244,6 +251,8 @@ export default function TaskRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showRecurrencePicker, setShowRecurrencePicker] = useState(false);
+  const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
   const attachmentRef = useRef<AttachmentStripHandle>(null);
   const [title, setTitle] = useState(task.title);
   const [link, setLink] = useState(task.link ?? "");
@@ -279,6 +288,8 @@ export default function TaskRow({
     setEstimatedMinutes(task.estimated_minutes?.toString() ?? "");
     setEnergyLevel(task.energy_level ?? "");
     setRevisitDate(task.revisit_date ?? "");
+    setShowRecurrencePicker(false);
+    setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
     setEditing(true);
   }
 
@@ -505,6 +516,45 @@ export default function TaskRow({
             >
               Convert to project →
             </button>
+          )}
+          {onConvertToRecurring && !task.recurring_template_id && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowRecurrencePicker((v) => !v)}
+                className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              >
+                ↻ Make recurring →
+              </button>
+              {showRecurrencePicker && (
+                <div className="mt-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+                  <RecurrenceFields
+                    pattern={recurrencePattern}
+                    onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
+                  />
+                  <div className="mt-3 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(false);
+                        setShowRecurrencePicker(false);
+                        onConvertToRecurring(task.id, recurrencePattern);
+                      }}
+                      className="rounded-md bg-zinc-950 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                    >
+                      Make recurring
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRecurrencePicker(false)}
+                      className="rounded-md px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </li>

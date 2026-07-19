@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Task, TaskDomain, TaskProject } from "@/components/task-row";
+import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 /** Shared fetch + CRUD wiring for the Things-style smart-list pages (Inbox, Upcoming, Anytime, Someday, Logbook). */
@@ -129,6 +130,20 @@ export function useTaskList() {
     await loadAll();
   }
 
+  async function handleConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
+    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pattern),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to recurring");
+      return;
+    }
+    await loadAll();
+  }
+
   return {
     domains,
     projects,
@@ -140,6 +155,7 @@ export function useTaskList() {
     handleDelete,
     createTask,
     handleConvertToProject,
+    handleConvertToRecurring,
     loadAll,
   };
 }

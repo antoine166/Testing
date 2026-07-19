@@ -5,6 +5,7 @@ import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
 import { type Task } from "@/components/task-row";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
+import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type Domain = {
@@ -240,6 +241,20 @@ export default function DomainsPage() {
     await loadDomains();
   }
 
+  async function handleTaskConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
+    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pattern),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to recurring");
+      return;
+    }
+    await loadDomains();
+  }
+
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
       <h1 className="mb-6 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
@@ -450,6 +465,7 @@ export default function DomainsPage() {
                               onUpdate: handleTaskUpdate,
                               onDelete: handleTaskDelete,
                               onConvertToProject: handleTaskConvertToProject,
+                              onConvertToRecurring: handleTaskConvertToRecurring,
                             })}
                           </ul>
                         </details>
@@ -483,6 +499,7 @@ export default function DomainsPage() {
                                   onUpdate: handleTaskUpdate,
                                   onDelete: handleTaskDelete,
                                   onConvertToProject: handleTaskConvertToProject,
+                                  onConvertToRecurring: handleTaskConvertToRecurring,
                                 })}
                               </ul>
                             )}

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
-import { topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
+import { seedCompletionTemplate, topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
+import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
 
-const RECURRENCE_TYPES = ["weekly", "monthly", "interval"] as const;
 const PRIORITIES = ["none", "low", "medium", "high"] as const;
 
 export async function GET() {
@@ -37,31 +37,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
 
-  const recurrenceType = body.recurrence_type;
-  if (!RECURRENCE_TYPES.includes(recurrenceType)) {
-    return NextResponse.json({ error: "Invalid recurrence_type" }, { status: 400 });
+  const patternResult = parseRecurrencePattern(body);
+  if ("error" in patternResult) {
+    return NextResponse.json({ error: patternResult.error }, { status: 400 });
   }
-
-  let daysOfWeek: number[] | null = null;
-  let dayOfMonth: number | null = null;
-  let intervalDays: number | null = null;
-
-  if (recurrenceType === "weekly") {
-    const parsed: number[] = Array.isArray(body.days_of_week) ? body.days_of_week.map(Number) : [];
-    if (parsed.length === 0 || parsed.some((d) => d < 0 || d > 6)) {
-      return NextResponse.json({ error: "days_of_week must be one or more of 0-6" }, { status: 400 });
-    }
-    daysOfWeek = parsed;
-  } else if (recurrenceType === "monthly") {
-    dayOfMonth = Number(body.day_of_month);
-    if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
-      return NextResponse.json({ error: "day_of_month must be 1-31" }, { status: 400 });
-    }
-  } else {
-    intervalDays = Number(body.interval_days);
-    if (!Number.isInteger(intervalDays) || intervalDays < 1) {
-      return NextResponse.json({ error: "interval_days must be a positive integer" }, { status: 400 });
-    }
+  const endsResult = parseEnds(body);
+  if ("error" in endsResult) {
+    return NextResponse.json({ error: endsResult.error }, { status: 400 });
   }
 
   const horizonCount = body.horizon_count !== undefined ? Number(body.horizon_count) : 12;
@@ -81,10 +63,8 @@ export async function POST(request: Request) {
       domain_id: typeof body.domain_id === "string" ? body.domain_id : null,
       project_id: typeof body.project_id === "string" ? body.project_id : null,
       priority,
-      recurrence_type: recurrenceType,
-      days_of_week: daysOfWeek,
-      day_of_month: dayOfMonth,
-      interval_days: intervalDays,
+      ...patternResult.pattern,
+      ...endsResult.ends,
       horizon_count: horizonCount,
     })
     .select()
@@ -94,10 +74,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { error: topUpError } = await topUpTemplate(supabase, template as StoredTemplate);
-  if (topUpError) {
+  const stored = template as StoredTemplate;
+  const { error: generateError } =
+    stored.recurrence_type === "completion"
+      ? await seedCompletionTemplate(supabase, stored)
+      : await topUpTemplate(supabase, stored);
+  if (generateError) {
     return NextResponse.json(
-      { error: `Template created, but generating the first occurrences failed: ${topUpError}`, template },
+      { error: `Template created, but generating the first occurrences failed: ${generateError}`, template },
       { status: 500 },
     );
   }

@@ -37,6 +37,7 @@ export default function UpcomingPage() {
     toggleDone,
     handleDelete,
     handleConvertToProject,
+    handleConvertToRecurring,
   } = useTaskList();
   const today = todayLocal();
 
@@ -89,6 +90,7 @@ export default function UpcomingPage() {
                   onUpdate: handleUpdate,
                   onDelete: handleDelete,
                   onConvertToProject: handleConvertToProject,
+                  onConvertToRecurring: handleConvertToRecurring,
                 })}
               </ul>
             </div>

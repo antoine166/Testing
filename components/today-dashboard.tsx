@@ -15,9 +15,11 @@ import TaskRow, {
 } from "@/components/task-row";
 import { type Routine } from "@/components/routine-card";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
-import RecurrenceFields from "@/components/recurrence-fields";
+import RecurrenceFields, {
+  DEFAULT_RECURRENCE_PATTERN,
+  type RecurrencePatternDraft,
+} from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
-import { type RecurrenceType } from "@/lib/recurring-tasks/types";
 
 type Checkin = {
   date: string;
@@ -119,10 +121,7 @@ export default function TodayDashboard() {
   const [newTaskFollowUpDate, setNewTaskFollowUpDate] = useState("");
   const [addingTask, setAddingTask] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("weekly");
-  const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<number[]>([]);
-  const [recurrenceDayOfMonth, setRecurrenceDayOfMonth] = useState(1);
-  const [recurrenceIntervalDays, setRecurrenceIntervalDays] = useState(7);
+  const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
   async function loadAll() {
     try {
@@ -349,6 +348,20 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
+  async function handleConvertTaskToRecurring(id: string, pattern: RecurrencePatternDraft) {
+    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pattern),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to recurring");
+      return;
+    }
+    await loadAll();
+  }
+
   function resetCreateForm() {
     setNewTaskTitle("");
     setNewTaskLink("");
@@ -362,10 +375,7 @@ export default function TodayDashboard() {
     setNewTaskWaitingFor(false);
     setNewTaskFollowUpDate("");
     setIsRecurring(false);
-    setRecurrenceType("weekly");
-    setRecurrenceDaysOfWeek([]);
-    setRecurrenceDayOfMonth(1);
-    setRecurrenceIntervalDays(7);
+    setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
 
   async function handleCreateSubmit(e: FormEvent<HTMLFormElement>) {
@@ -374,7 +384,7 @@ export default function TodayDashboard() {
     setAddingTask(true);
 
     if (isRecurring) {
-      if (recurrenceType === "weekly" && recurrenceDaysOfWeek.length === 0) {
+      if (recurrencePattern.recurrence_type === "weekly" && recurrencePattern.days_of_week.length === 0) {
         setAddingTask(false);
         setError("Pick at least one day for a weekly recurring task.");
         return;
@@ -390,10 +400,7 @@ export default function TodayDashboard() {
           domain_id: newTaskDomainId || null,
           project_id: newTaskProjectId || null,
           priority: newTaskPriority,
-          recurrence_type: recurrenceType,
-          days_of_week: recurrenceType === "weekly" ? recurrenceDaysOfWeek : undefined,
-          day_of_month: recurrenceType === "monthly" ? recurrenceDayOfMonth : undefined,
-          interval_days: recurrenceType === "interval" ? recurrenceIntervalDays : undefined,
+          ...recurrencePattern,
         }),
       });
 
@@ -609,6 +616,7 @@ export default function TodayDashboard() {
                 onUpdate={handleUpdateTask}
                 onDelete={handleDeleteTask}
                 onConvertToProject={handleConvertTaskToProject}
+                onConvertToRecurring={handleConvertTaskToRecurring}
               />
             ))}
           </ul>
@@ -867,18 +875,8 @@ export default function TodayDashboard() {
               </label>
               {isRecurring && (
                 <RecurrenceFields
-                  recurrenceType={recurrenceType}
-                  onRecurrenceTypeChange={setRecurrenceType}
-                  daysOfWeek={recurrenceDaysOfWeek}
-                  onToggleDay={(day) =>
-                    setRecurrenceDaysOfWeek((prev) =>
-                      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
-                    )
-                  }
-                  dayOfMonth={recurrenceDayOfMonth}
-                  onDayOfMonthChange={setRecurrenceDayOfMonth}
-                  intervalDays={recurrenceIntervalDays}
-                  onIntervalDaysChange={setRecurrenceIntervalDays}
+                  pattern={recurrencePattern}
+                  onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
                 />
               )}
             </div>
@@ -898,6 +896,7 @@ export default function TodayDashboard() {
                 onUpdate={handleUpdateTask}
                 onDelete={handleDeleteTask}
                 onConvertToProject={handleConvertTaskToProject}
+                onConvertToRecurring={handleConvertTaskToRecurring}
               />
             ))}
           </ul>

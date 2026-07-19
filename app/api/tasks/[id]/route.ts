@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import { generateNextCompletionOccurrence } from "@/lib/recurring-tasks/topup";
+import { todayLocal } from "@/lib/date";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -102,6 +104,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       updates.follow_up_date = null;
     }
   }
+  let justCompleted = false;
   if (typeof body.status === "string") {
     const { data: existing } = await supabase
       .from("tasks")
@@ -112,6 +115,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     updates.status = body.status;
     if (existing?.status !== body.status) {
       updates.completed_at = body.status === "done" ? new Date().toISOString() : null;
+      justCompleted = body.status === "done";
     }
   }
 
@@ -124,6 +128,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // An after-completion recurring task doesn't pre-generate its next
+  // occurrence ahead of time like every other recurrence type — it's
+  // spawned here, offset from the date it was actually finished.
+  if (justCompleted && data.recurring_template_id) {
+    await generateNextCompletionOccurrence(supabase, data.recurring_template_id, todayLocal());
   }
 
   return NextResponse.json(data);
