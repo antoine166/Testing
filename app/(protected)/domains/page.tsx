@@ -7,6 +7,7 @@ import { type Task } from "@/components/task-row";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { findStalledProjectIds } from "@/lib/projects/stalled";
 
 type Domain = {
   id: string;
@@ -22,6 +23,7 @@ type Project = {
   name: string;
   domain_id: string | null;
   status: string;
+  parent_project_id: string | null;
 };
 
 export default function DomainsPage() {
@@ -255,6 +257,24 @@ export default function DomainsPage() {
     await loadDomains();
   }
 
+  async function handleTaskConvertToKnowledgeItem(id: string) {
+    if (
+      !confirm(
+        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to file task as reference");
+      return;
+    }
+    await loadDomains();
+  }
+
+  const stalledProjectIds = findStalledProjectIds(projects, tasks);
+
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
       <h1 className="mb-6 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
@@ -466,6 +486,7 @@ export default function DomainsPage() {
                               onDelete: handleTaskDelete,
                               onConvertToProject: handleTaskConvertToProject,
                               onConvertToRecurring: handleTaskConvertToRecurring,
+                              onConvertToKnowledgeItem: handleTaskConvertToKnowledgeItem,
                             })}
                           </ul>
                         </details>
@@ -487,6 +508,14 @@ export default function DomainsPage() {
                               <span className="text-xs text-zinc-400">
                                 ({projectTasks.length})
                               </span>
+                              {stalledProjectIds.has(project.id) && (
+                                <span
+                                  title="Active, zero open tasks — no next action"
+                                  className="text-xs font-medium text-amber-600 dark:text-amber-400"
+                                >
+                                  ⚠ Stalled
+                                </span>
+                              )}
                             </summary>
                             {projectTasks.length === 0 ? (
                               <p className="mt-1 pl-4 text-xs text-zinc-500">No open tasks.</p>
@@ -500,6 +529,7 @@ export default function DomainsPage() {
                                   onDelete: handleTaskDelete,
                                   onConvertToProject: handleTaskConvertToProject,
                                   onConvertToRecurring: handleTaskConvertToRecurring,
+                                  onConvertToKnowledgeItem: handleTaskConvertToKnowledgeItem,
                                 })}
                               </ul>
                             )}

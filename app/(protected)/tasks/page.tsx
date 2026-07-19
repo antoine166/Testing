@@ -448,6 +448,22 @@ export default function TasksPage() {
     await loadRecurringTemplates();
   }
 
+  async function handleConvertToKnowledgeItem(id: string) {
+    if (
+      !confirm(
+        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to file task as reference");
+      return;
+    }
+    await loadAll();
+  }
+
   function toggleSelectMode() {
     setSelectMode((v) => !v);
     setSelectedIds(new Set());
@@ -974,6 +990,7 @@ export default function TasksPage() {
                 onDelete: handleDelete,
                 onConvertToProject: handleConvertToProject,
                 onConvertToRecurring: handleConvertToRecurring,
+                onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
               })}
             </ul>
           )}
@@ -1081,6 +1098,7 @@ export default function TasksPage() {
                         onDelete={handleDelete}
                         onConvertToProject={handleConvertToProject}
                         onConvertToRecurring={handleConvertToRecurring}
+                        onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
                         selectable
                         selected={selectedIds.has(task.id)}
                         onSelectChange={(checked) => toggleSelected(task.id, checked)}
@@ -1094,6 +1112,7 @@ export default function TasksPage() {
                       onDelete: handleDelete,
                       onConvertToProject: handleConvertToProject,
                       onConvertToRecurring: handleConvertToRecurring,
+                      onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                     })}
                 </ul>
               </>
@@ -1172,6 +1191,7 @@ export default function TasksPage() {
                                       onDelete: handleDelete,
                                       onConvertToProject: handleConvertToProject,
                                       onConvertToRecurring: handleConvertToRecurring,
+                                      onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                                     })}
                                   </ul>
                                 )}
@@ -1195,6 +1215,7 @@ export default function TasksPage() {
                                   onDelete: handleDelete,
                                   onConvertToProject: handleConvertToProject,
                                   onConvertToRecurring: handleConvertToRecurring,
+                                  onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                                 })}
                               </ul>
                             </div>

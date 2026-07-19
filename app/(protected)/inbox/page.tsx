@@ -25,6 +25,7 @@ export default function InboxPage() {
     createTask,
     handleConvertToProject,
     handleConvertToRecurring,
+    handleConvertToKnowledgeItem,
     loadAll,
   } = useTaskList();
 
@@ -443,6 +444,7 @@ export default function InboxPage() {
                 onDelete={handleDelete}
                 onConvertToProject={handleConvertToProject}
                 onConvertToRecurring={handleConvertToRecurring}
+                onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
               />
             ))}
           </ul>

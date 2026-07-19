@@ -463,6 +463,15 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         priority: z.enum(TASK_PRIORITIES).optional(),
         due_date: z.string().optional().describe("YYYY-MM-DD"),
         scheduled_date: z.string().optional().describe("YYYY-MM-DD"),
+        scheduled_time: z
+          .string()
+          .optional()
+          .describe(
+            "HH:MM, only meaningful alongside scheduled_date. Only set this if it's a genuine " +
+              "appointment that must happen at that time (GTD's hard landscape) — a scheduled_date " +
+              "alone just means 'planned for that day,' not a commitment. Don't set a time just " +
+              "because a date was given.",
+          ),
         someday: z
           .boolean()
           .optional()
@@ -471,6 +480,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .boolean()
           .optional()
           .describe("GTD Waiting For: delegated/blocked on someone else. Starts the days-waiting clock."),
+        waiting_on: z
+          .string()
+          .optional()
+          .describe("Only meaningful when waiting_for is true. Who it's delegated to/blocked on."),
         estimated_minutes: z
           .number()
           .int()
@@ -511,8 +524,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       priority,
       due_date,
       scheduled_date,
+      scheduled_time,
       someday,
       waiting_for,
+      waiting_on,
       estimated_minutes,
       energy_required,
       revisit_date,
@@ -534,9 +549,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           priority,
           due_date,
           scheduled_date,
+          scheduled_time: scheduled_time || undefined,
           someday,
           waiting_for,
           waiting_since: waiting_for === true ? todayLocal() : undefined,
+          waiting_on: waiting_for === true && waiting_on ? waiting_on.trim() : undefined,
           estimated_minutes,
           energy_level: energy_required,
           revisit_date: someday === true ? revisit_date : undefined,
@@ -570,14 +587,29 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         priority: z.enum(TASK_PRIORITIES).optional(),
         due_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
         scheduled_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
+        scheduled_time: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "HH:MM or null to clear. Only meaningful alongside scheduled_date. Only set this if " +
+              "it's a genuine appointment (GTD's hard landscape) — don't set a time just because a " +
+              "date was given.",
+          ),
         someday: z.boolean().optional().describe("Things-style Someday/Maybe flag."),
         waiting_for: z
           .boolean()
           .optional()
           .describe(
-            "GTD Waiting For. Turning it on starts the days-waiting clock; turning it off clears it. " +
-              "Leaving an already-waiting task waiting doesn't reset the clock.",
+            "GTD Waiting For. Turning it on starts the days-waiting clock; turning it off clears it " +
+              "(and waiting_on/follow_up_date with it). Leaving an already-waiting task waiting " +
+              "doesn't reset the clock.",
           ),
+        waiting_on: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("Who it's delegated to/blocked on, or null to clear. Only meaningful when waiting_for is true."),
         estimated_minutes: z
           .number()
           .int()
@@ -609,7 +641,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ id, title, link, context, waiting_for, energy_required, ...rest }) => {
+    async ({ id, title, link, context, waiting_for, waiting_on, energy_required, ...rest }) => {
       const updates: Record<string, unknown> = { ...rest };
       if (title !== undefined) {
         const trimmed = title.trim();
@@ -621,6 +653,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       }
       if (context !== undefined) {
         updates.context = context && context.trim() ? context.trim() : null;
+      }
+      if (waiting_on !== undefined) {
+        updates.waiting_on = waiting_on && waiting_on.trim() ? waiting_on.trim() : null;
       }
       if (energy_required !== undefined) {
         updates.energy_level = energy_required;
@@ -647,10 +682,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
             .maybeSingle();
           if (!existing?.waiting_for) updates.waiting_since = todayLocal();
         } else {
-          // Wins over any follow_up_date in the same call (already applied
-          // via the ...rest spread above).
+          // Wins over any follow_up_date/waiting_on in the same call
+          // (already applied via ...rest / the block above).
           updates.waiting_since = null;
           updates.follow_up_date = null;
+          updates.waiting_on = null;
         }
       }
 
@@ -808,6 +844,55 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       }
 
       return ok(project);
+    },
+  );
+
+  server.registerTool(
+    "convert_task_to_knowledge_item",
+    {
+      title: "Convert task to knowledge item",
+      description:
+        "GTD's first Clarify fork: 'is it actionable?' Use when the answer is no — files a task as " +
+        "reference instead of action. Creates a knowledge library item (type note) carrying over the " +
+        "task's title, notes, and link, then moves the original task to Trash (recoverable for 30 " +
+        "days). Deliberately no type/folder picker — one motion, refile it afterward if needed.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ id }) => {
+      const { data: task, error: taskError } = await admin
+        .from("tasks")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .single();
+      if (taskError || !task) return fail("Task not found");
+
+      const { data: item, error: itemError } = await admin
+        .from("knowledge_items")
+        .insert({
+          user_id: userId,
+          title: task.title,
+          content: task.notes,
+          url: task.link,
+          type: "note",
+        })
+        .select()
+        .single();
+      if (itemError) return fail(itemError.message);
+
+      const { error: trashError } = await admin
+        .from("tasks")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (trashError) {
+        return fail(
+          `Knowledge item created but couldn't trash the original task: ${trashError.message}`,
+        );
+      }
+
+      return ok(item);
     },
   );
 

@@ -9,6 +9,7 @@ import {
 } from "@/lib/recurring-tasks/topup";
 import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
 import { describeRecurrence } from "@/lib/recurring-tasks/types";
+import { findStalledProjectIds } from "@/lib/projects/stalled";
 
 // Domain restore stays app-only alongside domain deletion.
 const COACH_RESTORABLE_TRASH_TYPES = [
@@ -45,6 +46,14 @@ export const TOOLS: Tool[] = [
         priority: { type: "string", enum: ["none", "low", "medium", "high"] },
         due_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
         scheduled_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
+        scheduled_time: {
+          type: "string",
+          description:
+            "Optional, format HH:MM, only meaningful alongside scheduled_date. Only set this if " +
+            "it's a genuine appointment that must happen at that time (GTD's hard landscape) — a " +
+            "scheduled_date alone just means 'planned for that day,' not a commitment. Don't set a " +
+            "time just because a date was given.",
+        },
         someday: {
           type: "boolean",
           description: "Optional. Things-style Someday/Maybe — deliberately deferred rather than active now.",
@@ -52,6 +61,10 @@ export const TOOLS: Tool[] = [
         waiting_for: {
           type: "boolean",
           description: "Optional. GTD Waiting For — delegated/blocked on someone else. Starts the days-waiting clock.",
+        },
+        waiting_on: {
+          type: "string",
+          description: "Optional, only meaningful when waiting_for is true. Who it's delegated to/blocked on.",
         },
         estimated_minutes: {
           type: "number",
@@ -200,8 +213,23 @@ export const TOOLS: Tool[] = [
         },
         due_date: { type: "string", description: "Empty string clears it" },
         scheduled_date: { type: "string", description: "Empty string clears it" },
+        scheduled_time: {
+          type: "string",
+          description:
+            "Format HH:MM. Empty string clears it. Only meaningful alongside scheduled_date. Only " +
+            "set this if it's a genuine appointment (GTD's hard landscape) — don't set a time just " +
+            "because a date was given.",
+        },
         someday: { type: "boolean" },
-        waiting_for: { type: "boolean" },
+        waiting_for: {
+          type: "boolean",
+          description: "Turning it off also clears waiting_on and follow_up_date.",
+        },
+        waiting_on: {
+          type: "string",
+          description:
+            "Who it's delegated to/blocked on. Empty string clears it. Only meaningful when waiting_for is true.",
+        },
         domain_id: { type: "string", description: "Empty string clears it" },
         project_id: { type: "string", description: "Empty string clears it" },
         estimated_minutes: { type: "number", description: "Empty/0 clears it" },
@@ -248,6 +276,19 @@ export const TOOLS: Tool[] = [
       "Turn a task into a project when it turns out to need multiple steps, not one action. " +
       "Creates a new project carrying over the task's title, notes, domain, priority, dates, and " +
       "link, then moves the original task to Trash (recoverable for 30 days).",
+    input_schema: {
+      type: "object",
+      properties: { task_id: { type: "string" } },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "convert_task_to_knowledge_item",
+    description:
+      "GTD's first Clarify fork: 'is it actionable?' Use when the answer is no — files a task as " +
+      "reference instead of action. Creates a knowledge library item (type note) carrying over the " +
+      "task's title, notes, and link, then moves the original task to Trash (recoverable for 30 " +
+      "days). Deliberately no type/folder picker — one motion, refile it afterward if needed.",
     input_schema: {
       type: "object",
       properties: { task_id: { type: "string" } },
@@ -1049,7 +1090,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     supabase
       .from("tasks")
       .select(
-        "id, title, status, priority, due_date, scheduled_date, someday, revisit_date, waiting_for, waiting_since, follow_up_date, domain_id, project_id",
+        "id, title, status, priority, due_date, scheduled_date, scheduled_time, someday, revisit_date, waiting_for, waiting_since, waiting_on, follow_up_date, domain_id, project_id",
       )
       .is("deleted_at", null),
     supabase.from("habits").select("id, name, frequency, active").eq("active", true),
@@ -1126,10 +1167,14 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
           .map(
             (t) =>
               `- ${t.id} "${t.title}" [${t.status}, ${t.priority} priority${
-                t.scheduled_date ? `, scheduled ${t.scheduled_date}` : ""
+                t.scheduled_date
+                  ? t.scheduled_time
+                    ? `, appointment ${t.scheduled_date} at ${t.scheduled_time}`
+                    : `, scheduled ${t.scheduled_date}`
+                  : ""
               }${t.due_date ? `, due ${t.due_date}` : ""}${t.someday ? ", someday" : ""}${
                 t.someday && t.revisit_date ? `, revisit ${t.revisit_date}` : ""
-              }${t.waiting_for ? `, waiting for since ${t.waiting_since}` : ""}${
+              }${t.waiting_for ? `, waiting for since ${t.waiting_since}${t.waiting_on ? ` on ${t.waiting_on}` : ""}` : ""}${
                 t.waiting_for && t.follow_up_date ? `, follow up ${t.follow_up_date}` : ""
               }]`,
           )
@@ -1214,26 +1259,8 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
 
   if (mode !== "weekly-review") return lines.join("\n");
 
-  const openTaskCountByProject = new Map<string, number>();
-  for (const t of openTasks) {
-    if (!t.project_id) continue;
-    openTaskCountByProject.set(t.project_id, (openTaskCountByProject.get(t.project_id) ?? 0) + 1);
-  }
-  const subprojectsByParent = new Map<string, typeof projects>();
-  for (const p of projects) {
-    if (!p.parent_project_id) continue;
-    if (!subprojectsByParent.has(p.parent_project_id)) subprojectsByParent.set(p.parent_project_id, []);
-    subprojectsByParent.get(p.parent_project_id)!.push(p);
-  }
-  const stalledProjects = projects.filter((p) => {
-    if (p.status !== "active") return false;
-    const ownCount = openTaskCountByProject.get(p.id) ?? 0;
-    const childCount = (subprojectsByParent.get(p.id) ?? []).reduce(
-      (sum, child) => sum + (openTaskCountByProject.get(child.id) ?? 0),
-      0,
-    );
-    return !ownCount && !childCount;
-  });
+  const stalledIds = findStalledProjectIds(projects, tasks);
+  const stalledProjects = projects.filter((p) => stalledIds.has(p.id));
   const waitingFor = openTasks.filter((t) => t.waiting_for);
   const somedayTasks = openTasks.filter((t) => t.someday);
 
@@ -1249,8 +1276,8 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
           .map(
             (t) =>
               `- ${t.id} "${t.title}" waiting since ${t.waiting_since}${
-                t.follow_up_date ? `, follow up ${t.follow_up_date}` : ""
-              }`,
+                t.waiting_on ? ` on ${t.waiting_on}` : ""
+              }${t.follow_up_date ? `, follow up ${t.follow_up_date}` : ""}`,
           )
           .join("\n")
       : "(none)",
@@ -1293,9 +1320,15 @@ export async function executeTool(
         priority: typeof input.priority === "string" ? input.priority : undefined,
         due_date: typeof input.due_date === "string" ? input.due_date : undefined,
         scheduled_date: typeof input.scheduled_date === "string" ? input.scheduled_date : undefined,
+        scheduled_time:
+          typeof input.scheduled_time === "string" && input.scheduled_time ? input.scheduled_time : undefined,
         someday: typeof input.someday === "boolean" ? input.someday : undefined,
         waiting_for: waitingFor,
         waiting_since: waitingFor === true ? today : undefined,
+        waiting_on:
+          waitingFor === true && typeof input.waiting_on === "string" && input.waiting_on.trim()
+            ? input.waiting_on.trim()
+            : undefined,
         estimated_minutes: typeof input.estimated_minutes === "number" ? input.estimated_minutes : undefined,
         energy_level: typeof input.energy_required === "string" ? input.energy_required : undefined,
         revisit_date:
@@ -1451,13 +1484,18 @@ export async function executeTool(
     if (typeof input.context === "string") updates.context = input.context.trim() || null;
     if (typeof input.due_date === "string") updates.due_date = input.due_date || null;
     if (typeof input.scheduled_date === "string") updates.scheduled_date = input.scheduled_date || null;
+    if (typeof input.scheduled_time === "string") updates.scheduled_time = input.scheduled_time || null;
     if (typeof input.someday === "boolean") updates.someday = input.someday;
     if (typeof input.follow_up_date === "string") updates.follow_up_date = input.follow_up_date || null;
+    if (typeof input.waiting_on === "string") updates.waiting_on = input.waiting_on.trim() || null;
     if (typeof input.waiting_for === "boolean") {
       updates.waiting_for = input.waiting_for;
       updates.waiting_since = input.waiting_for ? today : null;
-      // Wins over follow_up_date above if both are in the same call.
-      if (!input.waiting_for) updates.follow_up_date = null;
+      // Wins over follow_up_date/waiting_on above if both are in the same call.
+      if (!input.waiting_for) {
+        updates.follow_up_date = null;
+        updates.waiting_on = null;
+      }
     }
     if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
     if (typeof input.project_id === "string") updates.project_id = input.project_id || null;
@@ -1564,6 +1602,42 @@ export async function executeTool(
     }
 
     return `Converted to project "${project.name}".`;
+  }
+
+  if (name === "convert_task_to_knowledge_item") {
+    const taskId = typeof input.task_id === "string" ? input.task_id : "";
+    if (!taskId) return "Error: task_id is required";
+
+    const { data: task, error: taskError } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("id", taskId)
+      .is("deleted_at", null)
+      .single();
+    if (taskError || !task) return "Error: task not found";
+
+    const { data: item, error: itemError } = await supabase
+      .from("knowledge_items")
+      .insert({
+        user_id: userId,
+        title: task.title,
+        content: task.notes,
+        url: task.link,
+        type: "note",
+      })
+      .select()
+      .single();
+    if (itemError) return `Error: ${itemError.message}`;
+
+    const { error: trashError } = await supabase
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", taskId);
+    if (trashError) {
+      return `Knowledge item "${item.title}" created, but couldn't trash the original task: ${trashError.message}`;
+    }
+
+    return `Filed as reference: "${item.title}".`;
   }
 
   if (name === "convert_task_to_recurring") {

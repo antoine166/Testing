@@ -16,6 +16,7 @@ export default function AnytimePage() {
     handleDelete,
     handleConvertToProject,
     handleConvertToRecurring,
+    handleConvertToKnowledgeItem,
   } = useTaskList();
 
   // Filed under a domain, no specific date, not deferred to Someday — actionable whenever.
@@ -50,6 +51,7 @@ export default function AnytimePage() {
               onDelete={handleDelete}
               onConvertToProject={handleConvertToProject}
               onConvertToRecurring={handleConvertToRecurring}
+              onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
             />
           ))}
         </ul>

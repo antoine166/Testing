@@ -144,6 +144,22 @@ export function useTaskList() {
     await loadAll();
   }
 
+  async function handleConvertToKnowledgeItem(id: string) {
+    if (
+      !confirm(
+        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to file task as reference");
+      return;
+    }
+    await loadAll();
+  }
+
   return {
     domains,
     projects,
@@ -156,6 +172,7 @@ export function useTaskList() {
     createTask,
     handleConvertToProject,
     handleConvertToRecurring,
+    handleConvertToKnowledgeItem,
     loadAll,
   };
 }

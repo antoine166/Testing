@@ -13,6 +13,7 @@ type CommonRowProps = {
   onDelete: (id: string, scope?: "skip" | "following") => void;
   onConvertToProject?: (id: string) => void;
   onConvertToRecurring?: (id: string, pattern: RecurrencePatternDraft) => void;
+  onConvertToKnowledgeItem?: (id: string) => void;
 };
 
 type Props = CommonRowProps & { tasks: Task[] };
@@ -53,11 +54,21 @@ export default function RecurringTaskGroup({
   onDelete,
   onConvertToProject,
   onConvertToRecurring,
+  onConvertToKnowledgeItem,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [first, ...rest] = tasks;
 
-  const rowProps = { domains, projects, onToggleDone, onUpdate, onDelete, onConvertToProject, onConvertToRecurring };
+  const rowProps = {
+    domains,
+    projects,
+    onToggleDone,
+    onUpdate,
+    onDelete,
+    onConvertToProject,
+    onConvertToRecurring,
+    onConvertToKnowledgeItem,
+  };
 
   if (expanded) {
     return (

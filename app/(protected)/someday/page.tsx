@@ -21,6 +21,7 @@ export default function SomedayPage() {
     handleDelete,
     handleConvertToProject,
     handleConvertToRecurring,
+    handleConvertToKnowledgeItem,
   } = useTaskList();
 
   const [ticklerItems, setTicklerItems] = useState<TicklerItem[]>([]);
@@ -120,6 +121,7 @@ export default function SomedayPage() {
     onDelete: handleDelete,
     onConvertToProject: handleConvertToProject,
     onConvertToRecurring: handleConvertToRecurring,
+    onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
   };
 
   return (

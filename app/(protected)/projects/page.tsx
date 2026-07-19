@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { findStalledProjectIds } from "@/lib/projects/stalled";
 
 type Domain = {
   id: string;
@@ -307,12 +308,6 @@ export default function ProjectsPage() {
     await loadAll();
   }
 
-  const openTaskCountByProject = new Map<string, number>();
-  for (const t of tasks) {
-    if (!t.project_id || t.status === "done") continue;
-    openTaskCountByProject.set(t.project_id, (openTaskCountByProject.get(t.project_id) ?? 0) + 1);
-  }
-
   const childrenByParent = new Map<string, Project[]>();
   for (const project of projects) {
     if (!project.parent_project_id) continue;
@@ -322,13 +317,9 @@ export default function ProjectsPage() {
     childrenByParent.get(project.parent_project_id)!.push(project);
   }
 
-  function openTaskCount(project: Project): number {
-    const own = openTaskCountByProject.get(project.id) ?? 0;
-    const children = childrenByParent.get(project.id) ?? [];
-    return own + children.reduce((sum, child) => sum + (openTaskCountByProject.get(child.id) ?? 0), 0);
-  }
+  const stalledProjectIds = findStalledProjectIds(projects, tasks);
   function isStalled(project: Project) {
-    return project.status === "active" && !openTaskCount(project);
+    return stalledProjectIds.has(project.id);
   }
 
   const topLevelProjects = projects.filter((p) => !p.parent_project_id);

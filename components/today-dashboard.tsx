@@ -362,6 +362,22 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
+  async function handleConvertTaskToKnowledgeItem(id: string) {
+    if (
+      !confirm(
+        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to file task as reference");
+      return;
+    }
+    await loadAll();
+  }
+
   function resetCreateForm() {
     setNewTaskTitle("");
     setNewTaskLink("");
@@ -502,6 +518,13 @@ export default function TodayDashboard() {
   const todayTasks = [...tasks]
     .filter((t) => t.scheduled_date === today && t.status !== "done")
     .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+  // GTD's hard landscape: a scheduled_time makes this a real appointment,
+  // not just a day it's planned for — kept visually separate so "Today"
+  // doesn't quietly become a to-do list with dates.
+  const appointmentsToday = todayTasks
+    .filter((t) => t.scheduled_time)
+    .sort((a, b) => (a.scheduled_time ?? "").localeCompare(b.scheduled_time ?? ""));
+  const plannedToday = todayTasks.filter((t) => !t.scheduled_time);
   const overdueTasks = [...tasks]
     .filter((t) => t.scheduled_date && t.scheduled_date < today && t.status !== "done")
     .sort((a, b) => (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? ""));
@@ -617,6 +640,7 @@ export default function TodayDashboard() {
                 onDelete={handleDeleteTask}
                 onConvertToProject={handleConvertTaskToProject}
                 onConvertToRecurring={handleConvertTaskToRecurring}
+                onConvertToKnowledgeItem={handleConvertTaskToKnowledgeItem}
               />
             ))}
           </ul>
@@ -885,21 +909,56 @@ export default function TodayDashboard() {
         {todayTasks.length === 0 ? (
           <p className="text-sm text-zinc-500">Nothing scheduled for today.</p>
         ) : (
-          <ul className="space-y-2">
-            {todayTasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                domains={domains}
-                projects={projects}
-                onToggleDone={toggleTask}
-                onUpdate={handleUpdateTask}
-                onDelete={handleDeleteTask}
-                onConvertToProject={handleConvertTaskToProject}
-                onConvertToRecurring={handleConvertTaskToRecurring}
-              />
-            ))}
-          </ul>
+          <>
+            {appointmentsToday.length > 0 && (
+              <div className="mb-4">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Appointments
+                </h3>
+                <ul className="space-y-2">
+                  {appointmentsToday.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      domains={domains}
+                      projects={projects}
+                      onToggleDone={toggleTask}
+                      onUpdate={handleUpdateTask}
+                      onDelete={handleDeleteTask}
+                      onConvertToProject={handleConvertTaskToProject}
+                      onConvertToRecurring={handleConvertTaskToRecurring}
+                onConvertToKnowledgeItem={handleConvertTaskToKnowledgeItem}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+            {plannedToday.length > 0 && (
+              <>
+                {appointmentsToday.length > 0 && (
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Planned
+                  </h3>
+                )}
+                <ul className="space-y-2">
+                  {plannedToday.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      domains={domains}
+                      projects={projects}
+                      onToggleDone={toggleTask}
+                      onUpdate={handleUpdateTask}
+                      onDelete={handleDeleteTask}
+                      onConvertToProject={handleConvertTaskToProject}
+                      onConvertToRecurring={handleConvertTaskToRecurring}
+                onConvertToKnowledgeItem={handleConvertTaskToKnowledgeItem}
+                    />
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
         )}
       </div>
 

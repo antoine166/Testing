@@ -24,11 +24,14 @@ export type Task = {
   priority: TaskPriority;
   due_date: string | null;
   scheduled_date: string | null;
+  /** Only meaningful alongside scheduled_date — a real appointment (GTD's hard landscape), not just a day it's planned for. */
+  scheduled_time?: string | null;
   someday: boolean;
   context: string | null;
   waiting_for: boolean;
   waiting_since: string | null;
   follow_up_date?: string | null;
+  waiting_on?: string | null;
   completed_at?: string | null;
   recurring_template_id?: string | null;
   recurring_task_templates?: RecurrencePattern | null;
@@ -63,6 +66,15 @@ function linkLabel(url: string): string {
 function daysSince(date: string): number {
   const ms = Date.now() - new Date(`${date}T00:00:00`).getTime();
   return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
+}
+
+/** "14:30:00" (Postgres time) -> "2:30 PM". */
+function formatTime(time: string): string {
+  const [hoursStr, minutes] = time.split(":");
+  const hours = Number(hoursStr);
+  const period = hours >= 12 ? "PM" : "AM";
+  const hours12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hours12}:${minutes} ${period}`;
 }
 
 function NotesText({ notes }: { notes: string }) {
@@ -231,6 +243,7 @@ export default function TaskRow({
   onDelete,
   onConvertToProject,
   onConvertToRecurring,
+  onConvertToKnowledgeItem,
   selectable = false,
   selected = false,
   onSelectChange,
@@ -244,6 +257,8 @@ export default function TaskRow({
   onConvertToProject?: (id: string) => void;
   /** Seeds a new recurring template from this plain task, then trashes it — the "Repeat..." action Things 3 exposes on any to-do. Omitted (or the task is already part of a series) hides the action. */
   onConvertToRecurring?: (id: string, pattern: RecurrencePatternDraft) => void;
+  /** Not actionable — files this task as a Knowledge Library reference item in one motion, then trashes it. GTD's first Clarify fork ("is it actionable?"), the "no" branch. */
+  onConvertToKnowledgeItem?: (id: string) => void;
   /** Shows a selection checkbox for bulk actions (e.g. filing multiple Inbox tasks at once). */
   selectable?: boolean;
   selected?: boolean;
@@ -263,9 +278,11 @@ export default function TaskRow({
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
   const [scheduledDate, setScheduledDate] = useState(task.scheduled_date ?? "");
+  const [scheduledTime, setScheduledTime] = useState(task.scheduled_time ?? "");
   const [someday, setSomeday] = useState(task.someday);
   const [waitingFor, setWaitingFor] = useState(task.waiting_for);
   const [followUpDate, setFollowUpDate] = useState(task.follow_up_date ?? "");
+  const [waitingOn, setWaitingOn] = useState(task.waiting_on ?? "");
   const [context, setContext] = useState(task.context ?? "");
   const [estimatedMinutes, setEstimatedMinutes] = useState(task.estimated_minutes?.toString() ?? "");
   const [energyLevel, setEnergyLevel] = useState<TaskEnergy | "">(task.energy_level ?? "");
@@ -281,9 +298,11 @@ export default function TaskRow({
     setPriority(task.priority);
     setDueDate(task.due_date ?? "");
     setScheduledDate(task.scheduled_date ?? "");
+    setScheduledTime(task.scheduled_time ?? "");
     setSomeday(task.someday);
     setWaitingFor(task.waiting_for);
     setFollowUpDate(task.follow_up_date ?? "");
+    setWaitingOn(task.waiting_on ?? "");
     setContext(task.context ?? "");
     setEstimatedMinutes(task.estimated_minutes?.toString() ?? "");
     setEnergyLevel(task.energy_level ?? "");
@@ -301,6 +320,7 @@ export default function TaskRow({
       notes,
       waiting_for: waitingFor,
       follow_up_date: waitingFor && followUpDate ? followUpDate : null,
+      waiting_on: waitingFor && waitingOn.trim() ? waitingOn.trim() : null,
       context: context.trim() || null,
       domain_id: domainId || null,
       project_id: projectId || null,
@@ -308,6 +328,7 @@ export default function TaskRow({
       priority,
       due_date: dueDate || null,
       scheduled_date: scheduledDate || null,
+      scheduled_time: scheduledDate && scheduledTime ? scheduledTime : null,
       someday,
       revisit_date: someday && revisitDate ? revisitDate : null,
       estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
@@ -427,10 +448,24 @@ export default function TaskRow({
                   const value = e.target.value;
                   setScheduledDate(value);
                   if (value && !dueDate) setDueDate(value);
+                  if (!value) setScheduledTime("");
                 }}
+                title="When you plan to work on it — not a commitment. Only set this if you actually intend to get to it that day; otherwise leave it and pull the task from Anytime when you're ready."
                 className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
             </label>
+            {scheduledDate && (
+              <label className="text-xs text-zinc-500">
+                Time
+                <input
+                  type="time"
+                  value={scheduledTime}
+                  onChange={(e) => setScheduledTime(e.target.value)}
+                  title="Only set a time if this is a real appointment that must happen then — GTD's Calendar, not a to-do list with dates."
+                  className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            )}
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as TaskStatus)}
@@ -467,6 +502,15 @@ export default function TaskRow({
               />
               Waiting for
             </label>
+            {waitingFor && (
+              <input
+                value={waitingOn}
+                onChange={(e) => setWaitingOn(e.target.value)}
+                placeholder="Waiting on who?"
+                title="Who this is delegated to — makes 'everything I'm waiting on from X' a real filter"
+                className="w-36 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            )}
             {waitingFor && (
               <input
                 type="date"
@@ -556,6 +600,18 @@ export default function TaskRow({
               )}
             </div>
           )}
+          {onConvertToKnowledgeItem && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false);
+                onConvertToKnowledgeItem(task.id);
+              }}
+              className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            >
+              File as reference →
+            </button>
+          )}
         </div>
       </li>
     );
@@ -628,7 +684,11 @@ export default function TaskRow({
             {domain ? ` · ${domain.name}` : ""}
             {project ? ` · ${project.name}` : ""}
             {task.due_date ? ` · due ${task.due_date}` : ""}
-            {task.scheduled_date ? ` · scheduled ${task.scheduled_date}` : ""}
+            {task.scheduled_date
+              ? task.scheduled_time
+                ? ` · 📅 ${task.scheduled_date} at ${formatTime(task.scheduled_time)}`
+                : ` · scheduled ${task.scheduled_date}`
+              : ""}
             {task.someday ? " · someday" : ""}
             {task.someday && task.revisit_date ? ` · 🔔 revisit ${task.revisit_date}` : ""}
             {task.estimated_minutes ? ` · ~${task.estimated_minutes}min` : ""}
@@ -643,7 +703,7 @@ export default function TaskRow({
                   : "text-zinc-500"
               }`}
             >
-              ⏳ Waiting For
+              {task.waiting_on ? `⏳ Waiting on ${task.waiting_on}` : "⏳ Waiting For"}
               {task.waiting_since ? ` · ${daysSince(task.waiting_since)}d` : ""}
               {task.follow_up_date
                 ? task.follow_up_date <= todayLocal()
