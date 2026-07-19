@@ -404,6 +404,37 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "create_context",
+    description:
+      "Save a new GTD context (e.g. 'Errands', 'Deep Work') so it's suggested on tasks before " +
+      "anything uses it. tasks.context itself stays free text — this only feeds the suggestion list.",
+    input_schema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_context",
+    description: "Rename a saved context, referenced by its UUID from the context below.",
+    input_schema: {
+      type: "object",
+      properties: { context_id: { type: "string" }, name: { type: "string" } },
+      required: ["context_id", "name"],
+    },
+  },
+  {
+    name: "delete_context",
+    description:
+      "Permanently delete a saved context, referenced by its UUID. Doesn't touch any task already " +
+      "using that context string — it just stops being suggested.",
+    input_schema: {
+      type: "object",
+      properties: { context_id: { type: "string" } },
+      required: ["context_id"],
+    },
+  },
+  {
     name: "create_routine",
     description:
       "Create a new routine — an ordered sequence of steps tied to a time of day, surfaced on " +
@@ -947,7 +978,7 @@ const BASE_SYSTEM =
   "recurring task templates, and today's check-in, given below. Give specific, context-aware " +
   "coaching grounded in this data — never generic advice. Keep replies conversational and brief.\n\n" +
   "You can take actions via tools: create/update/delete tasks and projects (including " +
-  "subprojects), create/update domains, save daily check-ins, create/update/delete/log/track " +
+  "subprojects), create/update domains, create/update/delete saved contexts, save daily check-ins, create/update/delete/log/track " +
   "habits, create/update/delete routines and their individual steps (list_routine_items first if " +
   "you need an existing step's id), create/update/delete/reset checklists and their individual " +
   "items (list_checklist_items first if you need an existing item's id), save/update/delete/organize " +
@@ -1008,6 +1039,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     horizonsRes,
     recurringRes,
     ticklerRes,
+    contextsRes,
   ] = await Promise.all([
     supabase.from("domains").select("id, name"),
     supabase
@@ -1042,6 +1074,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
       .select("id, note, revisit_date")
       .is("deleted_at", null)
       .order("revisit_date"),
+    supabase.from("contexts").select("id, name").order("name"),
   ]);
 
   const domains = domainsRes.data ?? [];
@@ -1056,6 +1089,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   const horizons = horizonsRes.data;
   const recurringTemplates = recurringRes.data ?? [];
   const ticklerItems = ticklerRes.data ?? [];
+  const contexts = contextsRes.data ?? [];
   const openTasks = tasks.filter((t) => t.status !== "done");
   const openAgendaItems = agendaItems.filter((a) => !a.done);
 
@@ -1064,6 +1098,9 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
 
   lines.push("\nDomains:");
   lines.push(domains.length ? domains.map((d) => `- ${d.id} ${d.name}`).join("\n") : "(none yet)");
+
+  lines.push("\nSaved contexts (suggestions for a task's free-text context field):");
+  lines.push(contexts.length ? contexts.map((c) => `- ${c.id} ${c.name}`).join(", ") : "(none yet)");
 
   const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
   lines.push("\nActive projects:");
@@ -1690,6 +1727,47 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return `Updated domain "${data.name}".`;
+  }
+
+  if (name === "create_context") {
+    const contextName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!contextName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("contexts")
+      .insert({ user_id: userId, name: contextName })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Saved context "${data.name}".`;
+  }
+
+  if (name === "update_context") {
+    const contextId = typeof input.context_id === "string" ? input.context_id : "";
+    if (!contextId) return "Error: context_id is required";
+    const contextName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!contextName) return "Error: name cannot be empty";
+
+    const { data, error } = await supabase
+      .from("contexts")
+      .update({ name: contextName })
+      .eq("id", contextId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Renamed context to "${data.name}".`;
+  }
+
+  if (name === "delete_context") {
+    const contextId = typeof input.context_id === "string" ? input.context_id : "";
+    if (!contextId) return "Error: context_id is required";
+
+    const { error } = await supabase.from("contexts").delete().eq("id", contextId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Deleted context.";
   }
 
   if (name === "create_routine") {

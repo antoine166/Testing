@@ -142,6 +142,86 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     },
   );
 
+  // --- Contexts ---
+  // GTD contexts as a standalone saved list, separate from tasks.context
+  // (still a free-text field on the task itself) — lets a context exist
+  // and be suggested before any task uses it.
+
+  server.registerTool(
+    "list_contexts",
+    {
+      title: "List contexts",
+      description: "List Antoine's saved GTD contexts (e.g. Computer, Errands, Phone) — suggestions for a task's context field.",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin.from("contexts").select("id, name").eq("user_id", userId).order("name");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_context",
+    {
+      title: "Create context",
+      description: "Save a new GTD context (e.g. \"Errands\", \"Deep Work\") so it's suggested on tasks before anything uses it.",
+      inputSchema: { name: z.string().min(1) },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ name }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name is required");
+
+      const { data, error } = await admin
+        .from("contexts")
+        .insert({ user_id: userId, name: trimmed })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_context",
+    {
+      title: "Update context",
+      description: "Rename an existing saved context.",
+      inputSchema: { id: z.string().uuid(), name: z.string().min(1) },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, name }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name cannot be empty");
+
+      const { data, error } = await admin
+        .from("contexts")
+        .update({ name: trimmed })
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_context",
+    {
+      title: "Delete context",
+      description: "Permanently delete a saved context. Doesn't touch any task already using that context string — it just stops being suggested.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin.from("contexts").delete().eq("id", id).eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
   server.registerTool(
     "list_projects",
     {

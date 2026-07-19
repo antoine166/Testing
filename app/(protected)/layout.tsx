@@ -23,7 +23,7 @@ export default async function ProtectedLayout({
 
   const today = todayLocal();
 
-  const [domainsRes, projectsRes, inboxRes, todayRes, waitingForRes, contextsRes] =
+  const [domainsRes, projectsRes, inboxRes, todayRes, waitingForRes, taskContextsRes, savedContextsRes] =
     await Promise.all([
       supabase.from("domains").select("id, name, color").is("deleted_at", null).order("name"),
       supabase
@@ -52,10 +52,17 @@ export default async function ProtectedLayout({
         .eq("waiting_for", true)
         .neq("status", "done"),
       supabase.from("tasks").select("context").not("context", "is", null),
+      supabase.from("contexts").select("name"),
     ]);
 
+  // Merges contexts already in use on tasks with the standalone saved list
+  // (contexts table) — the latter lets a context exist and be selectable
+  // before any task has used it yet.
   const contexts = Array.from(
-    new Set((contextsRes.data ?? []).map((t) => t.context as string)),
+    new Set([
+      ...(taskContextsRes.data ?? []).map((t) => t.context as string),
+      ...(savedContextsRes.data ?? []).map((c) => c.name as string),
+    ]),
   ).sort();
 
   return (
