@@ -28,6 +28,7 @@ const RESTORABLE_TRASH_TYPES = [
   "project",
   "task",
   "habit",
+  "workout",
   "routine",
   "checklist",
   "knowledge-item",
@@ -1523,6 +1524,196 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       const { error } = await admin.from("habit_logs").delete().eq("id", mostRecent.id);
       if (error) return fail(error.message);
       return ok({ unlogged: habit_id, date: loggedDate });
+    },
+  );
+
+  // --- Training Log ---
+
+  server.registerTool(
+    "list_workouts",
+    {
+      title: "List workouts",
+      description: "List Antoine's workout catalog (the named workouts he can log against, e.g. \"GPP Lift\").",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("workouts")
+        .select("id, name, icon")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("name");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_workout",
+    {
+      title: "Create workout",
+      description: "Add a new named workout to Antoine's training catalog (e.g. \"Leg Day\").",
+      inputSchema: {
+        name: z.string().min(1),
+        icon: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ name, icon }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name is required");
+
+      const { data, error } = await admin
+        .from("workouts")
+        .insert({ user_id: userId, name: trimmed, icon })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_workout",
+    {
+      title: "Update workout",
+      description: "Rename or update an existing workout in the catalog.",
+      inputSchema: {
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        icon: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, name, icon }) => {
+      const updates: Record<string, unknown> = {};
+      if (name !== undefined) {
+        const trimmed = name.trim();
+        if (!trimmed) return fail("Name cannot be empty");
+        updates.name = trimmed;
+      }
+      if (icon !== undefined) updates.icon = icon;
+
+      const { data, error } = await admin
+        .from("workouts")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_workout",
+    {
+      title: "Delete workout",
+      description: "Move a workout (and its log history) to trash. Recoverable for 30 days.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("workouts")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  server.registerTool(
+    "log_workout",
+    {
+      title: "Log workout",
+      description:
+        "Record that Antoine did a specific workout from his catalog on a given day. Can be " +
+        "called more than once for the same workout+day for a second session (e.g. AM/PM).",
+      inputSchema: {
+        workout_id: z.string().uuid(),
+        date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+        duration_minutes: z.number().int().min(0).optional(),
+        notes: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ workout_id, date, duration_minutes, notes }) => {
+      const loggedDate = date ?? todayLocal();
+      const { data, error } = await admin
+        .from("workout_logs")
+        .insert({
+          user_id: userId,
+          workout_id,
+          logged_date: loggedDate,
+          duration_minutes: duration_minutes ?? null,
+          notes: notes ?? null,
+        })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "unlog_workout",
+    {
+      title: "Unlog workout",
+      description:
+        "Undo a workout log entry for a given day. If it was logged more than once that day, " +
+        "this removes just the most recently added one, not all of them.",
+      inputSchema: {
+        workout_id: z.string().uuid(),
+        date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ workout_id, date }) => {
+      const loggedDate = date ?? todayLocal();
+      const { data: mostRecent, error: findError } = await admin
+        .from("workout_logs")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("workout_id", workout_id)
+        .eq("logged_date", loggedDate)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (findError) return fail(findError.message);
+      if (!mostRecent) return ok({ unlogged: null, date: loggedDate });
+
+      const { error } = await admin.from("workout_logs").delete().eq("id", mostRecent.id);
+      if (error) return fail(error.message);
+      return ok({ unlogged: workout_id, date: loggedDate });
+    },
+  );
+
+  server.registerTool(
+    "list_workout_logs",
+    {
+      title: "List workout logs",
+      description: "List Antoine's training history over a date range, most recent first.",
+      inputSchema: {
+        from: z.string().optional().describe("YYYY-MM-DD, defaults to 14 days ago"),
+        to: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ from, to }) => {
+      const toDate = to ?? todayLocal();
+      const start = from ?? new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const { data, error } = await admin
+        .from("workout_logs")
+        .select("id, workout_id, logged_date, duration_minutes, notes, workouts(name)")
+        .eq("user_id", userId)
+        .gte("logged_date", start)
+        .lte("logged_date", toDate)
+        .order("logged_date", { ascending: false });
+      if (error) return fail(error.message);
+      return ok(data);
     },
   );
 

@@ -143,6 +143,19 @@ Simple habit tracker with streak counting.
 - **"Don't break it twice"** (James Clear, *Atomic Habits*) — a habit is **at risk** when its most recent required occurrence was missed and today isn't logged yet (`lib/habits/streaks.ts` → `isAtRisk`): one more miss would be two in a row, the point a slip turns into a broken habit. For `times_per_week`, "at risk" is time-aware, not just "under target so far" — it only fires once there are no more spare days left in the week to still hit the target (e.g. 4x/week with 0 done: safe through Wednesday, at risk starting Thursday), so it doesn't false-alarm early in the week. Surfaced three ways: (1) the habit row gets an amber border + a frequency-appropriate warning note + ⚠️ (vs. 🔥 for a healthy active streak), (2) the Today view sorts at-risk habits first and calls out the count, (3) the MCP connector's `list_habits`/`get_today_summary` include an `at_risk` flag so the Coach/Claude digest can prioritize the same way
 - **Weekly checkbox row**: each habit row shows a strip of checkboxes sized to its cadence — 7 for `daily`, one per required weekday for `specific_days` (both tied to specific dates within the current Mon–Sun week, individually clickable to log/unlog that day — including past days, not just today), or `target_count` plain progress boxes for `times_per_week` (a fill-level tally, not date-specific, since any day counts)
 
+### 3.7a Training Log
+A simple log of named workouts, separate from Habits (no frequency, streaks, or domain tagging).
+
+- **Catalog** (`workouts`): a flat, user-editable list of workout names (e.g. "GPP Lift", "Nordic 4x4") — add/rename/delete anytime via a "+ New Workout" field, no fixed set
+- **Logging**: pick a date (defaults to today) and check off which catalog workouts were done that day — a checklist, not a form. Checking an item creates a log entry; unchecking removes the most recent one for that workout+day
+- Each log entry (`workout_logs`) optionally carries a duration (minutes) and notes — both optional, filled in via an expandable section under the checked item, not required to log
+- The same workout can be logged more than once on the same day (e.g. an AM/PM session) via a "log another session" affordance, once already checked
+- **Image attachments**: a log entry can have one or more images attached, same Storage-backed pattern as task image attachments (3.4) — a private bucket, signed URLs, one metadata row per image
+- **History**: the Training Log page lists all logged days (most recent first) below the day-picker, and the Analytics page (§11 Phase 4) shows workout name + notes + images together under one "Workouts" section
+- Deleting a workout from the catalog moves it (and its log entries) to Trash together — recoverable for 30 days, same as everything else in 3.12
+- Sidebar entry "Training Log" sits between Habits and Coach (see §4)
+- Full Coach + MCP parity: catalog CRUD, log/unlog, and a training-history read tool — no app-only exceptions here (image upload is the one MCP/Coach gap, matching task image attachments, which are also app-only for uploads)
+
 ### 3.8 Routines *(Phase 2)*
 Ordered sequences of steps (tasks, habits, or notes) tied to a time of day.
 
@@ -174,7 +187,8 @@ AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 - Antoine can ask it questions: "What should I focus on today?", "How are my habits going?"
 - Responds with context-aware coaching, not generic advice
 - **Can also take action** via tool use, broadly: create/update/delete tasks and projects
-  (including subprojects), create/update domains, log/unlog habits, create/update/delete routines
+  (including subprojects), create/update domains, log/unlog habits, create/update/delete workouts
+  and log/unlog Training Log entries, create/update/delete routines
   and append steps to them, create/update/delete/reset checklists and append items to them, and
   create/organize knowledge library items and folders
 - **Every tool call requires Antoine's explicit approve/decline before it runs** — this is the
@@ -194,12 +208,13 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claud
 - claude.ai's connector flow requires real OAuth (it auto-registers itself as a client and won't accept a plain shared token), so `/api/mcp` is its own OAuth 2.1 + PKCE authorization server (`/api/mcp/register`, `/api/mcp/authorize`, `/api/mcp/token`, discovery documents at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`) — gated by Antoine's existing Supabase Auth login, not a separate account system
 - Authorization codes and tokens are stored as SHA-256 hashes (`mcp_oauth_clients`/`mcp_oauth_codes`/`mcp_oauth_tokens`); access tokens last 1 hour, refresh tokens 6 months with rotation on use
 - **Full CRUD across nearly the entire app**, unlike the in-app Coach: tasks and habits
-  (create/update/complete/delete, log/unlog), projects and subprojects (create/update/delete,
-  cascading to a project's subprojects and their tasks together), domains (create/update only —
-  see below), routines and their steps (create/update/delete), checklists and their items
-  (create/update/delete/reset), the knowledge library (items: create/update/delete; folders:
-  create/update), and the daily check-in (read/write). Plus `get_today_summary` for "what should I
-  focus on today" style coaching
+  (create/update/complete/delete, log/unlog), workouts and Training Log entries
+  (create/update/delete, log/unlog, plus a training-history read tool), projects and subprojects
+  (create/update/delete, cascading to a project's subprojects and their tasks together), domains
+  (create/update only — see below), routines and their steps (create/update/delete), checklists
+  and their items (create/update/delete/reset), the knowledge library (items: create/update/delete;
+  folders: create/update), and the daily check-in (read/write). Plus `get_today_summary` for "what
+  should I focus on today" style coaching
 - **Deliberately excluded, on both MCP and Coach** — the two genuinely irreversible actions:
   domain deletion (cascades to all of that domain's projects/tasks with no MCP-side confirmation
   step) and permanently purging a trashed item before its 30-day recovery window ends. Both stay
@@ -211,7 +226,7 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claud
 ### 3.12 Trash *(Phase 4)*
 Soft delete with a 30-day recovery window, so an accidental delete is never permanent by mistake.
 
-- Applies to: domains, projects, tasks, habits, routines, knowledge library items
+- Applies to: domains, projects, tasks, habits, workouts, routines, knowledge library items
 - Deleting one of these sets `deleted_at` instead of removing the row; it disappears from normal views but is recoverable
 - Domains and projects cascade: deleting a domain trashes its projects and tasks together (and restoring the domain restores all of them together); deleting a project cascades to its tasks the same way
 - Child records that aren't independently trashable (habit logs, routine steps) aren't given their own trash entry — they simply go with their parent when it's permanently purged
@@ -240,7 +255,7 @@ Life OS
   Project name
 + New List                         ← links to /domains
 ─────────────────────
-Habits · Routines · Checklists · Check-in · Library · Coach · Analytics · Trash · Settings
+Habits · Training Log · Routines · Checklists · Check-in · Library · Coach · Analytics · Trash · Settings
 ─────────────────────
 user@email · Log out
 ```
@@ -369,6 +384,49 @@ habit_id     uuid references habits(id) on delete cascade
 logged_date  date not null
 created_at   timestamptz default now()
 unique (user_id, habit_id, logged_date)
+```
+
+---
+
+### `workouts`
+```sql
+id          uuid primary key default gen_random_uuid()
+user_id     uuid references auth.users(id) on delete cascade
+name        text not null
+icon        text
+created_at  timestamptz default now()
+deleted_at  timestamptz   -- soft delete (Trash, 3.12); its logs go with it on purge (FK cascade)
+```
+
+---
+
+### `workout_logs`
+```sql
+id                uuid primary key default gen_random_uuid()
+user_id           uuid references auth.users(id) on delete cascade
+workout_id        uuid references workouts(id) on delete cascade
+logged_date       date not null
+duration_minutes  int
+notes             text
+created_at        timestamptz default now()
+-- no unique constraint: the same workout can be logged more than once on
+-- the same day (e.g. an AM/PM session)
+```
+
+---
+
+### `workout_log_attachments`
+```sql
+id              uuid primary key default gen_random_uuid()
+user_id         uuid references auth.users(id) on delete cascade
+workout_log_id  uuid references workout_logs(id) on delete cascade
+storage_path    text not null    -- path in the private "workout-log-attachments" Storage bucket
+filename        text not null
+content_type    text
+size            int
+created_at      timestamptz default now()
+-- not independently trashable — goes with its log entry on purge, same
+-- Storage-cleanup caveat as task_attachments (3.4)
 ```
 
 ---
@@ -604,6 +662,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Trash / soft delete with 30-day recovery (3.12)
 - [x] Task image attachments (3.4), including from forwarded emails (3.1a)
 - [x] Checklists (3.8a)
+- [x] Training Log (3.7a) — workout catalog + daily logging with image attachments
 
 ---
 
