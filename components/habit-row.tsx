@@ -8,7 +8,7 @@ import {
   type Habit as StreakHabit,
   type HabitFrequency,
 } from "@/lib/habits/streaks";
-import { daysOfWeek } from "@/lib/date";
+import { lastSevenDays } from "@/lib/date";
 
 function weekdayOf(dateStr: string): number {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -140,11 +140,11 @@ export default function HabitRow({
   const atRisk = isAtRisk(habit, logs, today);
 
   const loggedDates = new Set(logs.map((l) => l.logged_date));
-  const weekDates = daysOfWeek(today);
+  const recentDates = lastSevenDays(today);
   const requiredDates =
     habit.frequency === "specific_days"
-      ? weekDates.filter((d) => (habit.frequency_days ?? []).includes(weekdayOf(d)))
-      : weekDates;
+      ? recentDates.filter((d) => (habit.frequency_days ?? []).includes(weekdayOf(d)))
+      : recentDates;
 
   /** One day's cell in the daily/specific_days row and the times_per_week
    * day-picker — a plain per-day toggle, one log per day. */
@@ -359,7 +359,7 @@ export default function HabitRow({
             </div>
             {showDayRow && (
               <div className="mt-1.5 flex gap-1">
-                {weekDates.map((date) => (
+                {recentDates.map((date) => (
                   <div key={date}>{renderDaySquare(date)}</div>
                 ))}
               </div>
