@@ -3,9 +3,11 @@
 import { useState, type FormEvent } from "react";
 import SmartListHeader from "@/components/smart-list-header";
 import TaskRow, { type TaskPriority } from "@/components/task-row";
-import RecurrenceFields from "@/components/recurrence-fields";
+import RecurrenceFields, {
+  DEFAULT_RECURRENCE_PATTERN,
+  type RecurrencePatternDraft,
+} from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
-import { type RecurrenceType } from "@/lib/recurring-tasks/types";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
@@ -22,6 +24,8 @@ export default function InboxPage() {
     handleDelete,
     createTask,
     handleConvertToProject,
+    handleConvertToRecurring,
+    handleConvertToKnowledgeItem,
     loadAll,
   } = useTaskList();
 
@@ -40,10 +44,7 @@ export default function InboxPage() {
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("weekly");
-  const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<number[]>([]);
-  const [recurrenceDayOfMonth, setRecurrenceDayOfMonth] = useState(1);
-  const [recurrenceIntervalDays, setRecurrenceIntervalDays] = useState(7);
+  const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
   const inboxTasks = tasks.filter(
     (t) => !t.domain_id && !t.someday && t.status !== "done",
@@ -62,10 +63,7 @@ export default function InboxPage() {
     setWaitingFor(false);
     setFollowUpDate("");
     setIsRecurring(false);
-    setRecurrenceType("weekly");
-    setRecurrenceDaysOfWeek([]);
-    setRecurrenceDayOfMonth(1);
-    setRecurrenceIntervalDays(7);
+    setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -75,7 +73,7 @@ export default function InboxPage() {
     setCreateError(null);
 
     if (isRecurring) {
-      if (recurrenceType === "weekly" && recurrenceDaysOfWeek.length === 0) {
+      if (recurrencePattern.recurrence_type === "weekly" && recurrencePattern.days_of_week.length === 0) {
         setSubmitting(false);
         setCreateError("Pick at least one day for a weekly recurring task.");
         return;
@@ -91,10 +89,7 @@ export default function InboxPage() {
           domain_id: domainId || null,
           project_id: projectId || null,
           priority,
-          recurrence_type: recurrenceType,
-          days_of_week: recurrenceType === "weekly" ? recurrenceDaysOfWeek : undefined,
-          day_of_month: recurrenceType === "monthly" ? recurrenceDayOfMonth : undefined,
-          interval_days: recurrenceType === "interval" ? recurrenceIntervalDays : undefined,
+          ...recurrencePattern,
         }),
       });
 
@@ -419,18 +414,8 @@ export default function InboxPage() {
             </label>
             {isRecurring && (
               <RecurrenceFields
-                recurrenceType={recurrenceType}
-                onRecurrenceTypeChange={setRecurrenceType}
-                daysOfWeek={recurrenceDaysOfWeek}
-                onToggleDay={(day) =>
-                  setRecurrenceDaysOfWeek((prev) =>
-                    prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
-                  )
-                }
-                dayOfMonth={recurrenceDayOfMonth}
-                onDayOfMonthChange={setRecurrenceDayOfMonth}
-                intervalDays={recurrenceIntervalDays}
-                onIntervalDaysChange={setRecurrenceIntervalDays}
+                pattern={recurrencePattern}
+                onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
               />
             )}
           </div>
@@ -458,6 +443,8 @@ export default function InboxPage() {
                 onUpdate={handleUpdate}
                 onDelete={handleDelete}
                 onConvertToProject={handleConvertToProject}
+                onConvertToRecurring={handleConvertToRecurring}
+                onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
               />
             ))}
           </ul>

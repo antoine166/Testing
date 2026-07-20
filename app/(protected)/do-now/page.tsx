@@ -40,6 +40,8 @@ export default function DoNowPage() {
     toggleDone,
     handleDelete,
     handleConvertToProject,
+    handleConvertToRecurring,
+    handleConvertToKnowledgeItem,
   } = useTaskList();
 
   const [contextFilter, setContextFilter] = useState("");
@@ -140,6 +142,8 @@ export default function DoNowPage() {
             onUpdate: handleUpdate,
             onDelete: handleDelete,
             onConvertToProject: handleConvertToProject,
+            onConvertToRecurring: handleConvertToRecurring,
+            onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
           })}
         </ul>
       )}

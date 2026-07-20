@@ -3,6 +3,7 @@
 import { useState } from "react";
 import TaskRow, { type Task, type TaskDomain, type TaskProject } from "@/components/task-row";
 import { groupRecurringTasks, type GroupedEntry } from "@/lib/recurring-tasks/group";
+import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 
 type CommonRowProps = {
   domains: TaskDomain[];
@@ -11,6 +12,8 @@ type CommonRowProps = {
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string, scope?: "skip" | "following") => void;
   onConvertToProject?: (id: string) => void;
+  onConvertToRecurring?: (id: string, pattern: RecurrencePatternDraft) => void;
+  onConvertToKnowledgeItem?: (id: string) => void;
 };
 
 type Props = CommonRowProps & { tasks: Task[] };
@@ -50,11 +53,22 @@ export default function RecurringTaskGroup({
   onUpdate,
   onDelete,
   onConvertToProject,
+  onConvertToRecurring,
+  onConvertToKnowledgeItem,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [first, ...rest] = tasks;
 
-  const rowProps = { domains, projects, onToggleDone, onUpdate, onDelete, onConvertToProject };
+  const rowProps = {
+    domains,
+    projects,
+    onToggleDone,
+    onUpdate,
+    onDelete,
+    onConvertToProject,
+    onConvertToRecurring,
+    onConvertToKnowledgeItem,
+  };
 
   if (expanded) {
     return (

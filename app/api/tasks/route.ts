@@ -51,9 +51,17 @@ export async function POST(request: Request) {
       due_date: typeof body.due_date === "string" ? body.due_date : undefined,
       scheduled_date:
         typeof body.scheduled_date === "string" ? body.scheduled_date : undefined,
+      // Only meaningful alongside scheduled_date — a real appointment
+      // (hard landscape), not just a day you plan to work on it.
+      scheduled_time:
+        typeof body.scheduled_time === "string" && body.scheduled_time ? body.scheduled_time : undefined,
       someday: typeof body.someday === "boolean" ? body.someday : undefined,
       waiting_for: typeof body.waiting_for === "boolean" ? body.waiting_for : undefined,
       waiting_since: body.waiting_for === true ? new Date().toISOString().slice(0, 10) : undefined,
+      waiting_on:
+        body.waiting_for === true && typeof body.waiting_on === "string" && body.waiting_on.trim()
+          ? body.waiting_on.trim()
+          : undefined,
       estimated_minutes: typeof body.estimated_minutes === "number" ? body.estimated_minutes : undefined,
       energy_level: typeof body.energy_level === "string" ? body.energy_level : undefined,
       revisit_date: body.someday === true && typeof body.revisit_date === "string" ? body.revisit_date : undefined,

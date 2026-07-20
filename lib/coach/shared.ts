@@ -1,7 +1,15 @@
 import type { ContentBlockParam, Tool } from "@anthropic-ai/sdk/resources/messages";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TRASH_CONFIG, TRASH_TYPES, type TrashType } from "@/lib/trash";
-import { topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
+import {
+  generateNextCompletionOccurrence,
+  seedCompletionTemplate,
+  topUpTemplate,
+  type StoredTemplate,
+} from "@/lib/recurring-tasks/topup";
+import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
+import { describeRecurrence } from "@/lib/recurring-tasks/types";
+import { findStalledProjectIds } from "@/lib/projects/stalled";
 
 // Domain restore stays app-only alongside domain deletion.
 const COACH_RESTORABLE_TRASH_TYPES = [
@@ -38,6 +46,14 @@ export const TOOLS: Tool[] = [
         priority: { type: "string", enum: ["none", "low", "medium", "high"] },
         due_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
         scheduled_date: { type: "string", description: "Optional, format YYYY-MM-DD" },
+        scheduled_time: {
+          type: "string",
+          description:
+            "Optional, format HH:MM, only meaningful alongside scheduled_date. Only set this if " +
+            "it's a genuine appointment that must happen at that time (GTD's hard landscape) — a " +
+            "scheduled_date alone just means 'planned for that day,' not a commitment. Don't set a " +
+            "time just because a date was given.",
+        },
         someday: {
           type: "boolean",
           description: "Optional. Things-style Someday/Maybe — deliberately deferred rather than active now.",
@@ -45,6 +61,10 @@ export const TOOLS: Tool[] = [
         waiting_for: {
           type: "boolean",
           description: "Optional. GTD Waiting For — delegated/blocked on someone else. Starts the days-waiting clock.",
+        },
+        waiting_on: {
+          type: "string",
+          description: "Optional, only meaningful when waiting_for is true. Who it's delegated to/blocked on.",
         },
         estimated_minutes: {
           type: "number",
@@ -193,8 +213,23 @@ export const TOOLS: Tool[] = [
         },
         due_date: { type: "string", description: "Empty string clears it" },
         scheduled_date: { type: "string", description: "Empty string clears it" },
+        scheduled_time: {
+          type: "string",
+          description:
+            "Format HH:MM. Empty string clears it. Only meaningful alongside scheduled_date. Only " +
+            "set this if it's a genuine appointment (GTD's hard landscape) — don't set a time just " +
+            "because a date was given.",
+        },
         someday: { type: "boolean" },
-        waiting_for: { type: "boolean" },
+        waiting_for: {
+          type: "boolean",
+          description: "Turning it off also clears waiting_on and follow_up_date.",
+        },
+        waiting_on: {
+          type: "string",
+          description:
+            "Who it's delegated to/blocked on. Empty string clears it. Only meaningful when waiting_for is true.",
+        },
         domain_id: { type: "string", description: "Empty string clears it" },
         project_id: { type: "string", description: "Empty string clears it" },
         estimated_minutes: { type: "number", description: "Empty/0 clears it" },
@@ -245,6 +280,51 @@ export const TOOLS: Tool[] = [
       type: "object",
       properties: { task_id: { type: "string" } },
       required: ["task_id"],
+    },
+  },
+  {
+    name: "convert_task_to_knowledge_item",
+    description:
+      "GTD's first Clarify fork: 'is it actionable?' Use when the answer is no — files a task as " +
+      "reference instead of action. Creates a knowledge library item (type note) carrying over the " +
+      "task's title, notes, and link, then moves the original task to Trash (recoverable for 30 " +
+      "days). Deliberately no type/folder picker — one motion, refile it afterward if needed.",
+    input_schema: {
+      type: "object",
+      properties: { task_id: { type: "string" } },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "convert_task_to_recurring",
+    description:
+      "Turn an existing plain task into the seed of a new recurring task template, carrying over " +
+      "its title, notes, domain, project, priority, and link. Generates the new series' first " +
+      "occurrence(s), then moves the original task to Trash (recoverable for 30 days) — the new " +
+      "series' first occurrence stands in for it. Fails if the task is already part of a series. " +
+      "Same recurrence_type / pattern-field rules as create_recurring_task.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string" },
+        recurrence_type: {
+          type: "string",
+          enum: ["weekly", "monthly", "monthly_nth_weekday", "yearly", "interval", "completion"],
+        },
+        days_of_week: { type: "array", items: { type: "number" } },
+        day_of_month: { type: "number" },
+        interval_days: { type: "number" },
+        month_of_year: { type: "number" },
+        week_of_month: { type: "number" },
+        weekday_of_month: { type: "number" },
+        month_clamp: { type: "string", enum: ["clamp", "roll"] },
+        completion_offset_count: { type: "number" },
+        completion_offset_unit: { type: "string", enum: ["day", "week", "month", "year"] },
+        ends_type: { type: "string", enum: ["never", "date", "count"] },
+        ends_date: { type: "string" },
+        ends_count: { type: "number" },
+      },
+      required: ["task_id", "recurrence_type"],
     },
   },
   {
@@ -362,6 +442,37 @@ export const TOOLS: Tool[] = [
         icon: { type: "string" },
       },
       required: ["domain_id"],
+    },
+  },
+  {
+    name: "create_context",
+    description:
+      "Save a new GTD context (e.g. 'Errands', 'Deep Work') so it's suggested on tasks before " +
+      "anything uses it. tasks.context itself stays free text — this only feeds the suggestion list.",
+    input_schema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_context",
+    description: "Rename a saved context, referenced by its UUID from the context below.",
+    input_schema: {
+      type: "object",
+      properties: { context_id: { type: "string" }, name: { type: "string" } },
+      required: ["context_id", "name"],
+    },
+  },
+  {
+    name: "delete_context",
+    description:
+      "Permanently delete a saved context, referenced by its UUID. Doesn't touch any task already " +
+      "using that context string — it just stops being suggested.",
+    input_schema: {
+      type: "object",
+      properties: { context_id: { type: "string" } },
+      required: ["context_id"],
     },
   },
   {
@@ -765,8 +876,13 @@ export const TOOLS: Tool[] = [
     name: "create_recurring_task",
     description:
       "Create a recurring task template (e.g. 'submit the BSL accountability tracker every " +
-      "Monday'). Generates the first batch of occurrences immediately, up to horizon_count. Exactly " +
-      "one of days_of_week / day_of_month / interval_days is required, matching recurrence_type.",
+      "Monday', or 'change the oil 3 months after I last did it'). For every recurrence_type except " +
+      "completion, generates the first batch of occurrences immediately, up to horizon_count; " +
+      "completion generates a single starting occurrence instead. The fields required alongside " +
+      "recurrence_type vary: weekly needs days_of_week; monthly needs day_of_month (+ optional " +
+      "month_clamp); monthly_nth_weekday needs week_of_month + weekday_of_month; yearly needs " +
+      "month_of_year + day_of_month (+ optional month_clamp); interval needs interval_days; " +
+      "completion needs completion_offset_count + completion_offset_unit.",
     input_schema: {
       type: "object",
       properties: {
@@ -776,7 +892,13 @@ export const TOOLS: Tool[] = [
         domain_id: { type: "string" },
         project_id: { type: "string" },
         priority: { type: "string", enum: ["none", "low", "medium", "high"] },
-        recurrence_type: { type: "string", enum: ["weekly", "monthly", "interval"] },
+        recurrence_type: {
+          type: "string",
+          enum: ["weekly", "monthly", "monthly_nth_weekday", "yearly", "interval", "completion"],
+          description:
+            "completion generates the next occurrence only once the current one is marked done, " +
+            "offset from the completion date, instead of on a fixed schedule.",
+        },
         days_of_week: {
           type: "array",
           items: { type: "number" },
@@ -784,15 +906,45 @@ export const TOOLS: Tool[] = [
         },
         day_of_month: {
           type: "number",
-          description: "Required for monthly: 1-31, clamped to the last day of shorter months.",
+          description: "Required for monthly and yearly: 1-31, subject to month_clamp in the target month.",
         },
         interval_days: {
           type: "number",
           description: "Required for interval: generate every N days, starting today.",
         },
+        month_of_year: { type: "number", description: "Required for yearly: 1=Jan..12=Dec." },
+        week_of_month: {
+          type: "number",
+          description: "Required for monthly_nth_weekday: 1-5 (1st..5th), or -1 for 'last'.",
+        },
+        weekday_of_month: {
+          type: "number",
+          description:
+            "Required for monthly_nth_weekday: 0=Sun..6=Sat, e.g. week_of_month 2 + weekday_of_month 2 = '2nd Tuesday'.",
+        },
+        month_clamp: {
+          type: "string",
+          enum: ["clamp", "roll"],
+          description:
+            "Only for monthly/yearly, when day_of_month doesn't exist in the target month: 'clamp' " +
+            "(default) generates on that month's last day; 'roll' generates on the 1st of the next month.",
+        },
+        completion_offset_count: { type: "number", description: "Required for completion." },
+        completion_offset_unit: {
+          type: "string",
+          enum: ["day", "week", "month", "year"],
+          description: "Required for completion.",
+        },
+        ends_type: {
+          type: "string",
+          enum: ["never", "date", "count"],
+          description: "'never' (default), 'date' (requires ends_date), or 'count' (requires ends_count).",
+        },
+        ends_date: { type: "string", description: "Required when ends_type is 'date' (YYYY-MM-DD)." },
+        ends_count: { type: "number", description: "Required when ends_type is 'count' — total occurrences, ever." },
         horizon_count: {
           type: "number",
-          description: "How many future occurrences stay generated at once. Defaults to 12.",
+          description: "How many future occurrences stay generated at once (ignored for completion). Defaults to 12.",
         },
       },
       required: ["title", "recurrence_type"],
@@ -802,8 +954,9 @@ export const TOOLS: Tool[] = [
     name: "update_recurring_task",
     description:
       "Update a recurring task template, referenced by its UUID from the context below — edit its " +
-      "details, pause/resume it (active), change its horizon, or change its recurrence pattern " +
-      "(only affects occurrences generated from now on, not already-generated tasks).",
+      "details, pause/resume it (active), change its horizon or Ends condition, or change its " +
+      "recurrence pattern (detaches not-yet-done occurrences already generated under the old pattern, " +
+      "which become ordinary tasks, and immediately generates the first occurrence(s) of the new one).",
     input_schema: {
       type: "object",
       properties: {
@@ -816,10 +969,22 @@ export const TOOLS: Tool[] = [
         priority: { type: "string", enum: ["none", "low", "medium", "high"] },
         active: { type: "boolean" },
         horizon_count: { type: "number" },
-        recurrence_type: { type: "string", enum: ["weekly", "monthly", "interval"] },
+        recurrence_type: {
+          type: "string",
+          enum: ["weekly", "monthly", "monthly_nth_weekday", "yearly", "interval", "completion"],
+        },
         days_of_week: { type: "array", items: { type: "number" } },
         day_of_month: { type: "number" },
         interval_days: { type: "number" },
+        month_of_year: { type: "number" },
+        week_of_month: { type: "number" },
+        weekday_of_month: { type: "number" },
+        month_clamp: { type: "string", enum: ["clamp", "roll"] },
+        completion_offset_count: { type: "number" },
+        completion_offset_unit: { type: "string", enum: ["day", "week", "month", "year"] },
+        ends_type: { type: "string", enum: ["never", "date", "count"] },
+        ends_date: { type: "string" },
+        ends_count: { type: "number" },
       },
       required: ["recurring_task_id"],
     },
@@ -840,7 +1005,8 @@ export const TOOLS: Tool[] = [
     name: "generate_recurring_tasks",
     description:
       "Top up every active recurring task template's pre-generated occurrences back up to its " +
-      "horizon. Safe to call any time — idempotent, a template with no deficit generates nothing. " +
+      "horizon (no-op for completion-anchored templates, which generate one at a time on completion " +
+      "instead). Safe to call any time — idempotent, a template with no deficit generates nothing. " +
       "Use if Antoine asks to generate recurring tasks now rather than waiting for the daily job.",
     input_schema: { type: "object", properties: {} },
   },
@@ -853,7 +1019,7 @@ const BASE_SYSTEM =
   "recurring task templates, and today's check-in, given below. Give specific, context-aware " +
   "coaching grounded in this data — never generic advice. Keep replies conversational and brief.\n\n" +
   "You can take actions via tools: create/update/delete tasks and projects (including " +
-  "subprojects), create/update domains, save daily check-ins, create/update/delete/log/track " +
+  "subprojects), create/update domains, create/update/delete saved contexts, save daily check-ins, create/update/delete/log/track " +
   "habits, create/update/delete routines and their individual steps (list_routine_items first if " +
   "you need an existing step's id), create/update/delete/reset checklists and their individual " +
   "items (list_checklist_items first if you need an existing item's id), save/update/delete/organize " +
@@ -914,6 +1080,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     horizonsRes,
     recurringRes,
     ticklerRes,
+    contextsRes,
   ] = await Promise.all([
     supabase.from("domains").select("id, name"),
     supabase
@@ -923,7 +1090,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     supabase
       .from("tasks")
       .select(
-        "id, title, status, priority, due_date, scheduled_date, someday, revisit_date, waiting_for, waiting_since, follow_up_date, domain_id, project_id",
+        "id, title, status, priority, due_date, scheduled_date, scheduled_time, someday, revisit_date, waiting_for, waiting_since, waiting_on, follow_up_date, domain_id, project_id",
       )
       .is("deleted_at", null),
     supabase.from("habits").select("id, name, frequency, active").eq("active", true),
@@ -939,13 +1106,16 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     supabase.from("horizons").select("goals, vision, purpose").maybeSingle(),
     supabase
       .from("recurring_task_templates")
-      .select("id, title, recurrence_type, days_of_week, day_of_month, interval_days, active")
+      .select(
+        "id, title, recurrence_type, days_of_week, day_of_month, interval_days, month_of_year, week_of_month, weekday_of_month, month_clamp, completion_offset_count, completion_offset_unit, ends_type, ends_date, ends_count, active",
+      )
       .order("created_at"),
     supabase
       .from("tickler_items")
       .select("id, note, revisit_date")
       .is("deleted_at", null)
       .order("revisit_date"),
+    supabase.from("contexts").select("id, name").order("name"),
   ]);
 
   const domains = domainsRes.data ?? [];
@@ -960,6 +1130,7 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   const horizons = horizonsRes.data;
   const recurringTemplates = recurringRes.data ?? [];
   const ticklerItems = ticklerRes.data ?? [];
+  const contexts = contextsRes.data ?? [];
   const openTasks = tasks.filter((t) => t.status !== "done");
   const openAgendaItems = agendaItems.filter((a) => !a.done);
 
@@ -968,6 +1139,9 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
 
   lines.push("\nDomains:");
   lines.push(domains.length ? domains.map((d) => `- ${d.id} ${d.name}`).join("\n") : "(none yet)");
+
+  lines.push("\nSaved contexts (suggestions for a task's free-text context field):");
+  lines.push(contexts.length ? contexts.map((c) => `- ${c.id} ${c.name}`).join(", ") : "(none yet)");
 
   const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
   lines.push("\nActive projects:");
@@ -993,10 +1167,14 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
           .map(
             (t) =>
               `- ${t.id} "${t.title}" [${t.status}, ${t.priority} priority${
-                t.scheduled_date ? `, scheduled ${t.scheduled_date}` : ""
+                t.scheduled_date
+                  ? t.scheduled_time
+                    ? `, appointment ${t.scheduled_date} at ${t.scheduled_time}`
+                    : `, scheduled ${t.scheduled_date}`
+                  : ""
               }${t.due_date ? `, due ${t.due_date}` : ""}${t.someday ? ", someday" : ""}${
                 t.someday && t.revisit_date ? `, revisit ${t.revisit_date}` : ""
-              }${t.waiting_for ? `, waiting for since ${t.waiting_since}` : ""}${
+              }${t.waiting_for ? `, waiting for since ${t.waiting_since}${t.waiting_on ? ` on ${t.waiting_on}` : ""}` : ""}${
                 t.waiting_for && t.follow_up_date ? `, follow up ${t.follow_up_date}` : ""
               }]`,
           )
@@ -1025,20 +1203,15 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
       : "(none)",
   );
 
-  const RECURRENCE_DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  lines.push("\nRecurring tasks (generate ordinary tasks ahead of time on this schedule):");
+  lines.push(
+    "\nRecurring tasks (most generate ordinary tasks ahead of time on their schedule; " +
+      "recurrence_type \"completion\" instead generates its next occurrence only once the current one " +
+      "is marked done):",
+  );
   lines.push(
     recurringTemplates.length
       ? recurringTemplates
-          .map((t) => {
-            const pattern =
-              t.recurrence_type === "weekly"
-                ? `weekly on ${(t.days_of_week ?? []).map((d: number) => RECURRENCE_DAY_LABELS[d]).join(", ")}`
-                : t.recurrence_type === "monthly"
-                  ? `monthly on day ${t.day_of_month}`
-                  : `every ${t.interval_days} days`;
-            return `- ${t.id} ${t.title} (${pattern}${t.active ? "" : ", paused"})`;
-          })
+          .map((t) => `- ${t.id} ${t.title} (${describeRecurrence(t)}${t.active ? "" : ", paused"})`)
           .join("\n")
       : "(none)",
   );
@@ -1086,26 +1259,8 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
 
   if (mode !== "weekly-review") return lines.join("\n");
 
-  const openTaskCountByProject = new Map<string, number>();
-  for (const t of openTasks) {
-    if (!t.project_id) continue;
-    openTaskCountByProject.set(t.project_id, (openTaskCountByProject.get(t.project_id) ?? 0) + 1);
-  }
-  const subprojectsByParent = new Map<string, typeof projects>();
-  for (const p of projects) {
-    if (!p.parent_project_id) continue;
-    if (!subprojectsByParent.has(p.parent_project_id)) subprojectsByParent.set(p.parent_project_id, []);
-    subprojectsByParent.get(p.parent_project_id)!.push(p);
-  }
-  const stalledProjects = projects.filter((p) => {
-    if (p.status !== "active") return false;
-    const ownCount = openTaskCountByProject.get(p.id) ?? 0;
-    const childCount = (subprojectsByParent.get(p.id) ?? []).reduce(
-      (sum, child) => sum + (openTaskCountByProject.get(child.id) ?? 0),
-      0,
-    );
-    return !ownCount && !childCount;
-  });
+  const stalledIds = findStalledProjectIds(projects, tasks);
+  const stalledProjects = projects.filter((p) => stalledIds.has(p.id));
   const waitingFor = openTasks.filter((t) => t.waiting_for);
   const somedayTasks = openTasks.filter((t) => t.someday);
 
@@ -1121,8 +1276,8 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
           .map(
             (t) =>
               `- ${t.id} "${t.title}" waiting since ${t.waiting_since}${
-                t.follow_up_date ? `, follow up ${t.follow_up_date}` : ""
-              }`,
+                t.waiting_on ? ` on ${t.waiting_on}` : ""
+              }${t.follow_up_date ? `, follow up ${t.follow_up_date}` : ""}`,
           )
           .join("\n")
       : "(none)",
@@ -1165,9 +1320,15 @@ export async function executeTool(
         priority: typeof input.priority === "string" ? input.priority : undefined,
         due_date: typeof input.due_date === "string" ? input.due_date : undefined,
         scheduled_date: typeof input.scheduled_date === "string" ? input.scheduled_date : undefined,
+        scheduled_time:
+          typeof input.scheduled_time === "string" && input.scheduled_time ? input.scheduled_time : undefined,
         someday: typeof input.someday === "boolean" ? input.someday : undefined,
         waiting_for: waitingFor,
         waiting_since: waitingFor === true ? today : undefined,
+        waiting_on:
+          waitingFor === true && typeof input.waiting_on === "string" && input.waiting_on.trim()
+            ? input.waiting_on.trim()
+            : undefined,
         estimated_minutes: typeof input.estimated_minutes === "number" ? input.estimated_minutes : undefined,
         energy_level: typeof input.energy_required === "string" ? input.energy_required : undefined,
         revisit_date:
@@ -1309,22 +1470,32 @@ export async function executeTool(
     if (!taskId) return "Error: task_id is required";
 
     const updates: Record<string, unknown> = {};
+    let justCompleted = false;
     if (typeof input.status === "string") {
+      const { data: existingTask } = await supabase.from("tasks").select("status").eq("id", taskId).maybeSingle();
       updates.status = input.status;
-      updates.completed_at = input.status === "done" ? new Date().toISOString() : null;
+      if (existingTask?.status !== input.status) {
+        updates.completed_at = input.status === "done" ? new Date().toISOString() : null;
+        justCompleted = input.status === "done";
+      }
     }
     if (typeof input.priority === "string") updates.priority = input.priority;
     if (typeof input.link === "string") updates.link = input.link.trim() || null;
     if (typeof input.context === "string") updates.context = input.context.trim() || null;
     if (typeof input.due_date === "string") updates.due_date = input.due_date || null;
     if (typeof input.scheduled_date === "string") updates.scheduled_date = input.scheduled_date || null;
+    if (typeof input.scheduled_time === "string") updates.scheduled_time = input.scheduled_time || null;
     if (typeof input.someday === "boolean") updates.someday = input.someday;
     if (typeof input.follow_up_date === "string") updates.follow_up_date = input.follow_up_date || null;
+    if (typeof input.waiting_on === "string") updates.waiting_on = input.waiting_on.trim() || null;
     if (typeof input.waiting_for === "boolean") {
       updates.waiting_for = input.waiting_for;
       updates.waiting_since = input.waiting_for ? today : null;
-      // Wins over follow_up_date above if both are in the same call.
-      if (!input.waiting_for) updates.follow_up_date = null;
+      // Wins over follow_up_date/waiting_on above if both are in the same call.
+      if (!input.waiting_for) {
+        updates.follow_up_date = null;
+        updates.waiting_on = null;
+      }
     }
     if (typeof input.domain_id === "string") updates.domain_id = input.domain_id || null;
     if (typeof input.project_id === "string") updates.project_id = input.project_id || null;
@@ -1340,6 +1511,13 @@ export async function executeTool(
       .single();
 
     if (error) return `Error: ${error.message}`;
+
+    // An after-completion recurring task doesn't pre-generate its next
+    // occurrence ahead of time like every other recurrence type — it's
+    // spawned here, offset from the date it was actually finished.
+    if (justCompleted && data.recurring_template_id) {
+      await generateNextCompletionOccurrence(supabase, data.recurring_template_id, today);
+    }
     return `Updated task "${data.title}".`;
   }
 
@@ -1424,6 +1602,97 @@ export async function executeTool(
     }
 
     return `Converted to project "${project.name}".`;
+  }
+
+  if (name === "convert_task_to_knowledge_item") {
+    const taskId = typeof input.task_id === "string" ? input.task_id : "";
+    if (!taskId) return "Error: task_id is required";
+
+    const { data: task, error: taskError } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("id", taskId)
+      .is("deleted_at", null)
+      .single();
+    if (taskError || !task) return "Error: task not found";
+
+    const { data: item, error: itemError } = await supabase
+      .from("knowledge_items")
+      .insert({
+        user_id: userId,
+        title: task.title,
+        content: task.notes,
+        url: task.link,
+        type: "note",
+      })
+      .select()
+      .single();
+    if (itemError) return `Error: ${itemError.message}`;
+
+    const { error: trashError } = await supabase
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", taskId);
+    if (trashError) {
+      return `Knowledge item "${item.title}" created, but couldn't trash the original task: ${trashError.message}`;
+    }
+
+    return `Filed as reference: "${item.title}".`;
+  }
+
+  if (name === "convert_task_to_recurring") {
+    const taskId = typeof input.task_id === "string" ? input.task_id : "";
+    if (!taskId) return "Error: task_id is required";
+
+    const { data: task, error: taskError } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("id", taskId)
+      .is("deleted_at", null)
+      .single();
+    if (taskError || !task) return "Error: task not found";
+    if (task.recurring_template_id) return "Error: this task is already part of a recurring series";
+
+    const patternResult = parseRecurrencePattern(input);
+    if ("error" in patternResult) return `Error: ${patternResult.error}`;
+    const endsResult = parseEnds(input);
+    if ("error" in endsResult) return `Error: ${endsResult.error}`;
+
+    const { data: template, error: templateError } = await supabase
+      .from("recurring_task_templates")
+      .insert({
+        user_id: userId,
+        title: task.title,
+        notes: task.notes,
+        link: task.link,
+        domain_id: task.domain_id,
+        project_id: task.project_id,
+        priority: task.priority,
+        ...patternResult.pattern,
+        ...endsResult.ends,
+      })
+      .select()
+      .single();
+    if (templateError) return `Error: ${templateError.message}`;
+
+    const stored = template as StoredTemplate;
+    const { error: generateError } =
+      stored.recurrence_type === "completion"
+        ? await seedCompletionTemplate(supabase, stored)
+        : await topUpTemplate(supabase, stored);
+    if (generateError) {
+      return `Template "${template.title}" created, but generating the first occurrences failed: ${generateError}`;
+    }
+
+    const { error: trashError } = await supabase
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", taskId);
+    if (trashError) {
+      return `Recurring task "${template.title}" created, but couldn't trash the original task: ${trashError.message}`;
+    }
+
+    return `Converted to recurring task "${template.title}".`;
   }
 
   if (name === "update_project") {
@@ -1532,6 +1801,47 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return `Updated domain "${data.name}".`;
+  }
+
+  if (name === "create_context") {
+    const contextName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!contextName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("contexts")
+      .insert({ user_id: userId, name: contextName })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Saved context "${data.name}".`;
+  }
+
+  if (name === "update_context") {
+    const contextId = typeof input.context_id === "string" ? input.context_id : "";
+    if (!contextId) return "Error: context_id is required";
+    const contextName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!contextName) return "Error: name cannot be empty";
+
+    const { data, error } = await supabase
+      .from("contexts")
+      .update({ name: contextName })
+      .eq("id", contextId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Renamed context to "${data.name}".`;
+  }
+
+  if (name === "delete_context") {
+    const contextId = typeof input.context_id === "string" ? input.context_id : "";
+    if (!contextId) return "Error: context_id is required";
+
+    const { error } = await supabase.from("contexts").delete().eq("id", contextId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Deleted context.";
   }
 
   if (name === "create_routine") {
@@ -2113,21 +2423,11 @@ export async function executeTool(
   if (name === "create_recurring_task") {
     const title = typeof input.title === "string" ? input.title.trim() : "";
     if (!title) return "Error: title is required";
-    const recurrenceType = input.recurrence_type;
-    if (recurrenceType !== "weekly" && recurrenceType !== "monthly" && recurrenceType !== "interval") {
-      return "Error: recurrence_type must be weekly, monthly, or interval";
-    }
 
-    const daysOfWeek = Array.isArray(input.days_of_week) ? input.days_of_week.map(Number) : [];
-    if (recurrenceType === "weekly" && daysOfWeek.length === 0) {
-      return "Error: days_of_week is required for a weekly recurrence";
-    }
-    if (recurrenceType === "monthly" && !input.day_of_month) {
-      return "Error: day_of_month is required for a monthly recurrence";
-    }
-    if (recurrenceType === "interval" && !input.interval_days) {
-      return "Error: interval_days is required for an interval recurrence";
-    }
+    const patternResult = parseRecurrencePattern(input);
+    if ("error" in patternResult) return `Error: ${patternResult.error}`;
+    const endsResult = parseEnds(input);
+    if ("error" in endsResult) return `Error: ${endsResult.error}`;
 
     const { data: template, error } = await supabase
       .from("recurring_task_templates")
@@ -2139,19 +2439,21 @@ export async function executeTool(
         domain_id: typeof input.domain_id === "string" ? input.domain_id : null,
         project_id: typeof input.project_id === "string" ? input.project_id : null,
         priority: typeof input.priority === "string" ? input.priority : undefined,
-        recurrence_type: recurrenceType,
-        days_of_week: recurrenceType === "weekly" ? daysOfWeek : null,
-        day_of_month: recurrenceType === "monthly" ? Number(input.day_of_month) : null,
-        interval_days: recurrenceType === "interval" ? Number(input.interval_days) : null,
+        ...patternResult.pattern,
+        ...endsResult.ends,
         horizon_count: typeof input.horizon_count === "number" ? input.horizon_count : 12,
       })
       .select()
       .single();
     if (error) return `Error: ${error.message}`;
 
-    const { error: topUpError } = await topUpTemplate(supabase, template as StoredTemplate);
-    if (topUpError) {
-      return `Created "${template.title}", but generating the first occurrences failed: ${topUpError}`;
+    const stored = template as StoredTemplate;
+    const { error: generateError } =
+      stored.recurrence_type === "completion"
+        ? await seedCompletionTemplate(supabase, stored)
+        : await topUpTemplate(supabase, stored);
+    if (generateError) {
+      return `Created "${template.title}", but generating the first occurrences failed: ${generateError}`;
     }
     return `Created recurring task "${template.title}".`;
   }
@@ -2174,25 +2476,45 @@ export async function executeTool(
     if (typeof input.active === "boolean") updates.active = input.active;
     if (typeof input.horizon_count === "number") updates.horizon_count = input.horizon_count;
 
+    let patternChanged = false;
     if (typeof input.recurrence_type === "string") {
-      updates.recurrence_type = input.recurrence_type;
-      updates.days_of_week = null;
-      updates.day_of_month = null;
-      updates.interval_days = null;
+      const { data: existing, error: existingError } = await supabase
+        .from("recurring_task_templates")
+        .select(
+          "recurrence_type, days_of_week, day_of_month, interval_days, month_of_year, week_of_month, weekday_of_month, month_clamp, completion_offset_count, completion_offset_unit",
+        )
+        .eq("id", recurringTaskId)
+        .single();
+      if (existingError || !existing) return `Error: ${existingError?.message ?? "Not found"}`;
 
-      if (input.recurrence_type === "weekly") {
-        const daysOfWeek = Array.isArray(input.days_of_week) ? input.days_of_week.map(Number) : [];
-        if (daysOfWeek.length === 0) return "Error: days_of_week is required when switching to weekly";
-        updates.days_of_week = daysOfWeek;
-      } else if (input.recurrence_type === "monthly") {
-        if (!input.day_of_month) return "Error: day_of_month is required when switching to monthly";
-        updates.day_of_month = Number(input.day_of_month);
-      } else if (input.recurrence_type === "interval") {
-        if (!input.interval_days) return "Error: interval_days is required when switching to interval";
-        updates.interval_days = Number(input.interval_days);
-      } else {
-        return "Error: recurrence_type must be weekly, monthly, or interval";
-      }
+      const patternResult = parseRecurrencePattern(input);
+      if ("error" in patternResult) return `Error: ${patternResult.error}`;
+      Object.assign(updates, patternResult.pattern);
+
+      const sortedDays = (d: number[] | null) => JSON.stringify([...(d ?? [])].sort());
+      patternChanged =
+        patternResult.pattern.recurrence_type !== existing.recurrence_type ||
+        sortedDays(patternResult.pattern.days_of_week) !== sortedDays(existing.days_of_week) ||
+        (patternResult.pattern.day_of_month ?? null) !== (existing.day_of_month ?? null) ||
+        (patternResult.pattern.interval_days ?? null) !== (existing.interval_days ?? null) ||
+        (patternResult.pattern.month_of_year ?? null) !== (existing.month_of_year ?? null) ||
+        (patternResult.pattern.week_of_month ?? null) !== (existing.week_of_month ?? null) ||
+        (patternResult.pattern.weekday_of_month ?? null) !== (existing.weekday_of_month ?? null) ||
+        patternResult.pattern.month_clamp !== (existing.month_clamp ?? "clamp") ||
+        (patternResult.pattern.completion_offset_count ?? null) !== (existing.completion_offset_count ?? null) ||
+        (patternResult.pattern.completion_offset_unit ?? null) !== (existing.completion_offset_unit ?? null);
+
+      if (patternChanged) updates.last_generated_date = null;
+    }
+
+    if (
+      input.ends_type !== undefined ||
+      input.ends_date !== undefined ||
+      input.ends_count !== undefined
+    ) {
+      const endsResult = parseEnds(input);
+      if ("error" in endsResult) return `Error: ${endsResult.error}`;
+      Object.assign(updates, endsResult.ends);
     }
 
     const { data, error } = await supabase
@@ -2202,6 +2524,25 @@ export async function executeTool(
       .select()
       .single();
     if (error) return `Error: ${error.message}`;
+
+    if (patternChanged) {
+      const { error: detachError } = await supabase
+        .from("tasks")
+        .update({ recurring_template_id: null })
+        .eq("recurring_template_id", recurringTaskId)
+        .is("deleted_at", null)
+        .neq("status", "done")
+        .gte("scheduled_date", today);
+      if (detachError) return `Pattern updated, but detaching old occurrences failed: ${detachError.message}`;
+
+      const stored = data as StoredTemplate;
+      const { error: generateError } =
+        stored.recurrence_type === "completion"
+          ? await seedCompletionTemplate(supabase, stored)
+          : await topUpTemplate(supabase, stored);
+      if (generateError) return `Pattern updated, but generating new occurrences failed: ${generateError}`;
+    }
+
     return `Updated recurring task "${data.title}".`;
   }
 

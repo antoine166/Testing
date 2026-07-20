@@ -26,6 +26,11 @@ function entryDate(entry: GroupedEntry<Task>): string {
   return entry.type === "single" ? entry.task.scheduled_date! : entry.tasks[0].scheduled_date!;
 }
 
+/** Same representative-task convention as entryDate, for scheduled_time. */
+function entryScheduledTime(entry: GroupedEntry<Task>): string | null | undefined {
+  return entry.type === "single" ? entry.task.scheduled_time : entry.tasks[0].scheduled_time;
+}
+
 export default function UpcomingPage() {
   const {
     domains,
@@ -37,6 +42,8 @@ export default function UpcomingPage() {
     toggleDone,
     handleDelete,
     handleConvertToProject,
+    handleConvertToRecurring,
+    handleConvertToKnowledgeItem,
   } = useTaskList();
   const today = todayLocal();
 
@@ -73,26 +80,56 @@ export default function UpcomingPage() {
         <p className="text-sm text-zinc-500">Nothing scheduled ahead.</p>
       ) : (
         <div className="space-y-6">
-          {sortedDates.map((date) => (
-            <div key={date}>
-              <div className="mb-2 flex items-baseline gap-2 border-b border-zinc-200 pb-1 dark:border-zinc-800">
-                <span className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-                  {parseLocalDate(date).getDate()}
-                </span>
-                <span className="text-sm text-zinc-500">{formatDateHeader(date, today)}</span>
+          {sortedDates.map((date) => {
+            const entries = byDate.get(date)!;
+            // GTD's hard landscape: an entry with a scheduled_time is a
+            // real appointment, not just a day it's planned for — kept
+            // visually separate so Upcoming doesn't read as a to-do list
+            // with dates.
+            const appointments = [...entries]
+              .filter((e) => entryScheduledTime(e))
+              .sort((a, b) => (entryScheduledTime(a) ?? "").localeCompare(entryScheduledTime(b) ?? ""));
+            const planned = entries.filter((e) => !entryScheduledTime(e));
+            const commonProps = {
+              domains,
+              projects,
+              onToggleDone: toggleDone,
+              onUpdate: handleUpdate,
+              onDelete: handleDelete,
+              onConvertToProject: handleConvertToProject,
+              onConvertToRecurring: handleConvertToRecurring,
+              onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
+            };
+
+            return (
+              <div key={date}>
+                <div className="mb-2 flex items-baseline gap-2 border-b border-zinc-200 pb-1 dark:border-zinc-800">
+                  <span className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+                    {parseLocalDate(date).getDate()}
+                  </span>
+                  <span className="text-sm text-zinc-500">{formatDateHeader(date, today)}</span>
+                </div>
+                {appointments.length > 0 && (
+                  <div className="mb-2">
+                    <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Appointments
+                    </h3>
+                    <ul className="space-y-2">{renderGroupedEntries(appointments, commonProps)}</ul>
+                  </div>
+                )}
+                {planned.length > 0 && (
+                  <>
+                    {appointments.length > 0 && (
+                      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                        Planned
+                      </h3>
+                    )}
+                    <ul className="space-y-2">{renderGroupedEntries(planned, commonProps)}</ul>
+                  </>
+                )}
               </div>
-              <ul className="space-y-2">
-                {renderGroupedEntries(byDate.get(date)!, {
-                  domains,
-                  projects,
-                  onToggleDone: toggleDone,
-                  onUpdate: handleUpdate,
-                  onDelete: handleDelete,
-                  onConvertToProject: handleConvertToProject,
-                })}
-              </ul>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

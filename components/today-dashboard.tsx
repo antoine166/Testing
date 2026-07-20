@@ -15,9 +15,11 @@ import TaskRow, {
 } from "@/components/task-row";
 import { type Routine } from "@/components/routine-card";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
-import RecurrenceFields from "@/components/recurrence-fields";
+import RecurrenceFields, {
+  DEFAULT_RECURRENCE_PATTERN,
+  type RecurrencePatternDraft,
+} from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
-import { type RecurrenceType } from "@/lib/recurring-tasks/types";
 
 type Checkin = {
   date: string;
@@ -119,10 +121,7 @@ export default function TodayDashboard() {
   const [newTaskFollowUpDate, setNewTaskFollowUpDate] = useState("");
   const [addingTask, setAddingTask] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("weekly");
-  const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<number[]>([]);
-  const [recurrenceDayOfMonth, setRecurrenceDayOfMonth] = useState(1);
-  const [recurrenceIntervalDays, setRecurrenceIntervalDays] = useState(7);
+  const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
   async function loadAll() {
     try {
@@ -349,6 +348,36 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
+  async function handleConvertTaskToRecurring(id: string, pattern: RecurrencePatternDraft) {
+    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pattern),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to recurring");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleConvertTaskToKnowledgeItem(id: string) {
+    if (
+      !confirm(
+        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to file task as reference");
+      return;
+    }
+    await loadAll();
+  }
+
   function resetCreateForm() {
     setNewTaskTitle("");
     setNewTaskLink("");
@@ -362,10 +391,7 @@ export default function TodayDashboard() {
     setNewTaskWaitingFor(false);
     setNewTaskFollowUpDate("");
     setIsRecurring(false);
-    setRecurrenceType("weekly");
-    setRecurrenceDaysOfWeek([]);
-    setRecurrenceDayOfMonth(1);
-    setRecurrenceIntervalDays(7);
+    setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
 
   async function handleCreateSubmit(e: FormEvent<HTMLFormElement>) {
@@ -374,7 +400,7 @@ export default function TodayDashboard() {
     setAddingTask(true);
 
     if (isRecurring) {
-      if (recurrenceType === "weekly" && recurrenceDaysOfWeek.length === 0) {
+      if (recurrencePattern.recurrence_type === "weekly" && recurrencePattern.days_of_week.length === 0) {
         setAddingTask(false);
         setError("Pick at least one day for a weekly recurring task.");
         return;
@@ -390,10 +416,7 @@ export default function TodayDashboard() {
           domain_id: newTaskDomainId || null,
           project_id: newTaskProjectId || null,
           priority: newTaskPriority,
-          recurrence_type: recurrenceType,
-          days_of_week: recurrenceType === "weekly" ? recurrenceDaysOfWeek : undefined,
-          day_of_month: recurrenceType === "monthly" ? recurrenceDayOfMonth : undefined,
-          interval_days: recurrenceType === "interval" ? recurrenceIntervalDays : undefined,
+          ...recurrencePattern,
         }),
       });
 
@@ -495,6 +518,13 @@ export default function TodayDashboard() {
   const todayTasks = [...tasks]
     .filter((t) => t.scheduled_date === today && t.status !== "done")
     .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+  // GTD's hard landscape: a scheduled_time makes this a real appointment,
+  // not just a day it's planned for — kept visually separate so "Today"
+  // doesn't quietly become a to-do list with dates.
+  const appointmentsToday = todayTasks
+    .filter((t) => t.scheduled_time)
+    .sort((a, b) => (a.scheduled_time ?? "").localeCompare(b.scheduled_time ?? ""));
+  const plannedToday = todayTasks.filter((t) => !t.scheduled_time);
   const overdueTasks = [...tasks]
     .filter((t) => t.scheduled_date && t.scheduled_date < today && t.status !== "done")
     .sort((a, b) => (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? ""));
@@ -609,6 +639,8 @@ export default function TodayDashboard() {
                 onUpdate={handleUpdateTask}
                 onDelete={handleDeleteTask}
                 onConvertToProject={handleConvertTaskToProject}
+                onConvertToRecurring={handleConvertTaskToRecurring}
+                onConvertToKnowledgeItem={handleConvertTaskToKnowledgeItem}
               />
             ))}
           </ul>
@@ -867,18 +899,8 @@ export default function TodayDashboard() {
               </label>
               {isRecurring && (
                 <RecurrenceFields
-                  recurrenceType={recurrenceType}
-                  onRecurrenceTypeChange={setRecurrenceType}
-                  daysOfWeek={recurrenceDaysOfWeek}
-                  onToggleDay={(day) =>
-                    setRecurrenceDaysOfWeek((prev) =>
-                      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
-                    )
-                  }
-                  dayOfMonth={recurrenceDayOfMonth}
-                  onDayOfMonthChange={setRecurrenceDayOfMonth}
-                  intervalDays={recurrenceIntervalDays}
-                  onIntervalDaysChange={setRecurrenceIntervalDays}
+                  pattern={recurrencePattern}
+                  onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
                 />
               )}
             </div>
@@ -887,20 +909,56 @@ export default function TodayDashboard() {
         {todayTasks.length === 0 ? (
           <p className="text-sm text-zinc-500">Nothing scheduled for today.</p>
         ) : (
-          <ul className="space-y-2">
-            {todayTasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                domains={domains}
-                projects={projects}
-                onToggleDone={toggleTask}
-                onUpdate={handleUpdateTask}
-                onDelete={handleDeleteTask}
-                onConvertToProject={handleConvertTaskToProject}
-              />
-            ))}
-          </ul>
+          <>
+            {appointmentsToday.length > 0 && (
+              <div className="mb-4">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Appointments
+                </h3>
+                <ul className="space-y-2">
+                  {appointmentsToday.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      domains={domains}
+                      projects={projects}
+                      onToggleDone={toggleTask}
+                      onUpdate={handleUpdateTask}
+                      onDelete={handleDeleteTask}
+                      onConvertToProject={handleConvertTaskToProject}
+                      onConvertToRecurring={handleConvertTaskToRecurring}
+                onConvertToKnowledgeItem={handleConvertTaskToKnowledgeItem}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+            {plannedToday.length > 0 && (
+              <>
+                {appointmentsToday.length > 0 && (
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Planned
+                  </h3>
+                )}
+                <ul className="space-y-2">
+                  {plannedToday.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      domains={domains}
+                      projects={projects}
+                      onToggleDone={toggleTask}
+                      onUpdate={handleUpdateTask}
+                      onDelete={handleDeleteTask}
+                      onConvertToProject={handleConvertTaskToProject}
+                      onConvertToRecurring={handleConvertTaskToRecurring}
+                onConvertToKnowledgeItem={handleConvertTaskToKnowledgeItem}
+                    />
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
         )}
       </div>
 

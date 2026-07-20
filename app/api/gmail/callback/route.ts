@@ -56,16 +56,21 @@ export async function GET(request: Request) {
 
     // Multiple accounts can be connected at once, identified by email. If
     // this exact account is already connected, update its tokens in place
-    // rather than adding a duplicate row. If not, but there's a
-    // pre-existing connection from before multi-account support with no
-    // email on file, adopt that row instead of leaving it orphaned.
+    // rather than adding a duplicate row — otherwise insert a new one.
+    //
+    // Deliberately NOT falling back to "adopt any pre-multi-account row
+    // with no email on file" here: that can't distinguish "reconnecting
+    // that same legacy account" from "connecting an unrelated second
+    // account," and previously caused a genuinely different account's
+    // tokens to silently overwrite an existing connection. A stale
+    // null-email row is harmless (the UI already shows and disconnects it
+    // individually) and safer left alone than guessed at.
     const { data: existing } = await supabase
       .from("gmail_connections")
       .select("id, email")
       .eq("user_id", user.id);
 
-    const targetId =
-      existing?.find((c) => c.email === email)?.id ?? existing?.find((c) => c.email === null)?.id;
+    const targetId = existing?.find((c) => c.email === email)?.id;
 
     const { error: dbError } = targetId
       ? await supabase.from("gmail_connections").update(row).eq("id", targetId)

@@ -10,10 +10,19 @@ import TaskRow, {
   type TaskPriority,
 } from "@/components/task-row";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
-import RecurrenceFields from "@/components/recurrence-fields";
+import RecurrenceFields, {
+  DEFAULT_RECURRENCE_PATTERN,
+  type RecurrencePatternDraft,
+} from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
-import { describeRecurrence, type RecurrenceType } from "@/lib/recurring-tasks/types";
+import {
+  describeRecurrence,
+  type CompletionOffsetUnit,
+  type EndsType,
+  type MonthClamp,
+  type RecurrenceType,
+} from "@/lib/recurring-tasks/types";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
@@ -31,6 +40,15 @@ type RecurringTemplate = {
   days_of_week: number[] | null;
   day_of_month: number | null;
   interval_days: number | null;
+  month_of_year: number | null;
+  week_of_month: number | null;
+  weekday_of_month: number | null;
+  month_clamp: MonthClamp;
+  completion_offset_count: number | null;
+  completion_offset_unit: CompletionOffsetUnit | null;
+  ends_type: EndsType;
+  ends_date: string | null;
+  ends_count: number | null;
   horizon_count: number;
   active: boolean;
 };
@@ -63,10 +81,7 @@ export default function TasksPage() {
   const [followUpDate, setFollowUpDate] = useState("");
 
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("weekly");
-  const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<number[]>([]);
-  const [recurrenceDayOfMonth, setRecurrenceDayOfMonth] = useState(1);
-  const [recurrenceIntervalDays, setRecurrenceIntervalDays] = useState(7);
+  const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
   const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>([]);
 
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -77,10 +92,7 @@ export default function TasksPage() {
   const [editProjectId, setEditProjectId] = useState("");
   const [editPriority, setEditPriority] = useState<TaskPriority>("none");
   const [editHorizonCount, setEditHorizonCount] = useState(12);
-  const [editRecurrenceType, setEditRecurrenceType] = useState<RecurrenceType>("weekly");
-  const [editDaysOfWeek, setEditDaysOfWeek] = useState<number[]>([]);
-  const [editDayOfMonth, setEditDayOfMonth] = useState(1);
-  const [editIntervalDays, setEditIntervalDays] = useState(7);
+  const [editPattern, setEditPattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -198,10 +210,7 @@ export default function TasksPage() {
     setWaitingFor(false);
     setFollowUpDate("");
     setIsRecurring(false);
-    setRecurrenceType("weekly");
-    setRecurrenceDaysOfWeek([]);
-    setRecurrenceDayOfMonth(1);
-    setRecurrenceIntervalDays(7);
+    setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -209,7 +218,7 @@ export default function TasksPage() {
     if (!title.trim()) return;
 
     if (isRecurring) {
-      if (recurrenceType === "weekly" && recurrenceDaysOfWeek.length === 0) {
+      if (recurrencePattern.recurrence_type === "weekly" && recurrencePattern.days_of_week.length === 0) {
         setError("Pick at least one day for a weekly recurring task.");
         return;
       }
@@ -224,10 +233,7 @@ export default function TasksPage() {
           domain_id: domainId || null,
           project_id: projectId || null,
           priority,
-          recurrence_type: recurrenceType,
-          days_of_week: recurrenceType === "weekly" ? recurrenceDaysOfWeek : undefined,
-          day_of_month: recurrenceType === "monthly" ? recurrenceDayOfMonth : undefined,
-          interval_days: recurrenceType === "interval" ? recurrenceIntervalDays : undefined,
+          ...recurrencePattern,
         }),
       });
 
@@ -301,10 +307,21 @@ export default function TasksPage() {
     setEditProjectId(t.project_id ?? "");
     setEditPriority(t.priority);
     setEditHorizonCount(t.horizon_count);
-    setEditRecurrenceType(t.recurrence_type);
-    setEditDaysOfWeek(t.days_of_week ?? []);
-    setEditDayOfMonth(t.day_of_month ?? 1);
-    setEditIntervalDays(t.interval_days ?? 7);
+    setEditPattern({
+      recurrence_type: t.recurrence_type,
+      days_of_week: t.days_of_week ?? [],
+      day_of_month: t.day_of_month ?? 1,
+      interval_days: t.interval_days ?? 7,
+      month_of_year: t.month_of_year ?? 1,
+      week_of_month: t.week_of_month ?? 1,
+      weekday_of_month: t.weekday_of_month ?? 1,
+      month_clamp: t.month_clamp ?? "clamp",
+      completion_offset_count: t.completion_offset_count ?? 1,
+      completion_offset_unit: t.completion_offset_unit ?? "day",
+      ends_type: t.ends_type ?? "never",
+      ends_date: t.ends_date ?? "",
+      ends_count: t.ends_count ?? 1,
+    });
   }
 
   function cancelEditTemplate() {
@@ -315,7 +332,7 @@ export default function TasksPage() {
     e.preventDefault();
     if (!editingTemplateId || !editTitle.trim()) return;
 
-    if (editRecurrenceType === "weekly" && editDaysOfWeek.length === 0) {
+    if (editPattern.recurrence_type === "weekly" && editPattern.days_of_week.length === 0) {
       setError("Pick at least one day for a weekly recurring task.");
       return;
     }
@@ -331,10 +348,7 @@ export default function TasksPage() {
         project_id: editProjectId || null,
         priority: editPriority,
         horizon_count: editHorizonCount,
-        recurrence_type: editRecurrenceType,
-        days_of_week: editRecurrenceType === "weekly" ? editDaysOfWeek : undefined,
-        day_of_month: editRecurrenceType === "monthly" ? editDayOfMonth : undefined,
-        interval_days: editRecurrenceType === "interval" ? editIntervalDays : undefined,
+        ...editPattern,
       }),
     });
 
@@ -414,6 +428,37 @@ export default function TasksPage() {
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to convert task to project");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
+    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pattern),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to recurring");
+      return;
+    }
+    await loadAll();
+    await loadRecurringTemplates();
+  }
+
+  async function handleConvertToKnowledgeItem(id: string) {
+    if (
+      !confirm(
+        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to file task as reference");
       return;
     }
     await loadAll();
@@ -765,18 +810,8 @@ export default function TasksPage() {
 
           {isRecurring && (
             <RecurrenceFields
-              recurrenceType={recurrenceType}
-              onRecurrenceTypeChange={setRecurrenceType}
-              daysOfWeek={recurrenceDaysOfWeek}
-              onToggleDay={(day) =>
-                setRecurrenceDaysOfWeek((prev) =>
-                  prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
-                )
-              }
-              dayOfMonth={recurrenceDayOfMonth}
-              onDayOfMonthChange={setRecurrenceDayOfMonth}
-              intervalDays={recurrenceIntervalDays}
-              onIntervalDaysChange={setRecurrenceIntervalDays}
+              pattern={recurrencePattern}
+              onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
             />
           )}
         </div>
@@ -852,32 +887,24 @@ export default function TasksPage() {
                           </option>
                         ))}
                       </select>
-                      <label className="flex items-center gap-2 text-sm text-zinc-500">
-                        Keep
-                        <input
-                          type="number"
-                          min={1}
-                          max={52}
-                          value={editHorizonCount}
-                          onChange={(e) => setEditHorizonCount(Number(e.target.value))}
-                          className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                        />
-                        upcoming
-                      </label>
+                      {editPattern.recurrence_type !== "completion" && (
+                        <label className="flex items-center gap-2 text-sm text-zinc-500">
+                          Keep
+                          <input
+                            type="number"
+                            min={1}
+                            max={52}
+                            value={editHorizonCount}
+                            onChange={(e) => setEditHorizonCount(Number(e.target.value))}
+                            className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                          />
+                          upcoming
+                        </label>
+                      )}
                     </div>
                     <RecurrenceFields
-                      recurrenceType={editRecurrenceType}
-                      onRecurrenceTypeChange={setEditRecurrenceType}
-                      daysOfWeek={editDaysOfWeek}
-                      onToggleDay={(day) =>
-                        setEditDaysOfWeek((prev) =>
-                          prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
-                        )
-                      }
-                      dayOfMonth={editDayOfMonth}
-                      onDayOfMonthChange={setEditDayOfMonth}
-                      intervalDays={editIntervalDays}
-                      onIntervalDaysChange={setEditIntervalDays}
+                      pattern={editPattern}
+                      onChange={(updates) => setEditPattern((prev) => ({ ...prev, ...updates }))}
                     />
                     <div className="flex gap-3">
                       <button
@@ -962,6 +989,8 @@ export default function TasksPage() {
                 onUpdate: handleUpdate,
                 onDelete: handleDelete,
                 onConvertToProject: handleConvertToProject,
+                onConvertToRecurring: handleConvertToRecurring,
+                onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
               })}
             </ul>
           )}
@@ -1068,6 +1097,8 @@ export default function TasksPage() {
                         onUpdate={handleUpdate}
                         onDelete={handleDelete}
                         onConvertToProject={handleConvertToProject}
+                        onConvertToRecurring={handleConvertToRecurring}
+                        onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
                         selectable
                         selected={selectedIds.has(task.id)}
                         onSelectChange={(checked) => toggleSelected(task.id, checked)}
@@ -1080,6 +1111,8 @@ export default function TasksPage() {
                       onUpdate: handleUpdate,
                       onDelete: handleDelete,
                       onConvertToProject: handleConvertToProject,
+                      onConvertToRecurring: handleConvertToRecurring,
+                      onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                     })}
                 </ul>
               </>
@@ -1157,6 +1190,8 @@ export default function TasksPage() {
                                       onUpdate: handleUpdate,
                                       onDelete: handleDelete,
                                       onConvertToProject: handleConvertToProject,
+                                      onConvertToRecurring: handleConvertToRecurring,
+                                      onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                                     })}
                                   </ul>
                                 )}
@@ -1179,6 +1214,8 @@ export default function TasksPage() {
                                   onUpdate: handleUpdate,
                                   onDelete: handleDelete,
                                   onConvertToProject: handleConvertToProject,
+                                  onConvertToRecurring: handleConvertToRecurring,
+                                  onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                                 })}
                               </ul>
                             </div>
