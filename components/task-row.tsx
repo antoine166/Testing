@@ -297,7 +297,7 @@ export default function TaskRow({
       const timeout = setTimeout(() => {
         setCompleting(false);
         setFadingOut(false);
-      }, 350);
+      }, 700);
       return () => clearTimeout(timeout);
     }
   }, [task.status, completing, fadingOut]);
@@ -315,7 +315,7 @@ export default function TaskRow({
     // the fade-out visually; on a fast reload the row may just unmount a
     // little before it finishes fading, which is a fine tradeoff.
     onToggleDone(task);
-    completeTimeoutRef.current = setTimeout(() => setFadingOut(true), 400);
+    completeTimeoutRef.current = setTimeout(() => setFadingOut(true), 900);
   }
   const [title, setTitle] = useState(task.title);
   const [link, setLink] = useState(task.link ?? "");
@@ -622,7 +622,7 @@ export default function TaskRow({
 
   return (
     <li
-      className={`flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 transition-all duration-300 dark:border-zinc-800 ${
+      className={`flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 transition-all duration-700 dark:border-zinc-800 ${
         fadingOut ? "scale-95 opacity-0" : "scale-100 opacity-100"
       }`}
     >
