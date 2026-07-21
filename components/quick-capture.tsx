@@ -129,7 +129,15 @@ export default function QuickCapture() {
     } catch {
       // No connection — queue it instead of losing it, synced automatically
       // once we're back online (see lib/offline-queue.ts).
-      await enqueueCapture({ mode, payload, image: mode === "task" ? image : null });
+      try {
+        await enqueueCapture({ mode, payload, image: mode === "task" ? image : null });
+      } catch {
+        // Queueing itself failed (e.g. IndexedDB unavailable) — surface a
+        // normal error rather than leaving the form stuck on "Saving...".
+        setSubmitting(false);
+        setError("Couldn't save — check your connection and try again.");
+        return;
+      }
       setSubmitting(false);
       resetForm();
       setQueuedNotice(true);

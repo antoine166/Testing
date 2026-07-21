@@ -78,13 +78,39 @@ export async function queueLength(): Promise<number> {
   return (await listQueue()).length;
 }
 
+// Guards against two overlapping flushes (e.g. the mount-time attempt and a
+// rapid "online" event firing close together) both reading the same queued
+// entries before either removes them, which would double-POST — and
+// therefore duplicate — a capture. Fine to be a plain module-level flag
+// rather than a cross-tab lock: this is a single-user app almost always
+// used from one tab at a time, and a missed flush just retries next trigger.
+let flushing = false;
+
 /**
  * Replays queued captures against the real API, oldest first. A network
  * error (still offline) stops the run, leaving the rest queued for next
  * time. A genuine server rejection (4xx/5xx) drops just that one entry
- * instead — retrying a rejected request forever wouldn't fix it.
+ * instead — retrying a rejected request forever wouldn't fix it. Any other
+ * unexpected error (e.g. a malformed response) also stops the run without
+ * dropping the entry, erring toward keeping it queued for retry over
+ * silently losing it.
  */
 export async function flushQueue(): Promise<{ synced: number; failed: number }> {
+  if (flushing) return { synced: 0, failed: 0 };
+  flushing = true;
+
+  try {
+    return await flushQueueInner();
+  } catch {
+    // IndexedDB itself unavailable/erroring — nothing to sync this attempt,
+    // but don't let the caller's unhandled rejection take down the effect.
+    return { synced: 0, failed: 0 };
+  } finally {
+    flushing = false;
+  }
+}
+
+async function flushQueueInner(): Promise<{ synced: number; failed: number }> {
   const entries = await listQueue();
   let synced = 0;
   let failed = 0;
@@ -107,20 +133,28 @@ export async function flushQueue(): Promise<{ synced: number; failed: number }> 
       continue;
     }
 
-    const created = await res.json();
+    try {
+      const created = await res.json();
 
-    if (entry.mode === "task" && entry.image) {
-      const formData = new FormData();
-      formData.append("file", entry.image);
-      // Same precedent as email-capture attachments: a photo failing to
-      // attach doesn't undo the capture — the task is the important part.
-      await fetch(`/api/tasks/${created.id}/attachments`, { method: "POST", body: formData }).catch(
-        () => {},
-      );
+      if (entry.mode === "task" && entry.image) {
+        const formData = new FormData();
+        formData.append("file", entry.image);
+        // Same precedent as email-capture attachments: a photo failing to
+        // attach doesn't undo the capture — the task is the important part.
+        await fetch(`/api/tasks/${created.id}/attachments`, {
+          method: "POST",
+          body: formData,
+        }).catch(() => {});
+      }
+
+      await removeFromQueue(entry.id);
+      synced++;
+    } catch {
+      // The task may or may not have actually been created server-side —
+      // safer to stop and leave it queued (a possible duplicate on next
+      // sync) than to assume failure and silently drop real data.
+      break;
     }
-
-    await removeFromQueue(entry.id);
-    synced++;
   }
 
   return { synced, failed };
