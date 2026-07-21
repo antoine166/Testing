@@ -35,12 +35,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  const weeklyTarget = typeof body.weekly_target === "number" ? body.weekly_target : null;
+  if (weeklyTarget !== null && (!Number.isInteger(weeklyTarget) || weeklyTarget < 1)) {
+    return NextResponse.json(
+      { error: "weekly_target must be a positive integer" },
+      { status: 400 },
+    );
+  }
+
   const { data, error } = await supabase
     .from("workouts")
     .insert({
       user_id: user.id,
       name,
       icon: typeof body.icon === "string" ? body.icon : undefined,
+      weekly_target: weeklyTarget,
     })
     .select()
     .single();

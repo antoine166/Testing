@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { computeWeeklyGoalStreak, countThisWeek } from "@/lib/workouts/weekly";
 
 export type Workout = {
   id: string;
   name: string;
   icon: string | null;
+  weekly_target: number | null;
 };
 
 export type WorkoutLogAttachment = {
@@ -186,6 +188,8 @@ function WorkoutLogEntry({
 
 export default function WorkoutRow({
   workout,
+  date,
+  today,
   logs,
   onToggle,
   onAddAnother,
@@ -196,7 +200,11 @@ export default function WorkoutRow({
   onDeleteWorkout,
 }: {
   workout: Workout;
-  /** This workout's logs for the currently selected date only. */
+  /** The date currently being logged/viewed (may be in the past). */
+  date: string;
+  /** The real current date, used for weekly-goal math regardless of `date`. */
+  today: string;
+  /** All of this workout's logs (not date-filtered) — needed for the weekly-goal count/streak. */
   logs: WorkoutLog[];
   onToggle: () => void;
   onAddAnother: () => void;
@@ -209,35 +217,64 @@ export default function WorkoutRow({
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [name, setName] = useState(workout.name);
-  const checked = logs.length > 0;
+  const [weeklyTarget, setWeeklyTarget] = useState(workout.weekly_target?.toString() ?? "");
+
+  const logsForDate = logs.filter((l) => l.logged_date === date);
+  const checked = logsForDate.length > 0;
+
+  const weekCount = workout.weekly_target ? countThisWeek(logs, today) : 0;
+  const { current: weekStreak } = workout.weekly_target
+    ? computeWeeklyGoalStreak(logs, today, workout.weekly_target)
+    : { current: 0 };
 
   function handleSave() {
     if (!name.trim()) return;
-    onUpdateWorkout(workout.id, { name });
+    const parsedTarget = weeklyTarget.trim() === "" ? null : Number(weeklyTarget);
+    onUpdateWorkout(workout.id, {
+      name,
+      weekly_target: Number.isFinite(parsedTarget as number) ? parsedTarget : null,
+    });
     setEditing(false);
   }
 
   if (editing) {
     return (
       <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <div className="flex items-center gap-2">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <button onClick={handleSave} className="text-sm font-medium text-emerald-600 hover:text-emerald-700">
-            Save
-          </button>
-          <button
-            onClick={() => {
-              setName(workout.name);
-              setEditing(false);
-            }}
-            className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
-          >
-            Cancel
-          </button>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-zinc-500">Weekly goal</label>
+            <input
+              type="number"
+              min={1}
+              value={weeklyTarget}
+              onChange={(e) => setWeeklyTarget(e.target.value)}
+              placeholder="none"
+              className="w-20 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <span className="text-xs text-zinc-500">times/week</span>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleSave} className="text-sm font-medium text-emerald-600 hover:text-emerald-700">
+              Save
+            </button>
+            <button
+              onClick={() => {
+                setName(workout.name);
+                setWeeklyTarget(workout.weekly_target?.toString() ?? "");
+                setEditing(false);
+              }}
+              className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </li>
     );
@@ -252,6 +289,13 @@ export default function WorkoutRow({
             {workout.icon ? `${workout.icon} ` : ""}
             {workout.name}
           </p>
+          {workout.weekly_target && (
+            <p className="text-xs text-zinc-500">
+              {weekCount >= workout.weekly_target ? "🎯 " : ""}
+              {weekCount}/{workout.weekly_target} this week
+              {weekStreak > 0 ? ` · 🔥 ${weekStreak} wk streak` : ""}
+            </p>
+          )}
         </div>
         {checked && (
           <button
@@ -293,7 +337,7 @@ export default function WorkoutRow({
       </div>
       {expanded && checked && (
         <div className="space-y-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
-          {logs.map((log) => (
+          {logsForDate.map((log) => (
             <WorkoutLogEntry
               key={log.id}
               log={log}

@@ -40,6 +40,7 @@ The most important feature. Available from everywhere in the app.
 - On submit → saved as a task with no domain assigned, which makes it an inbox item (see 3.4)
 - If a domain is set at capture time, the task is already "processed" and skips the inbox
 - Must be dismissible with `Escape`
+- **Offline queueing**: if the save request fails with a network error (not a real server rejection — an invalid submission still surfaces its error normally), the capture is stashed in IndexedDB (`lib/offline-queue.ts`) instead of lost, including a photo attachment if one was added. It replays automatically against the real API the moment the browser reports it's back online (or on next app load), oldest first — a network error mid-replay stops the run and leaves the rest queued for later, while a genuine server rejection (4xx/5xx) drops just that one entry rather than retrying forever. A persistent badge (`components/offline-queue-indicator.tsx`, same visual language as the realtime "Synced" pulse) shows how many captures are waiting, so it's never a silent black box. This is Quick-Capture-only — the app has no general offline data access (see 8)
 
 ### 3.1a Email Capture
 A second frictionless-capture path: forward or send an email, it becomes an inbox task, no app needed.
@@ -144,17 +145,18 @@ Simple habit tracker with streak counting.
 - **Weekly checkbox row**: each habit row shows a strip of checkboxes sized to its cadence — 7 for `daily`, one per required weekday for `specific_days` (both tied to specific dates within the current Mon–Sun week, individually clickable to log/unlog that day — including past days, not just today), or `target_count` plain progress boxes for `times_per_week` (a fill-level tally, not date-specific, since any day counts)
 
 ### 3.7a Training Log
-A simple log of named workouts, separate from Habits (no frequency, streaks, or domain tagging).
+A simple log of named workouts, separate from Habits (no domain tagging, and unlike Habits' `daily`/`specific_days`/`times_per_week` frequency modes, a workout has at most one flavor of goal — weekly count — described below).
 
 - **Catalog** (`workouts`): a flat, user-editable list of workout names (e.g. "GPP Lift", "Nordic 4x4") — add/rename/delete anytime via a "+ New Workout" field, no fixed set
 - **Logging**: pick a date (defaults to today) and check off which catalog workouts were done that day — a checklist, not a form. Checking an item creates a log entry; unchecking removes the most recent one for that workout+day
 - Each log entry (`workout_logs`) optionally carries a duration (minutes) and notes — both optional, filled in via an expandable section under the checked item, not required to log
 - The same workout can be logged more than once on the same day (e.g. an AM/PM session) via a "log another session" affordance, once already checked
+- **Weekly goal** (`workouts.weekly_target`, optional int): how many times per week Antoine's aiming to do a given workout — set at creation or edited anytime from the catalog ("adaptable as I progress through my training"), same in spirit as a `times_per_week` habit's `target_count` but kept as a standalone field/calculation (`lib/workouts/weekly.ts`) rather than sharing Habits' frequency machinery, since workouts have no other frequency modes to unify with. Each workout row shows "N/target this week" (Monday-Sunday calendar week, same convention as habits) plus a 🔥 streak of consecutive weeks the goal was hit — the in-progress current week counts once it's already hit target, and doesn't break the streak just for not being over yet. No "at risk" warning the way Habits has (3.7) — just the count and streak. Seeded defaults: CNS 1x/week, Full Breath Cardio 4x/week, GPP Lift 1x/week, Nordic 4x4 2x/week, Speed Session 1x/week
 - **Image attachments**: a log entry can have one or more images attached, same Storage-backed pattern as task image attachments (3.4) — a private bucket, signed URLs, one metadata row per image
-- **History**: the Training Log page lists all logged days (most recent first) below the day-picker, and the Analytics page (§11 Phase 4) shows workout name + notes + images together under one "Workouts" section
+- **History**: the Training Log page lists logged days (most recent first) below the day-picker, filtered to a selectable window — 7/14/28/74/148 days, defaulting to 7 — and the Analytics page (§11 Phase 4) shows workout name + notes + images together under one "Workouts" section
 - Deleting a workout from the catalog moves it (and its log entries) to Trash together — recoverable for 30 days, same as everything else in 3.12
 - Sidebar entry "Training Log" sits between Habits and Coach (see §4)
-- Full Coach + MCP parity: catalog CRUD, log/unlog, and a training-history read tool — no app-only exceptions here (image upload is the one MCP/Coach gap, matching task image attachments, which are also app-only for uploads)
+- Full Coach + MCP parity: catalog CRUD (including the weekly goal), log/unlog, and a training-history read tool — no app-only exceptions here (image upload is the one MCP/Coach gap, matching task image attachments, which are also app-only for uploads)
 
 ### 3.8 Routines *(Phase 2)*
 Ordered sequences of steps (tasks, habits, or notes) tied to a time of day.
@@ -390,12 +392,13 @@ unique (user_id, habit_id, logged_date)
 
 ### `workouts`
 ```sql
-id          uuid primary key default gen_random_uuid()
-user_id     uuid references auth.users(id) on delete cascade
-name        text not null
-icon        text
-created_at  timestamptz default now()
-deleted_at  timestamptz   -- soft delete (Trash, 3.12); its logs go with it on purge (FK cascade)
+id             uuid primary key default gen_random_uuid()
+user_id        uuid references auth.users(id) on delete cascade
+name           text not null
+icon           text
+weekly_target  int    -- optional goal, times/week; check (weekly_target is null or > 0)
+created_at     timestamptz default now()
+deleted_at     timestamptz   -- soft delete (Trash, 3.12); its logs go with it on purge (FK cascade)
 ```
 
 ---
@@ -566,7 +569,8 @@ create policy "owner_delete" on table_name
 
 - **No drag-and-drop in Phase 1** — too complex; manual ordering is fine
 - **No notifications in Phase 1** — no push, email, or reminders yet
-- **No mobile app** — mobile-responsive web only
+- **No mobile app** — mobile-responsive web only, but installable as a PWA (`app/manifest.ts`) — "Add to Home Screen" on iOS/iPadOS Safari, "Add to Dock" on macOS Safari 17+, or "Install" on Chrome — for an app-like icon with no browser chrome. On Android, installing also enables the Web Share Target API (`share_target` in the manifest → `/share-capture`) so any app's native Share sheet can send a link/selection straight to the Inbox; iOS Safari doesn't support that API yet
+- **No general offline data access** — everything is live from Supabase and auth-gated, so there's no safe way to serve stale data offline. A minimal service worker (`public/sw.js`) only swaps the browser's default "no internet" error for a friendlier branded one (`public/offline.html`) on navigation; it doesn't cache app data. The one deliberate exception is Quick Capture's offline queue (see 3.1) — capture specifically is important enough to work regardless of connection
 - **Dark mode** — default; light mode is a future nice-to-have
 - **Keyboard shortcut `C`** — opens Quick Capture from anywhere
 - **Escape** — closes any modal

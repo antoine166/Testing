@@ -203,19 +203,29 @@ export const TOOLS: Tool[] = [
       properties: {
         name: { type: "string" },
         icon: { type: "string" },
+        weekly_target: {
+          type: "number",
+          description: "Times per week he's aiming for this workout. Omit for no goal.",
+        },
       },
       required: ["name"],
     },
   },
   {
     name: "update_workout",
-    description: "Rename or update an existing workout in the Training Log catalog.",
+    description:
+      "Rename or update an existing workout in the Training Log catalog, including its weekly " +
+      "goal — adjust this as his training progresses (e.g. he says 'bump GPP Lift to twice a week').",
     input_schema: {
       type: "object",
       properties: {
         workout_id: { type: "string", description: "The workout's UUID from the context below" },
         name: { type: "string" },
         icon: { type: "string" },
+        weekly_target: {
+          type: "number",
+          description: "Times per week he's aiming for. Pass 0 to clear the goal.",
+        },
       },
       required: ["workout_id"],
     },
@@ -1183,7 +1193,11 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
       .is("deleted_at", null)
       .order("revisit_date"),
     supabase.from("contexts").select("id, name").order("name"),
-    supabase.from("workouts").select("id, name").is("deleted_at", null).order("name"),
+    supabase
+      .from("workouts")
+      .select("id, name, weekly_target")
+      .is("deleted_at", null)
+      .order("name"),
     supabase
       .from("workout_logs")
       .select("workout_id, logged_date, duration_minutes, notes, workouts(name)")
@@ -1270,7 +1284,13 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   );
 
   lines.push("\nTraining Log — workout catalog:");
-  lines.push(workouts.length ? workouts.map((w) => `- ${w.id} ${w.name}`).join("\n") : "(none)");
+  lines.push(
+    workouts.length
+      ? workouts
+          .map((w) => `- ${w.id} ${w.name}${w.weekly_target ? ` (goal: ${w.weekly_target}x/week)` : ""}`)
+          .join("\n")
+      : "(none)",
+  );
 
   lines.push("\nTraining Log — logged in the last 7 days:");
   lines.push(
@@ -1568,12 +1588,15 @@ export async function executeTool(
         user_id: userId,
         name: workoutName,
         icon: typeof input.icon === "string" ? input.icon : undefined,
+        weekly_target: typeof input.weekly_target === "number" ? input.weekly_target : null,
       })
       .select()
       .single();
 
     if (error) return `Error: ${error.message}`;
-    return `Added "${data.name}" to the training catalog.`;
+    return `Added "${data.name}" to the training catalog${
+      data.weekly_target ? ` with a goal of ${data.weekly_target}x/week` : ""
+    }.`;
   }
 
   if (name === "update_workout") {
@@ -1587,6 +1610,9 @@ export async function executeTool(
       updates.name = trimmed;
     }
     if (typeof input.icon === "string") updates.icon = input.icon;
+    if (typeof input.weekly_target === "number") {
+      updates.weekly_target = input.weekly_target > 0 ? input.weekly_target : null;
+    }
 
     const { data, error } = await supabase
       .from("workouts")

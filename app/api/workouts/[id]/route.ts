@@ -44,6 +44,16 @@ export async function PUT(request: Request, { params }: RouteParams) {
     updates.name = name;
   }
   if (typeof body.icon === "string") updates.icon = body.icon;
+  if ("weekly_target" in body) {
+    const weeklyTarget = typeof body.weekly_target === "number" ? body.weekly_target : null;
+    if (weeklyTarget !== null && (!Number.isInteger(weeklyTarget) || weeklyTarget < 1)) {
+      return NextResponse.json(
+        { error: "weekly_target must be a positive integer" },
+        { status: 400 },
+      );
+    }
+    updates.weekly_target = weeklyTarget;
+  }
 
   const { data, error } = await supabase
     .from("workouts")

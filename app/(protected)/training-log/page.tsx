@@ -23,6 +23,7 @@ export default function TrainingLogPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(todayLocal());
   const [newName, setNewName] = useState("");
+  const [newWeeklyTarget, setNewWeeklyTarget] = useState("");
   const [historyWindow, setHistoryWindow] =
     useState<(typeof HISTORY_WINDOW_OPTIONS)[number]>(7);
 
@@ -78,7 +79,10 @@ export default function TrainingLogPage() {
     const res = await fetch("/api/workouts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName }),
+      body: JSON.stringify({
+        name: newName,
+        weekly_target: newWeeklyTarget.trim() === "" ? null : Number(newWeeklyTarget),
+      }),
     });
 
     if (!res.ok) {
@@ -88,6 +92,7 @@ export default function TrainingLogPage() {
     }
 
     setNewName("");
+    setNewWeeklyTarget("");
     await loadAll();
   }
 
@@ -202,7 +207,7 @@ export default function TrainingLogPage() {
 
       <form
         onSubmit={handleCreateWorkout}
-        className="mb-8 flex items-end gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+        className="mb-8 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
       >
         <div className="min-w-[10rem] flex-1">
           <label htmlFor="new-workout" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -215,6 +220,20 @@ export default function TrainingLogPage() {
             placeholder="e.g. GPP Lift"
             required
             className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          />
+        </div>
+        <div>
+          <label htmlFor="new-weekly-target" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Weekly goal
+          </label>
+          <input
+            id="new-weekly-target"
+            type="number"
+            min={1}
+            value={newWeeklyTarget}
+            onChange={(e) => setNewWeeklyTarget(e.target.value)}
+            placeholder="none"
+            className="mt-1 w-24 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
         <button
@@ -269,9 +288,9 @@ export default function TrainingLogPage() {
                 <WorkoutRow
                   key={workout.id}
                   workout={workout}
-                  logs={logs.filter(
-                    (l) => l.workout_id === workout.id && l.logged_date === selectedDate,
-                  )}
+                  date={selectedDate}
+                  today={todayLocal()}
+                  logs={logs.filter((l) => l.workout_id === workout.id)}
                   onToggle={() => handleToggle(workout, selectedDate)}
                   onAddAnother={() => createLog(workout.id, selectedDate)}
                   onUpdateLog={handleUpdateLog}

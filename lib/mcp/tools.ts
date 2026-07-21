@@ -1539,7 +1539,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     async () => {
       const { data, error } = await admin
         .from("workouts")
-        .select("id, name, icon")
+        .select("id, name, icon, weekly_target")
         .eq("user_id", userId)
         .is("deleted_at", null)
         .order("name");
@@ -1556,16 +1556,22 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       inputSchema: {
         name: z.string().min(1),
         icon: z.string().optional(),
+        weekly_target: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("How many times per week he's aiming to do this workout. Omit for no goal."),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
-    async ({ name, icon }) => {
+    async ({ name, icon, weekly_target }) => {
       const trimmed = name.trim();
       if (!trimmed) return fail("Name is required");
 
       const { data, error } = await admin
         .from("workouts")
-        .insert({ user_id: userId, name: trimmed, icon })
+        .insert({ user_id: userId, name: trimmed, icon, weekly_target: weekly_target ?? null })
         .select()
         .single();
       if (error) return fail(error.message);
@@ -1577,15 +1583,24 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     "update_workout",
     {
       title: "Update workout",
-      description: "Rename or update an existing workout in the catalog.",
+      description:
+        "Rename or update an existing workout in the catalog, including its weekly goal " +
+        "(adjust as Antoine's training progresses).",
       inputSchema: {
         id: z.string().uuid(),
         name: z.string().min(1).optional(),
         icon: z.string().optional(),
+        weekly_target: z
+          .number()
+          .int()
+          .min(1)
+          .nullable()
+          .optional()
+          .describe("Times per week he's aiming for. Set to null to clear the goal."),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ id, name, icon }) => {
+    async ({ id, name, icon, weekly_target }) => {
       const updates: Record<string, unknown> = {};
       if (name !== undefined) {
         const trimmed = name.trim();
@@ -1593,6 +1608,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         updates.name = trimmed;
       }
       if (icon !== undefined) updates.icon = icon;
+      if (weekly_target !== undefined) updates.weekly_target = weekly_target;
 
       const { data, error } = await admin
         .from("workouts")
