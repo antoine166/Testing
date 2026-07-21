@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { computeWeeklyGoalStreak, countThisWeek } from "@/lib/workouts/weekly";
+import { computeWeeklyGoalStreak, countThisWeek, isAtRisk } from "@/lib/workouts/weekly";
 
 export type Workout = {
   id: string;
@@ -226,6 +226,8 @@ export default function WorkoutRow({
   const { current: weekStreak } = workout.weekly_target
     ? computeWeeklyGoalStreak(logs, today, workout.weekly_target)
     : { current: 0 };
+  const atRisk = workout.weekly_target ? isAtRisk(logs, today, workout.weekly_target) : false;
+  const remainingNeeded = workout.weekly_target ? workout.weekly_target - weekCount : 0;
 
   function handleSave() {
     if (!name.trim()) return;
@@ -281,11 +283,18 @@ export default function WorkoutRow({
   }
 
   return (
-    <li className="rounded-md border border-zinc-200 dark:border-zinc-800">
+    <li
+      className={`rounded-md border ${
+        atRisk
+          ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40"
+          : "border-zinc-200 dark:border-zinc-800"
+      }`}
+    >
       <div className="flex items-center gap-3 px-4 py-3">
         <input type="checkbox" checked={checked} onChange={onToggle} />
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            {atRisk ? "⚠️ " : weekStreak > 0 ? "🔥 " : ""}
             {workout.icon ? `${workout.icon} ` : ""}
             {workout.name}
           </p>
@@ -293,7 +302,12 @@ export default function WorkoutRow({
             <p className="text-xs text-zinc-500">
               {weekCount >= workout.weekly_target ? "🎯 " : ""}
               {weekCount}/{workout.weekly_target} this week
-              {weekStreak > 0 ? ` · 🔥 ${weekStreak} wk streak` : ""}
+              {weekStreak > 0 ? ` · ${weekStreak} wk streak` : ""}
+            </p>
+          )}
+          {atRisk && (
+            <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-500">
+              Running out of days — need {remainingNeeded} more this week
             </p>
           )}
         </div>

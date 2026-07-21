@@ -4,6 +4,11 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { todayLocal, daysSince } from "@/lib/date";
 import { computeStreak, isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
+import {
+  computeWeeklyGoalStreak,
+  countThisWeek,
+  isAtRisk as isWorkoutAtRisk,
+} from "@/lib/workouts/weekly";
 import { TRASH_CONFIG, TRASH_TYPES, type TrashType } from "@/lib/trash";
 import {
   generateNextCompletionOccurrence,
@@ -1533,18 +1538,54 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     "list_workouts",
     {
       title: "List workouts",
-      description: "List Antoine's workout catalog (the named workouts he can log against, e.g. \"GPP Lift\").",
+      description:
+        "List Antoine's workout catalog (the named workouts he can log against, e.g. \"GPP Lift\"), " +
+        "with this week's progress, streak, and at-risk flag for any with a weekly goal.",
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const { data, error } = await admin
+      const { data: workouts, error } = await admin
         .from("workouts")
         .select("id, name, icon, weekly_target")
         .eq("user_id", userId)
         .is("deleted_at", null)
         .order("name");
       if (error) return fail(error.message);
-      return ok(data);
+      if (workouts.length === 0) return ok([]);
+
+      const { data: logs, error: logsError } = await admin
+        .from("workout_logs")
+        .select("workout_id, logged_date")
+        .in(
+          "workout_id",
+          workouts.map((w) => w.id),
+        );
+      if (logsError) return fail(logsError.message);
+
+      const today = todayLocal();
+      const enriched = workouts.map((workout) => {
+        const workoutLogs = logs.filter((l) => l.workout_id === workout.id);
+        if (!workout.weekly_target) {
+          return {
+            ...workout,
+            week_count: null,
+            current_streak: null,
+            longest_streak: null,
+            at_risk: false,
+          };
+        }
+        const weekCount = countThisWeek(workoutLogs, today);
+        const streak = computeWeeklyGoalStreak(workoutLogs, today, workout.weekly_target);
+        return {
+          ...workout,
+          week_count: weekCount,
+          current_streak: streak.current,
+          longest_streak: streak.longest,
+          // "Don't break it twice" (James Clear) — same as habits' at_risk.
+          at_risk: isWorkoutAtRisk(workoutLogs, today, workout.weekly_target),
+        };
+      });
+      return ok(enriched);
     },
   );
 

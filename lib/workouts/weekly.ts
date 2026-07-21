@@ -91,3 +91,22 @@ export function computeWeeklyGoalStreak(
 
   return { current, longest };
 }
+
+/**
+ * "Don't break it twice" (James Clear) for weekly goals, mirroring
+ * lib/habits/streaks.ts's isAtRisk for times_per_week habits: true only
+ * once there are no more spare days left in the week to still hit
+ * `target`, so it doesn't false-alarm early in the week (e.g. 4x/week with
+ * 0 done: safe through Wednesday, at risk starting Thursday). Never true
+ * once today is already logged.
+ */
+export function isAtRisk(logs: WorkoutLogForWeekly[], today: string, target: number): boolean {
+  if (logs.some((l) => l.logged_date === today)) return false;
+
+  const remainingNeeded = target - countThisWeek(logs, today);
+  if (remainingNeeded <= 0) return false;
+
+  const weekdayIndex = (parseLocalDate(today).getDay() + 6) % 7; // 0=Mon...6=Sun
+  const daysLeftInWeek = 7 - weekdayIndex; // includes today
+  return daysLeftInWeek <= remainingNeeded;
+}
