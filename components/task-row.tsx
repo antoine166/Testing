@@ -272,6 +272,51 @@ export default function TaskRow({
   const [showRecurrencePicker, setShowRecurrencePicker] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
   const attachmentRef = useRef<AttachmentStripHandle>(null);
+
+  // Completion animation: checkmark + strikethrough play immediately, then
+  // a brief fade before the real update actually fires — so marking a task
+  // done feels satisfying instead of the row just vanishing on reload.
+  // Un-completing (in views where done tasks are still shown) stays instant.
+  const [completing, setCompleting] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
+  const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+    };
+  }, []);
+
+  // Views that filter out done tasks unmount this row once the server
+  // confirms completion, so the fade-out is the last thing seen. Views that
+  // keep showing done tasks (Logbook, the full Tasks browse) don't unmount
+  // it — without this, it'd stay invisible forever instead of settling
+  // into its normal "done" look once the fade has had a moment to play.
+  useEffect(() => {
+    if (task.status === "done" && (completing || fadingOut)) {
+      const timeout = setTimeout(() => {
+        setCompleting(false);
+        setFadingOut(false);
+      }, 350);
+      return () => clearTimeout(timeout);
+    }
+  }, [task.status, completing, fadingOut]);
+
+  function handleToggleClick() {
+    if (task.status === "done") {
+      onToggleDone(task);
+      return;
+    }
+    if (completing) return;
+    setCompleting(true);
+    // Fire the real update immediately — never delay the actual save behind
+    // the animation, or navigating away quickly (before the timeout below
+    // fires) would silently cancel the completion. The timeout only paces
+    // the fade-out visually; on a fast reload the row may just unmount a
+    // little before it finishes fading, which is a fine tradeoff.
+    onToggleDone(task);
+    completeTimeoutRef.current = setTimeout(() => setFadingOut(true), 400);
+  }
   const [title, setTitle] = useState(task.title);
   const [link, setLink] = useState(task.link ?? "");
   const [notes, setNotes] = useState(task.notes ?? "");
@@ -576,7 +621,11 @@ export default function TaskRow({
   }
 
   return (
-    <li className="flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+    <li
+      className={`flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 transition-all duration-300 dark:border-zinc-800 ${
+        fadingOut ? "scale-95 opacity-0" : "scale-100 opacity-100"
+      }`}
+    >
       <div className="flex min-w-0 flex-1 items-start gap-3">
         {selectable && (
           <input
@@ -590,20 +639,21 @@ export default function TaskRow({
         )}
         <button
           type="button"
-          onClick={() => onToggleDone(task)}
-          aria-pressed={task.status === "done"}
+          onClick={handleToggleClick}
+          disabled={completing}
+          aria-pressed={task.status === "done" || completing}
           aria-label={task.status === "done" ? "Mark not done" : "Mark done"}
           title={task.status === "done" ? "Mark not done" : "Mark done"}
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-            task.status === "done"
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-200 ${
+            task.status === "done" || completing
               ? "border-blue-500 bg-blue-500 text-white"
               : "border-zinc-300 hover:border-blue-400 dark:border-zinc-600"
           }`}
         >
-          {task.status === "done" && (
+          {(task.status === "done" || completing) && (
             <svg
               viewBox="0 0 12 12"
-              className="h-3 w-3"
+              className={`h-3 w-3 ${completing ? "animate-[task-check-pop_300ms_ease-out]" : ""}`}
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -616,11 +666,17 @@ export default function TaskRow({
         </button>
         <div className="min-w-0 flex-1">
           <p
-            className={`break-words text-sm font-medium text-zinc-900 dark:text-zinc-100 ${
-              task.status === "done" ? "line-through opacity-60" : ""
+            className={`relative break-words text-sm font-medium text-zinc-900 dark:text-zinc-100 ${
+              completing ? "" : task.status === "done" ? "line-through opacity-60" : ""
             }`}
           >
             {task.title}
+            {completing && (
+              <span
+                aria-hidden="true"
+                className="absolute left-0 top-1/2 h-px w-full origin-left scale-x-0 animate-[task-strike_250ms_ease-out_forwards] bg-zinc-900 dark:bg-zinc-100"
+              />
+            )}
           </p>
           {task.link && (
             <a

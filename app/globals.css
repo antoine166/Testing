@@ -36,3 +36,26 @@ body {
     font-size: 16px;
   }
 }
+
+/* Task completion: checkmark pop + strikethrough draw, used by TaskRow's
+   "satisfying" completion animation before the row fades out. */
+@keyframes task-check-pop {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes task-strike {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
