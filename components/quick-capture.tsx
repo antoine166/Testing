@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { enqueueCapture } from "@/lib/offline-queue";
 
 type Domain = {
   id: string;
@@ -26,6 +27,7 @@ export default function QuickCapture() {
   const [domainsLoaded, setDomainsLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queuedNotice, setQueuedNotice] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -76,6 +78,19 @@ export default function QuickCapture() {
       });
   }, [open, domainsLoaded]);
 
+  function resetForm() {
+    setTitle("");
+    setLink("");
+    setNotes("");
+    setDomainId("");
+    setPriority("none");
+    setDueDate("");
+    setScheduledDate("");
+    setWaitingFor(false);
+    setImage(null);
+    setMode("task");
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!title.trim() || submitting) return;
@@ -83,31 +98,47 @@ export default function QuickCapture() {
     setSubmitting(true);
     setError(null);
 
-    const res = await fetch(mode === "project" ? "/api/projects" : "/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        mode === "project"
-          ? {
-              name: title,
-              description: notes || undefined,
-              link: link || undefined,
-              domain_id: domainId || null,
-              priority,
-              due_date: dueDate || undefined,
-              scheduled_date: scheduledDate || undefined,
-            }
-          : {
-              title,
-              notes: notes || undefined,
-              link: link || undefined,
-              priority,
-              due_date: dueDate || undefined,
-              scheduled_date: scheduledDate || undefined,
-              waiting_for: waitingFor || undefined,
-            },
-      ),
-    });
+    const payload =
+      mode === "project"
+        ? {
+            name: title,
+            description: notes || undefined,
+            link: link || undefined,
+            domain_id: domainId || null,
+            priority,
+            due_date: dueDate || undefined,
+            scheduled_date: scheduledDate || undefined,
+          }
+        : {
+            title,
+            notes: notes || undefined,
+            link: link || undefined,
+            priority,
+            due_date: dueDate || undefined,
+            scheduled_date: scheduledDate || undefined,
+            waiting_for: waitingFor || undefined,
+          };
+
+    let res: Response;
+    try {
+      res = await fetch(mode === "project" ? "/api/projects" : "/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // No connection — queue it instead of losing it, synced automatically
+      // once we're back online (see lib/offline-queue.ts).
+      await enqueueCapture({ mode, payload, image: mode === "task" ? image : null });
+      setSubmitting(false);
+      resetForm();
+      setQueuedNotice(true);
+      setTimeout(() => {
+        setQueuedNotice(false);
+        setOpen(false);
+      }, 1400);
+      return;
+    }
 
     if (!res.ok) {
       setSubmitting(false);
@@ -125,16 +156,7 @@ export default function QuickCapture() {
     }
 
     setSubmitting(false);
-    setTitle("");
-    setLink("");
-    setNotes("");
-    setDomainId("");
-    setPriority("none");
-    setDueDate("");
-    setScheduledDate("");
-    setWaitingFor(false);
-    setImage(null);
-    setMode("task");
+    resetForm();
     setOpen(false);
   }
 
@@ -191,6 +213,12 @@ export default function QuickCapture() {
             {error && (
               <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
                 {error}
+              </p>
+            )}
+
+            {queuedNotice && (
+              <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                Saved — will sync when you&apos;re back online.
               </p>
             )}
 
