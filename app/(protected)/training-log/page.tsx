@@ -5,6 +5,8 @@ import { todayLocal } from "@/lib/date";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import WorkoutRow, { type Workout, type WorkoutLog } from "@/components/workout-row";
 
+const HISTORY_WINDOW_OPTIONS = [7, 14, 28, 74, 148] as const;
+
 function shiftDate(date: string, deltaDays: number): string {
   const [y, m, d] = date.split("-").map(Number);
   const next = new Date(y, m - 1, d + deltaDays);
@@ -21,6 +23,8 @@ export default function TrainingLogPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(todayLocal());
   const [newName, setNewName] = useState("");
+  const [historyWindow, setHistoryWindow] =
+    useState<(typeof HISTORY_WINDOW_OPTIONS)[number]>(7);
 
   async function loadAll() {
     try {
@@ -178,9 +182,10 @@ export default function TrainingLogPage() {
     await loadAll();
   }
 
-  const loggedDates = Array.from(new Set(logs.map((l) => l.logged_date))).sort((a, b) =>
-    b.localeCompare(a),
-  );
+  const historyCutoff = shiftDate(todayLocal(), -(historyWindow - 1));
+  const loggedDates = Array.from(new Set(logs.map((l) => l.logged_date)))
+    .filter((d) => d >= historyCutoff)
+    .sort((a, b) => b.localeCompare(a));
   const workoutNameById = new Map(workouts.map((w) => [w.id, w.name]));
 
   return (
@@ -279,9 +284,26 @@ export default function TrainingLogPage() {
             </ul>
           )}
 
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">History</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+              History (last {historyWindow} days)
+            </h2>
+            <select
+              value={historyWindow}
+              onChange={(e) =>
+                setHistoryWindow(Number(e.target.value) as (typeof HISTORY_WINDOW_OPTIONS)[number])
+              }
+              className="rounded-md border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              {HISTORY_WINDOW_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} days
+                </option>
+              ))}
+            </select>
+          </div>
           {loggedDates.length === 0 ? (
-            <p className="text-sm text-zinc-500">Nothing logged yet.</p>
+            <p className="text-sm text-zinc-500">Nothing logged in this window.</p>
           ) : (
             <ul className="space-y-4">
               {loggedDates.map((date) => {
