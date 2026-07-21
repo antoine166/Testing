@@ -8,6 +8,9 @@ import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
 } from "@/components/recurrence-fields";
+import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
+import WaitingForFields from "@/components/waiting-for-fields";
+import TaskExtraFields from "@/components/task-extra-fields";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -41,7 +44,7 @@ export type Task = {
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
-export type TaskProject = { id: string; name: string };
+export type TaskProject = { id: string; name: string; domain_id: string | null };
 
 type Attachment = {
   id: string;
@@ -272,8 +275,14 @@ export default function TaskRow({
   const [title, setTitle] = useState(task.title);
   const [link, setLink] = useState(task.link ?? "");
   const [notes, setNotes] = useState(task.notes ?? "");
-  const [domainId, setDomainId] = useState(task.domain_id ?? "");
-  const [projectId, setProjectId] = useState(task.project_id ?? "");
+  const {
+    domainId,
+    projectId,
+    setDomainId,
+    setProjectId,
+    filteredProjects,
+    reset: resetDomainProject,
+  } = useDomainProjectCascade(projects, task.domain_id ?? "", task.project_id ?? "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
@@ -292,8 +301,7 @@ export default function TaskRow({
     setTitle(task.title);
     setLink(task.link ?? "");
     setNotes(task.notes ?? "");
-    setDomainId(task.domain_id ?? "");
-    setProjectId(task.project_id ?? "");
+    resetDomainProject(task.domain_id ?? "", task.project_id ?? "");
     setStatus(task.status);
     setPriority(task.priority);
     setDueDate(task.due_date ?? "");
@@ -407,7 +415,7 @@ export default function TaskRow({
               className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             >
               <option value="">No project</option>
-              {projects.map((p) => (
+              {filteredProjects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -477,77 +485,27 @@ export default function TaskRow({
                 </option>
               ))}
             </select>
-            <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <input
-                type="checkbox"
-                checked={someday}
-                onChange={(e) => setSomeday(e.target.checked)}
-              />
-              Someday
-            </label>
-            {someday && (
-              <input
-                type="date"
-                value={revisitDate}
-                onChange={(e) => setRevisitDate(e.target.value)}
-                title="Revisit date — resurface this for reconsideration on this date (GTD tickler file)"
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            )}
-            <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <input
-                type="checkbox"
-                checked={waitingFor}
-                onChange={(e) => setWaitingFor(e.target.checked)}
-              />
-              Waiting for
-            </label>
-            {waitingFor && (
-              <input
-                value={waitingOn}
-                onChange={(e) => setWaitingOn(e.target.value)}
-                placeholder="Waiting on who?"
-                title="Who this is delegated to — makes 'everything I'm waiting on from X' a real filter"
-                className="w-36 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            )}
-            {waitingFor && (
-              <input
-                type="date"
-                value={followUpDate}
-                onChange={(e) => setFollowUpDate(e.target.value)}
-                title="Follow up date — actively prompt a nudge on this date instead of just tracking elapsed days"
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            )}
-            <input
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              list="task-contexts"
-              placeholder="Context (optional) — e.g. Errands, Deep Work"
-              className="min-w-40 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <input
-              type="number"
-              min={1}
-              value={estimatedMinutes}
-              onChange={(e) => setEstimatedMinutes(e.target.value)}
-              placeholder="Est. min"
-              title="Estimated minutes"
-              className="w-24 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <select
-              value={energyLevel}
-              onChange={(e) => setEnergyLevel(e.target.value as TaskEnergy | "")}
-              title="Energy required"
-              className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              <option value="">Energy...</option>
-              <option value="low">Low energy</option>
-              <option value="medium">Medium energy</option>
-              <option value="high">High energy</option>
-            </select>
           </div>
+          <WaitingForFields
+            waitingFor={waitingFor}
+            onWaitingForChange={setWaitingFor}
+            waitingOn={waitingOn}
+            onWaitingOnChange={setWaitingOn}
+            followUpDate={followUpDate}
+            onFollowUpDateChange={setFollowUpDate}
+          />
+          <TaskExtraFields
+            someday={someday}
+            onSomedayChange={setSomeday}
+            revisitDate={revisitDate}
+            onRevisitDateChange={setRevisitDate}
+            context={context}
+            onContextChange={setContext}
+            estimatedMinutes={estimatedMinutes}
+            onEstimatedMinutesChange={setEstimatedMinutes}
+            energyLevel={energyLevel}
+            onEnergyLevelChange={setEnergyLevel}
+          />
           <AttachmentStrip taskId={task.id} />
           {onConvertToProject && (
             <button

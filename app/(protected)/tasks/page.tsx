@@ -8,6 +8,7 @@ import TaskRow, {
   type TaskDomain,
   type TaskProject,
   type TaskPriority,
+  type TaskEnergy,
 } from "@/components/task-row";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import RecurrenceFields, {
@@ -15,6 +16,8 @@ import RecurrenceFields, {
   type RecurrencePatternDraft,
 } from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
+import TaskExtraFields from "@/components/task-extra-fields";
+import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import {
   describeRecurrence,
@@ -25,8 +28,6 @@ import {
 } from "@/lib/recurring-tasks/types";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
-
-type ProjectWithDomain = TaskProject & { domain_id: string | null };
 
 type RecurringTemplate = {
   id: string;
@@ -63,7 +64,7 @@ export default function TasksPage() {
   const openedEditTemplateRef = useRef(false);
 
   const [domains, setDomains] = useState<TaskDomain[]>([]);
-  const [projects, setProjects] = useState<ProjectWithDomain[]>([]);
+  const [projects, setProjects] = useState<TaskProject[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,14 +72,26 @@ export default function TasksPage() {
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
   const [notes, setNotes] = useState("");
-  const [domainId, setDomainId] = useState(domainFilter ?? "");
-  const [projectId, setProjectId] = useState(projectFilter ?? "");
+  const {
+    domainId,
+    projectId,
+    setDomainId,
+    setProjectId,
+    filteredProjects,
+    reset: resetDomainProject,
+  } = useDomainProjectCascade(projects, domainFilter ?? "", projectFilter ?? "");
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [waitingFor, setWaitingFor] = useState(false);
+  const [waitingOn, setWaitingOn] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
+  const [someday, setSomeday] = useState(false);
+  const [revisitDate, setRevisitDate] = useState("");
+  const [context, setContext] = useState("");
+  const [estimatedMinutes, setEstimatedMinutes] = useState("");
+  const [energyLevel, setEnergyLevel] = useState<TaskEnergy | "">("");
 
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
@@ -88,8 +101,14 @@ export default function TasksPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editLink, setEditLink] = useState("");
-  const [editDomainId, setEditDomainId] = useState("");
-  const [editProjectId, setEditProjectId] = useState("");
+  const {
+    domainId: editDomainId,
+    projectId: editProjectId,
+    setDomainId: setEditDomainId,
+    setProjectId: setEditProjectId,
+    filteredProjects: editFilteredProjects,
+    reset: resetEditDomainProject,
+  } = useDomainProjectCascade(projects);
   const [editPriority, setEditPriority] = useState<TaskPriority>("none");
   const [editHorizonCount, setEditHorizonCount] = useState(12);
   const [editPattern, setEditPattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
@@ -195,20 +214,29 @@ export default function TasksPage() {
     if (recurringDetailsRef.current) recurringDetailsRef.current.open = true;
     startEditTemplate(template);
     recurringDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // startEditTemplate only ever calls stable setState setters (including
+    // the memoized domain/project cascade setters) — safe to omit; adding
+    // it would re-run this on every render since it's redefined each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editTemplateId, recurringTemplates]);
 
   function resetCreateForm() {
     setTitle("");
     setLink("");
     setNotes("");
-    setDomainId("");
-    setProjectId("");
+    resetDomainProject();
     setPriority("none");
     setDueDate("");
     setScheduledDate("");
     setImage(null);
     setWaitingFor(false);
+    setWaitingOn("");
     setFollowUpDate("");
+    setSomeday(false);
+    setRevisitDate("");
+    setContext("");
+    setEstimatedMinutes("");
+    setEnergyLevel("");
     setIsRecurring(false);
     setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
@@ -262,7 +290,13 @@ export default function TasksPage() {
         due_date: dueDate || undefined,
         scheduled_date: scheduledDate || undefined,
         waiting_for: waitingFor || undefined,
+        waiting_on: waitingFor && waitingOn.trim() ? waitingOn.trim() : undefined,
         follow_up_date: waitingFor && followUpDate ? followUpDate : undefined,
+        someday: someday || undefined,
+        revisit_date: someday && revisitDate ? revisitDate : undefined,
+        context: context.trim() || undefined,
+        estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : undefined,
+        energy_level: energyLevel || undefined,
       }),
     });
 
@@ -303,8 +337,7 @@ export default function TasksPage() {
     setEditTitle(t.title);
     setEditNotes(t.notes ?? "");
     setEditLink(t.link ?? "");
-    setEditDomainId(t.domain_id ?? "");
-    setEditProjectId(t.project_id ?? "");
+    resetEditDomainProject(t.domain_id ?? "", t.project_id ?? "");
     setEditPriority(t.priority);
     setEditHorizonCount(t.horizon_count);
     setEditPattern({
@@ -679,7 +712,7 @@ export default function TasksPage() {
               className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             >
               <option value="">No project</option>
-              {projects.map((p) => (
+              {filteredProjects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -749,8 +782,22 @@ export default function TasksPage() {
               <WaitingForFields
                 waitingFor={waitingFor}
                 onWaitingForChange={setWaitingFor}
+                waitingOn={waitingOn}
+                onWaitingOnChange={setWaitingOn}
                 followUpDate={followUpDate}
                 onFollowUpDateChange={setFollowUpDate}
+              />
+              <TaskExtraFields
+                someday={someday}
+                onSomedayChange={setSomeday}
+                revisitDate={revisitDate}
+                onRevisitDateChange={setRevisitDate}
+                context={context}
+                onContextChange={setContext}
+                estimatedMinutes={estimatedMinutes}
+                onEstimatedMinutesChange={setEstimatedMinutes}
+                energyLevel={energyLevel}
+                onEnergyLevelChange={setEnergyLevel}
               />
               <label
                 aria-label="Add image"
@@ -870,7 +917,7 @@ export default function TasksPage() {
                         className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                       >
                         <option value="">No project</option>
-                        {projects.map((p) => (
+                        {editFilteredProjects.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
                           </option>
