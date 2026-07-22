@@ -91,8 +91,13 @@ export default function CalendarPage() {
   const { domains, tasks, loading, error, handleUpdate, toggleDone } = useTaskList();
   const today = todayLocal();
 
-  const [view, setView] = useState<"week" | "day">("week");
-  const [anchor, setAnchor] = useState(today); // day view: the day; week view: any day in the week
+  const [view, setView] = useState<"day" | "week" | "2weeks" | "3weeks" | "4weeks">("week");
+  const [anchor, setAnchor] = useState(today); // day view: the day; week/multi-week: any day in the range
+
+  // Day and Week keep the 24h time grid; 2–4 weeks render as a compact
+  // month-style day grid (a time grid stretched across weeks is unusable).
+  const weeks = view === "2weeks" ? 2 : view === "3weeks" ? 3 : view === "4weeks" ? 4 : 1;
+  const isMultiWeek = weeks > 1;
   const [placingId, setPlacingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [trayFilter, setTrayFilter] = useState("");
@@ -104,8 +109,8 @@ export default function CalendarPage() {
   const days = useMemo(() => {
     if (view === "day") return [anchor];
     const start = weekStartOf(anchor);
-    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  }, [view, anchor]);
+    return Array.from({ length: 7 * weeks }, (_, i) => addDays(start, i));
+  }, [view, anchor, weeks]);
 
   // Google events for the visible range — fetched live, never stored.
   useEffect(() => {
@@ -269,12 +274,102 @@ export default function CalendarPage() {
     };
   }
 
-  const step = view === "day" ? 1 : 7;
+  // Page by the full visible span (a week's worth for Week, the whole block
+  // for multi-week) so ← → don't leave a confusing overlap.
+  const step = view === "day" ? 1 : days.length;
+
+  // Month-style grid chunks the flat day list into rows of 7.
+  const weekRows = useMemo(() => {
+    const rows: string[][] = [];
+    for (let i = 0; i < days.length; i += 7) rows.push(days.slice(i, i + 7));
+    return rows;
+  }, [days]);
+
+  const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  // Compact chips for one day in the multi-week grid: deadlines, timed
+  // blocks, all-day intentions, then Google events — same visual language
+  // as the week view, shrunk. Returned as a flat list so the cell can cap
+  // it with a "+N more" that drills into that day.
+  function renderDayChips(date: string): React.ReactNode[] {
+    const chips: React.ReactNode[] = [];
+    for (const t of dueByDay.get(date) ?? []) {
+      chips.push(
+        <button
+          key={`due-${t.id}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedId(t.id);
+          }}
+          className="block w-full truncate rounded border border-red-300 bg-red-50 px-1 text-left text-[10px] text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+          title={`Due ${t.due_date}: ${t.title}`}
+        >
+          ⚑ {t.title}
+        </button>,
+      );
+    }
+    for (const t of timedByDay.get(date) ?? []) {
+      chips.push(
+        <button
+          key={t.id}
+          draggable
+          onDragStart={(e) => e.dataTransfer.setData("text/plain", t.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedId(t.id);
+          }}
+          style={{ borderLeftColor: domainColor(t, domains) ?? "#6366f1" }}
+          className="block w-full cursor-grab truncate rounded border-l-2 bg-white px-1 text-left text-[10px] ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-700"
+          title={`${formatTimeLabel(t.scheduled_time!)} ${t.title}`}
+        >
+          <span className="text-zinc-500">{formatTimeLabel(t.scheduled_time!)}</span> {t.title}
+        </button>,
+      );
+    }
+    for (const t of allDayByDay.get(date) ?? []) {
+      chips.push(
+        <button
+          key={t.id}
+          draggable
+          onDragStart={(e) => e.dataTransfer.setData("text/plain", t.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedId(t.id);
+          }}
+          style={{ borderLeftColor: domainColor(t, domains) ?? "#a1a1aa" }}
+          className={`block w-full cursor-grab truncate rounded border-l-2 bg-zinc-100 px-1 text-left text-[10px] dark:bg-zinc-800 ${
+            t.due_date === date ? "font-medium text-red-700 dark:text-red-300" : ""
+          }`}
+          title={t.title}
+        >
+          {t.due_date === date ? "⚑ " : ""}
+          {t.recurring_template_id ? "↻ " : ""}
+          {t.title}
+        </button>,
+      );
+    }
+    for (const ev of [...(allDayEventsByDay.get(date) ?? []), ...(timedEventsByDay.get(date) ?? [])]) {
+      chips.push(
+        <div
+          key={`g-${ev.id}-${date}`}
+          className="block w-full truncate rounded bg-zinc-200/80 px-1 text-left text-[10px] text-zinc-600 italic dark:bg-zinc-700/50 dark:text-zinc-300"
+          title={`${ev.title}${ev.account ? ` — ${ev.account}` : ""} (Google Calendar)`}
+        >
+          {ev.title}
+        </div>,
+      );
+    }
+    return chips;
+  }
 
   return (
     <div className="flex h-full flex-col">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h1 className="mr-2 text-lg font-semibold">{monthLabel(days[0])}</h1>
+        <h1 className="mr-2 text-lg font-semibold">
+          {monthLabel(days[0]) === monthLabel(days[days.length - 1])
+            ? monthLabel(days[0])
+            : `${monthLabel(days[0]).split(" ")[0]} – ${monthLabel(days[days.length - 1])}`}
+        </h1>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setAnchor(addDays(anchor, -step))}
@@ -298,23 +393,31 @@ export default function CalendarPage() {
           </button>
         </div>
         <div className="flex items-center gap-1">
-          {(["week", "day"] as const).map((v) => (
+          {(
+            [
+              { v: "day", label: "Day" },
+              { v: "week", label: "Week" },
+              { v: "2weeks", label: "2 wks" },
+              { v: "3weeks", label: "3 wks" },
+              { v: "4weeks", label: "4 wks" },
+            ] as const
+          ).map(({ v, label }) => (
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`rounded-md px-2 py-1 text-sm capitalize ${
+              className={`rounded-md px-2 py-1 text-sm ${
                 view === v
                   ? "bg-zinc-200 font-medium dark:bg-zinc-700"
                   : "border border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
               }`}
             >
-              {v}
+              {label}
             </button>
           ))}
         </div>
         {placingId && (
           <span className="ml-auto flex items-center gap-2 rounded-md bg-indigo-100 px-2 py-1 text-xs text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">
-            Tap a time slot (or a day&apos;s all-day row) to place it
+            {isMultiWeek ? "Tap a day to place it" : "Tap a time slot (or a day's all-day row) to place it"}
             <button onClick={() => setPlacingId(null)} className="font-semibold underline">
               Cancel
             </button>
@@ -401,6 +504,75 @@ export default function CalendarPage() {
 
       <div className="flex min-h-0 flex-1 gap-4">
         <div className="flex min-w-0 flex-1 flex-col overflow-x-auto">
+          {isMultiWeek ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-800">
+                {WEEKDAY_LABELS.map((label) => (
+                  <div key={label} className="px-1.5 py-1 text-xs text-zinc-500">
+                    {label}
+                  </div>
+                ))}
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                {weekRows.map((row, ri) => (
+                  <div key={ri} className="grid flex-1 grid-cols-7">
+                    {row.map((date) => {
+                      const chips = renderDayChips(date);
+                      const CAP = 4;
+                      const { day } = dayLabel(date);
+                      return (
+                        <div
+                          key={date}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const id = e.dataTransfer.getData("text/plain");
+                            if (id) void scheduleAt(id, date, null);
+                          }}
+                          onClick={() => {
+                            if (placingId) void scheduleAt(placingId, date, null);
+                          }}
+                          className={`min-h-[6rem] space-y-0.5 overflow-hidden border-b border-l border-zinc-200 p-1 dark:border-zinc-800 ${
+                            placingId ? "cursor-pointer bg-indigo-50/50 dark:bg-indigo-950/30" : ""
+                          } ${date === today ? "bg-indigo-50/40 dark:bg-indigo-950/20" : ""}`}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAnchor(date);
+                              setView("day");
+                            }}
+                            className={`mb-0.5 text-xs ${
+                              date === today
+                                ? "font-semibold text-indigo-600 dark:text-indigo-400"
+                                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                            }`}
+                            title="Open this day"
+                          >
+                            {day}
+                          </button>
+                          {chips.slice(0, CAP)}
+                          {chips.length > CAP && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAnchor(date);
+                                setView("day");
+                              }}
+                              className="block w-full text-left text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                            >
+                              +{chips.length - CAP} more
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+          <>
           <div
             className="grid"
             style={{ gridTemplateColumns: `3rem repeat(${days.length}, minmax(${view === "day" ? "12rem" : "8.5rem"}, 1fr))` }}
@@ -556,6 +728,8 @@ export default function CalendarPage() {
               ))}
             </div>
           </div>
+          </>
+          )}
         </div>
 
         {/* Time-blocking tray: drag onto the grid (desktop) or tap → place (mobile) */}
