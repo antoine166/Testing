@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
 
 export async function GET() {
   const { supabase, user } = await requireUser();
@@ -75,6 +76,12 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Only time-blocked tasks ever get a Google Calendar event, so plain
+  // creates skip the sync round-trip entirely.
+  if (data.scheduled_date && data.scheduled_time) {
+    await syncTaskCalendarEvent(user.id, data.id);
   }
 
   return NextResponse.json(data, { status: 201 });

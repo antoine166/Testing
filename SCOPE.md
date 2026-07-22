@@ -142,6 +142,12 @@ Time-blocking: drag a task from the "To schedule" tray (or between slots) on des
 
 **Due and scheduled dates are deliberately independent** — no auto-filling one from the other (an earlier behavior, removed when this view was added): a calendar of soft intentions dressed as hard commitments is a calendar you learn to ignore.
 
+**Google Calendar sync (two-way)** — connected from Settings (same Google OAuth client as Gmail, `google_calendar_connections` table):
+- *Pull*: events from every connected account render on the calendar view as gray read-only blocks/chips, fetched live per request (no local event storage, no sync state to corrupt). Also readable by Claude/Coach via `list_google_calendar_events`.
+- *Push*: a task that's live (not done/trashed) and time-blocked (scheduled date + time) gets an event on the first-connected account's primary calendar (`tasks.gcal_event_id` links them). Reschedules update it; unscheduling, completing, or trashing removes it. Sync runs best-effort after task writes on all three surfaces (API routes, MCP, Coach) and never fails the write itself.
+- *Loop prevention*: pushed events carry a private `life_os_task_id` property and are filtered out of the pull, so a time-blocked task never renders twice.
+- Connect/disconnect is app-only (account settings — CLAUDE.md's manual-only list).
+
 ### 3.6 Daily Capacity Check-in
 A 10-second prompt Antoine completes each morning.
 
@@ -562,6 +568,27 @@ unique (user_id, email)
 -- have several. Tokens are never returned to the client — read only by the
 -- inbound email webhook (service-role client) or by
 -- /api/gmail/{connect,callback,disconnect} (the owner's own session).
+```
+
+### `google_calendar_connections`
+```sql
+id            uuid primary key default gen_random_uuid()
+user_id       uuid references auth.users(id) on delete cascade not null
+access_token  text not null
+refresh_token text not null
+expires_at    timestamptz not null
+scope         text
+email         text
+time_zone     text  -- primary calendar's IANA timezone, captured at connect;
+              -- pushed events need an explicit timeZone since tasks only
+              -- store local wall time
+created_at    timestamptz not null default now()
+updated_at    timestamptz not null default now()
+unique (user_id, email)
+-- Same multi-account model as gmail_connections (3.5a Calendar sync).
+-- Events are read from every connected account; time-blocked tasks are
+-- pushed to the oldest connection's primary calendar only.
+-- tasks.gcal_event_id (text, nullable) links a pushed task to its event.
 ```
 
 ---

@@ -10,6 +10,7 @@ import {
   isAtRisk as isWorkoutAtRisk,
 } from "@/lib/workouts/weekly";
 import { TRASH_CONFIG, TRASH_TYPES, type TrashType } from "@/lib/trash";
+import { syncTaskCalendarEvent, listGoogleCalendarEvents } from "@/lib/google-calendar/sync";
 import {
   generateNextCompletionOccurrence,
   seedCompletionTemplate,
@@ -452,6 +453,30 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
   );
 
   server.registerTool(
+    "list_google_calendar_events",
+    {
+      title: "List Google Calendar events",
+      description:
+        "Antoine's real calendar events (from his connected Google Calendar accounts) in a date " +
+        "range — the hard landscape around which tasks get planned. Excludes events that Life OS " +
+        "itself pushed from time-blocked tasks (those are already visible as tasks).",
+      inputSchema: {
+        start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD, inclusive"),
+        end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD, inclusive"),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ start_date, end_date }) => {
+      if (start_date > end_date) return fail("start_date must be on or before end_date");
+      const events = await listGoogleCalendarEvents(userId, start_date, end_date);
+      if (events === null) {
+        return fail("No Google Calendar connected — connect one in Settings first.");
+      }
+      return ok(events);
+    },
+  );
+
+  server.registerTool(
     "create_task",
     {
       title: "Create task",
@@ -568,6 +593,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .select()
         .single();
       if (error) return fail(error.message);
+      if (data.scheduled_date && data.scheduled_time) {
+        await syncTaskCalendarEvent(userId, data.id);
+      }
       return ok(data);
     },
   );
@@ -711,6 +739,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       if (justCompleted && data.recurring_template_id) {
         await generateNextCompletionOccurrence(admin, data.recurring_template_id, todayLocal());
       }
+      await syncTaskCalendarEvent(userId, id);
       return ok(data);
     },
   );
@@ -737,6 +766,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       if (existing?.status !== "done" && data.recurring_template_id) {
         await generateNextCompletionOccurrence(admin, data.recurring_template_id, todayLocal());
       }
+      await syncTaskCalendarEvent(userId, id);
       return ok(data);
     },
   );
@@ -798,6 +828,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .eq("id", id)
         .eq("user_id", userId);
       if (error) return fail(error.message);
+      await syncTaskCalendarEvent(userId, id);
       return ok({ deleted: id });
     },
   );
@@ -849,6 +880,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         );
       }
 
+      await syncTaskCalendarEvent(userId, id);
       return ok(project);
     },
   );

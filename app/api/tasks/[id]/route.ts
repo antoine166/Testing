@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
 import { generateNextCompletionOccurrence } from "@/lib/recurring-tasks/topup";
 import { todayLocal } from "@/lib/date";
+import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -147,6 +148,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
     await generateNextCompletionOccurrence(supabase, data.recurring_template_id, todayLocal());
   }
 
+  await syncTaskCalendarEvent(user.id, id);
+
   return NextResponse.json(data);
 }
 
@@ -209,6 +212,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await syncTaskCalendarEvent(user.id, id);
 
   return new NextResponse(null, { status: 204 });
 }

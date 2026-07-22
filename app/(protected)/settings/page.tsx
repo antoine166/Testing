@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { isGmailConfigured } from "@/lib/gmail/client";
+import { isGoogleCalendarConfigured } from "@/lib/google-calendar/client";
 import GmailDisconnectButton from "@/components/gmail-connection";
+import GoogleCalendarDisconnectButton from "@/components/google-calendar-connection";
 
 const GMAIL_STATUS_MESSAGES: Record<string, { text: string; tone: "success" | "error" }> = {
   connected: { text: "Gmail connected.", tone: "success" },
@@ -8,17 +10,30 @@ const GMAIL_STATUS_MESSAGES: Record<string, { text: string; tone: "success" | "e
   error: { text: "Couldn't connect Gmail — try again.", tone: "error" },
 };
 
+const GCAL_STATUS_MESSAGES: Record<string, { text: string; tone: "success" | "error" }> = {
+  connected: { text: "Google Calendar connected.", tone: "success" },
+  denied: { text: "Google Calendar connection cancelled.", tone: "error" },
+  error: { text: "Couldn't connect Google Calendar — try again.", tone: "error" },
+};
+
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ gmail?: string }>;
+  searchParams: Promise<{ gmail?: string; gcal?: string }>;
 }) {
-  const { gmail } = await searchParams;
-  const statusMessage = gmail ? GMAIL_STATUS_MESSAGES[gmail] : undefined;
+  const { gmail, gcal } = await searchParams;
+  const statusMessage =
+    (gmail ? GMAIL_STATUS_MESSAGES[gmail] : undefined) ??
+    (gcal ? GCAL_STATUS_MESSAGES[gcal] : undefined);
 
   const supabase = await createClient();
   const { data: connections } = await supabase
     .from("gmail_connections")
+    .select("id, email, created_at")
+    .order("created_at");
+
+  const { data: calendarConnections } = await supabase
+    .from("google_calendar_connections")
     .select("id, email, created_at")
     .order("created_at");
 
@@ -79,6 +94,55 @@ export default async function SettingsPage({
               className="mt-3 inline-block rounded-md bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
             >
               {connections && connections.length > 0 ? "Connect another account" : "Connect Gmail"}
+            </a>
+          </>
+        )}
+      </div>
+
+      <div className="mb-6 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+        <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Google Calendar</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Connect Google Calendar for two-way sync with the Calendar page (§3.5a): your real
+          events show up alongside tasks, and time-blocked tasks (a scheduled date + time) are
+          pushed to Google Calendar and kept updated when you reschedule, complete, or trash
+          them. Events from every account connected here are shown; tasks are pushed to the
+          first-connected account&apos;s primary calendar.
+        </p>
+        {!isGoogleCalendarConfigured() ? (
+          <p className="mt-3 text-sm text-zinc-500">
+            Not set up yet — this needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET configured on
+            the server.
+          </p>
+        ) : (
+          <>
+            {calendarConnections && calendarConnections.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {calendarConnections.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
+                  >
+                    <span className="text-sm text-emerald-600 dark:text-emerald-400">
+                      ✓ {c.email ?? "Connected account"}
+                      <span className="ml-1 text-xs text-zinc-500">
+                        since {new Date(c.created_at).toLocaleDateString()}
+                      </span>
+                    </span>
+                    <GoogleCalendarDisconnectButton
+                      connectionId={c.id}
+                      label={c.email ?? "this account"}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <a
+              href="/api/google-calendar/connect"
+              className="mt-3 inline-block rounded-md bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+            >
+              {calendarConnections && calendarConnections.length > 0
+                ? "Connect another account"
+                : "Connect Google Calendar"}
             </a>
           </>
         )}

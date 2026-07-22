@@ -1,9 +1,18 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import type { Task, TaskDomain } from "@/components/task-row";
 import { todayLocal } from "@/lib/date";
+
+type GCalEvent = {
+  id: string;
+  title: string;
+  start: string; // RFC3339 dateTime for timed, YYYY-MM-DD for all-day
+  end: string;
+  all_day: boolean;
+  account: string | null;
+};
 
 // GTD's hard landscape, visualized. Three kinds of entry, kept visually
 // distinct on purpose:
@@ -87,6 +96,8 @@ export default function CalendarPage() {
   const [placingId, setPlacingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [trayFilter, setTrayFilter] = useState("");
+  const [gcalEvents, setGcalEvents] = useState<GCalEvent[]>([]);
+  const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const scrolledOnce = useRef(false);
 
@@ -95,6 +106,62 @@ export default function CalendarPage() {
     const start = weekStartOf(anchor);
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }, [view, anchor]);
+
+  // Google events for the visible range — fetched live, never stored.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/google-calendar/events?start=${days[0]}&end=${days[days.length - 1]}`, {
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
+      .then((data: { connected: boolean; events: GCalEvent[] }) => {
+        setGcalConnected(data.connected);
+        setGcalEvents(data.events);
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        // Google being unreachable shouldn't degrade the task calendar —
+        // just show it without events.
+      });
+    return () => controller.abort();
+  }, [days]);
+
+  // Bucket events by local calendar date. Timed events land on their local
+  // start date; all-day events span [start, end) per Google's exclusive-end
+  // convention (capped defensively — a malformed range shouldn't hang render).
+  const { timedEventsByDay, allDayEventsByDay } = useMemo(() => {
+    const timed = new Map<string, GCalEvent[]>();
+    const allDay = new Map<string, GCalEvent[]>();
+    for (const event of gcalEvents) {
+      if (event.all_day) {
+        let cursor = event.start;
+        for (let i = 0; cursor < event.end && i < 60; i++) {
+          const list = allDay.get(cursor) ?? [];
+          list.push(event);
+          allDay.set(cursor, list);
+          cursor = addDays(cursor, 1);
+        }
+      } else {
+        const start = new Date(event.start);
+        const dateStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+        const list = timed.get(dateStr) ?? [];
+        list.push(event);
+        timed.set(dateStr, list);
+      }
+    }
+    return { timedEventsByDay: timed, allDayEventsByDay: allDay };
+  }, [gcalEvents]);
+
+  function eventBlockStyle(event: GCalEvent): React.CSSProperties {
+    const start = new Date(event.start);
+    const end = new Date(event.end);
+    const startMinutes = start.getHours() * 60 + start.getMinutes();
+    const durationMinutes = Math.max((end.getTime() - start.getTime()) / 60000, 20);
+    return {
+      top: (startMinutes / 60) * HOUR_PX,
+      height: (durationMinutes / 60) * HOUR_PX,
+    };
+  }
 
   // Scroll the grid to morning once tasks are in — during render would be
   // too early (the ref isn't attached while loading), and an effect would
@@ -257,6 +324,15 @@ export default function CalendarPage() {
 
       {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
       {loading && <p className="text-sm text-zinc-500">Loading…</p>}
+      {gcalConnected === false && (
+        <p className="mb-2 text-xs text-zinc-400">
+          Tip: connect Google Calendar in{" "}
+          <a href="/settings" className="underline">
+            Settings
+          </a>{" "}
+          to see your real events here and push time blocks to your calendar.
+        </p>
+      )}
 
       {selected && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
@@ -364,6 +440,15 @@ export default function CalendarPage() {
                   placingId ? "cursor-pointer bg-indigo-50/50 dark:bg-indigo-950/30" : ""
                 }`}
               >
+                {(allDayEventsByDay.get(date) ?? []).map((event) => (
+                  <div
+                    key={`gcal-${event.id}-${date}`}
+                    className="block w-full truncate rounded bg-zinc-200/80 px-1 text-left text-[11px] text-zinc-600 italic dark:bg-zinc-700/50 dark:text-zinc-300"
+                    title={`${event.title}${event.account ? ` — ${event.account}` : ""} (Google Calendar)`}
+                  >
+                    {event.title}
+                  </div>
+                ))}
                 {(dueByDay.get(date) ?? []).map((t) => (
                   <button
                     key={`due-${t.id}`}
@@ -435,6 +520,16 @@ export default function CalendarPage() {
                       className="absolute right-0 left-0 border-t border-zinc-100 dark:border-zinc-800/60"
                       style={{ top: h * HOUR_PX }}
                     />
+                  ))}
+                  {(timedEventsByDay.get(date) ?? []).map((event) => (
+                    <div
+                      key={`gcal-${event.id}`}
+                      style={{ ...eventBlockStyle(event), left: 2, right: 2 }}
+                      className="absolute overflow-hidden rounded bg-zinc-200/80 px-1 py-0.5 text-[11px] text-zinc-600 italic dark:bg-zinc-700/50 dark:text-zinc-300"
+                      title={`${event.title}${event.account ? ` — ${event.account}` : ""} (Google Calendar)`}
+                    >
+                      {event.title}
+                    </div>
                   ))}
                   {(timedByDay.get(date) ?? []).map((t, i) => (
                     <button
