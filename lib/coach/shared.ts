@@ -459,6 +459,91 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "list_project_templates",
+    description:
+      "Antoine's reusable project templates (name, fields, starter tasks). Instantiate one with " +
+      "instantiate_project_template to create a real project from it.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "create_project_template",
+    description:
+      "Create a reusable project template — pass from_project_id to snapshot an existing project " +
+      "and its open tasks, or define one from scratch with name (+ optional tasks array of " +
+      "{title, notes, context, priority}). Templates are date-free: shape, not schedule.",
+    input_schema: {
+      type: "object",
+      properties: {
+        from_project_id: { type: "string", description: "Snapshot this project + its open tasks" },
+        name: { type: "string", description: "Template name (defaults to the project's when snapshotting)" },
+        description: { type: "string" },
+        purpose: { type: "string" },
+        outcome_vision: { type: "string" },
+        brainstorm: { type: "string" },
+        domain_id: { type: "string" },
+        priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+        tasks: {
+          type: "array",
+          description: "Starter tasks in order (ignored when from_project_id is set)",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              notes: { type: "string" },
+              context: { type: "string" },
+              priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+            },
+            required: ["title"],
+          },
+        },
+      },
+    },
+  },
+  {
+    name: "instantiate_project_template",
+    description:
+      "Create a real project (plus its starter tasks) from a template. Optional name and " +
+      "domain_id override the template's defaults.",
+    input_schema: {
+      type: "object",
+      properties: {
+        template_id: { type: "string" },
+        name: { type: "string" },
+        domain_id: { type: "string" },
+      },
+      required: ["template_id"],
+    },
+  },
+  {
+    name: "update_project_template",
+    description: "Rename a project template or update its project-level fields.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        purpose: { type: "string" },
+        outcome_vision: { type: "string" },
+        brainstorm: { type: "string" },
+        domain_id: { type: "string" },
+        priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_project_template",
+    description:
+      "Permanently delete a project template (not trash-backed). Projects already created from " +
+      "it are unaffected.",
+    input_schema: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    },
+  },
+  {
     name: "create_project",
     description:
       "Create a new project when a next action implies a multi-step outcome that isn't tracked " +
@@ -1969,6 +2054,168 @@ export async function executeTool(
 
     if (error) return `Error: ${error.message}`;
     return `Updated project "${data.name}".`;
+  }
+
+  if (name === "list_project_templates") {
+    const { data, error } = await supabase
+      .from("project_templates")
+      .select("*, project_template_tasks(*)")
+      .order("name")
+      .order("sort_order", { referencedTable: "project_template_tasks" });
+    if (error) return `Error: ${error.message}`;
+    if (!data || data.length === 0) return "No project templates yet.";
+    return data
+      .map(
+        (t) =>
+          `${t.name} (id ${t.id}, ${t.project_template_tasks.length} tasks): ${t.project_template_tasks
+            .map((task: { title: string }) => task.title)
+            .join("; ")}`,
+      )
+      .join("\n");
+  }
+
+  if (name === "create_project_template") {
+    let fields: Record<string, unknown>;
+    let taskRows: Record<string, unknown>[];
+
+    if (typeof input.from_project_id === "string") {
+      const { data: project, error: projectError } = await supabase
+        .from("projects")
+        .select("name, description, purpose, outcome_vision, brainstorm, link, domain_id, priority")
+        .eq("id", input.from_project_id)
+        .is("deleted_at", null)
+        .single();
+      if (projectError || !project) return "Error: project not found";
+      const { data: projectTasks, error: tasksError } = await supabase
+        .from("tasks")
+        .select("title, notes, context, link, priority")
+        .eq("project_id", input.from_project_id)
+        .is("deleted_at", null)
+        .neq("status", "done")
+        .order("created_at");
+      if (tasksError) return `Error: ${tasksError.message}`;
+      fields = {
+        ...project,
+        name:
+          typeof input.name === "string" && input.name.trim() ? input.name.trim() : project.name,
+      };
+      taskRows = (projectTasks ?? []).map((t, i) => ({ ...t, sort_order: i }));
+    } else {
+      const templateName = typeof input.name === "string" ? input.name.trim() : "";
+      if (!templateName) return "Error: name is required when from_project_id isn't set";
+      fields = {
+        name: templateName,
+        description: typeof input.description === "string" ? input.description : undefined,
+        purpose: typeof input.purpose === "string" ? input.purpose : undefined,
+        outcome_vision: typeof input.outcome_vision === "string" ? input.outcome_vision : undefined,
+        brainstorm: typeof input.brainstorm === "string" ? input.brainstorm : undefined,
+        domain_id: typeof input.domain_id === "string" ? input.domain_id : null,
+        priority: typeof input.priority === "string" ? input.priority : undefined,
+      };
+      taskRows = (Array.isArray(input.tasks) ? input.tasks : [])
+        .filter((t): t is { title: string; notes?: string; context?: string; priority?: string } =>
+          !!t && typeof (t as { title?: unknown }).title === "string" && !!(t as { title: string }).title.trim(),
+        )
+        .map((t, i) => ({
+          title: t.title.trim(),
+          notes: t.notes ?? null,
+          context: t.context ?? null,
+          priority: t.priority ?? "none",
+          sort_order: i,
+        }));
+    }
+
+    const { data: template, error } = await supabase
+      .from("project_templates")
+      .insert({ ...fields, user_id: userId })
+      .select()
+      .single();
+    if (error) return `Error: ${error.message}`;
+
+    if (taskRows.length > 0) {
+      const { error: insertError } = await supabase.from("project_template_tasks").insert(
+        taskRows.map((t) => ({ ...t, user_id: userId, template_id: template.id })),
+      );
+      if (insertError) return `Template created but its tasks failed: ${insertError.message}`;
+    }
+    return `Created template "${template.name}" with ${taskRows.length} starter task(s).`;
+  }
+
+  if (name === "instantiate_project_template") {
+    const templateId = typeof input.template_id === "string" ? input.template_id : "";
+    if (!templateId) return "Error: template_id is required";
+
+    const { data: template, error: templateError } = await supabase
+      .from("project_templates")
+      .select("*, project_template_tasks(*)")
+      .eq("id", templateId)
+      .order("sort_order", { referencedTable: "project_template_tasks" })
+      .single();
+    if (templateError || !template) return "Error: template not found";
+
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .insert({
+        user_id: userId,
+        name:
+          typeof input.name === "string" && input.name.trim() ? input.name.trim() : template.name,
+        description: template.description,
+        purpose: template.purpose,
+        outcome_vision: template.outcome_vision,
+        brainstorm: template.brainstorm,
+        link: template.link,
+        domain_id: typeof input.domain_id === "string" ? input.domain_id : template.domain_id,
+        priority: template.priority,
+      })
+      .select()
+      .single();
+    if (projectError) return `Error: ${projectError.message}`;
+
+    const templateTasks = template.project_template_tasks ?? [];
+    if (templateTasks.length > 0) {
+      const { error: tasksError } = await supabase.from("tasks").insert(
+        templateTasks.map(
+          (t: { title: string; notes: string | null; context: string | null; link: string | null; priority: string }) => ({
+            user_id: userId,
+            project_id: project.id,
+            domain_id: project.domain_id,
+            title: t.title,
+            notes: t.notes,
+            context: t.context,
+            link: t.link,
+            priority: t.priority,
+          }),
+        ),
+      );
+      if (tasksError) return `Project created but its tasks failed: ${tasksError.message}`;
+    }
+    return `Created project "${project.name}" from template with ${templateTasks.length} task(s).`;
+  }
+
+  if (name === "update_project_template") {
+    const templateId = typeof input.id === "string" ? input.id : "";
+    if (!templateId) return "Error: id is required";
+    const updates: Record<string, unknown> = {};
+    if (typeof input.name === "string" && input.name.trim()) updates.name = input.name.trim();
+    for (const field of ["description", "purpose", "outcome_vision", "brainstorm", "domain_id", "priority"]) {
+      if (typeof input[field] === "string") updates[field] = input[field];
+    }
+    const { data, error } = await supabase
+      .from("project_templates")
+      .update(updates)
+      .eq("id", templateId)
+      .select()
+      .single();
+    if (error) return `Error: ${error.message}`;
+    return `Updated template "${data.name}".`;
+  }
+
+  if (name === "delete_project_template") {
+    const templateId = typeof input.id === "string" ? input.id : "";
+    if (!templateId) return "Error: id is required";
+    const { error } = await supabase.from("project_templates").delete().eq("id", templateId);
+    if (error) return `Error: ${error.message}`;
+    return "Template deleted.";
   }
 
   if (name === "create_project") {

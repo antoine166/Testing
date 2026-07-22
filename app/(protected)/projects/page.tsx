@@ -34,6 +34,14 @@ type Project = {
 
 type ProjectTask = { project_id: string | null; status: "todo" | "in_progress" | "done" };
 
+type ProjectTemplate = {
+  id: string;
+  name: string;
+  domain_id: string | null;
+  priority: ProjectPriority;
+  project_template_tasks: { id: string; title: string }[];
+};
+
 const STATUSES: ProjectStatus[] = ["active", "someday", "completed", "archived"];
 const PRIORITIES: ProjectPriority[] = ["none", "low", "medium", "high"];
 const NO_DOMAIN_KEY = "__none__";
@@ -87,19 +95,23 @@ export default function ProjectsPage() {
   const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
   const [addingTaskId, setAddingTaskId] = useState<string | null>(null);
 
+  const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
+
   async function loadAll() {
     try {
-      const [domainsRes, projectsRes, tasksRes] = await Promise.all([
+      const [domainsRes, projectsRes, tasksRes, templatesRes] = await Promise.all([
         fetch("/api/domains"),
         fetch("/api/projects"),
         fetch("/api/tasks"),
+        fetch("/api/project-templates"),
       ]);
-      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) {
+      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok || !templatesRes.ok) {
         throw new Error("Failed to load projects");
       }
       setDomains(await domainsRes.json());
       setProjects(await projectsRes.json());
       setTasks(await tasksRes.json());
+      setTemplates(await templatesRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -115,18 +127,32 @@ export default function ProjectsPage() {
       fetch("/api/domains", { signal: controller.signal }),
       fetch("/api/projects", { signal: controller.signal }),
       fetch("/api/tasks", { signal: controller.signal }),
+      fetch("/api/project-templates", { signal: controller.signal }),
     ])
-      .then(async ([domainsRes, projectsRes, tasksRes]) => {
-        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) {
+      .then(async ([domainsRes, projectsRes, tasksRes, templatesRes]) => {
+        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok || !templatesRes.ok) {
           throw new Error("Failed to load projects");
         }
-        return Promise.all([domainsRes.json(), projectsRes.json(), tasksRes.json()]);
+        return Promise.all([
+          domainsRes.json(),
+          projectsRes.json(),
+          tasksRes.json(),
+          templatesRes.json(),
+        ]);
       })
-      .then(([domainsData, projectsData, tasksData]: [Domain[], Project[], ProjectTask[]]) => {
-        setDomains(domainsData);
-        setProjects(projectsData);
-        setTasks(tasksData);
-      })
+      .then(
+        ([domainsData, projectsData, tasksData, templatesData]: [
+          Domain[],
+          Project[],
+          ProjectTask[],
+          ProjectTemplate[],
+        ]) => {
+          setDomains(domainsData);
+          setProjects(projectsData);
+          setTasks(tasksData);
+          setTemplates(templatesData);
+        },
+      )
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -136,7 +162,7 @@ export default function ProjectsPage() {
     return () => controller.abort();
   }, []);
 
-  useRealtimeRefresh(["projects", "domains", "tasks"], () => loadAll());
+  useRealtimeRefresh(["projects", "domains", "tasks", "project_templates"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -285,6 +311,69 @@ export default function ProjectsPage() {
     }
 
     setNewTaskTitles((prev) => ({ ...prev, [project.id]: "" }));
+    await loadAll();
+  }
+
+  async function handleSaveAsTemplate(project: Project) {
+    const name = prompt("Template name:", project.name);
+    if (name === null) return;
+    const res = await fetch("/api/project-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from_project_id: project.id, name }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to save template");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleUseTemplate(template: ProjectTemplate) {
+    const name = prompt("Name for the new project:", template.name);
+    if (name === null) return;
+    const res = await fetch(`/api/project-templates/${template.id}/instantiate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create project from template");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleRenameTemplate(template: ProjectTemplate) {
+    const name = prompt("Rename template:", template.name);
+    if (name === null || !name.trim() || name.trim() === template.name) return;
+    const res = await fetch(`/api/project-templates/${template.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to rename template");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleDeleteTemplate(template: ProjectTemplate) {
+    // Hard delete (not trash-backed) — same as recurring task templates, so
+    // the confirm carries the weight.
+    if (!confirm(`Delete the template "${template.name}"? This can't be undone. Projects already created from it are unaffected.`)) {
+      return;
+    }
+    const res = await fetch(`/api/project-templates/${template.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to delete template");
+      return;
+    }
     await loadAll();
   }
 
@@ -604,6 +693,53 @@ export default function ProjectsPage() {
         </div>
       </form>
 
+      {templates.length > 0 && (
+        <details className="mb-8 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <summary className="cursor-pointer text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            Project templates ({templates.length})
+          </summary>
+          <ul className="mt-3 space-y-2">
+            {templates.map((template) => (
+              <li
+                key={template.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
+              >
+                <div className="min-w-0">
+                  <span className="text-sm font-medium">{template.name}</span>
+                  <span className="ml-2 text-xs text-zinc-500">
+                    {template.project_template_tasks.length} task
+                    {template.project_template_tasks.length === 1 ? "" : "s"}
+                    {template.domain_id
+                      ? ` · ${domains.find((d) => d.id === template.domain_id)?.name ?? ""}`
+                      : ""}
+                  </span>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => handleUseTemplate(template)}
+                    className="rounded-md bg-zinc-900 px-2.5 py-1 text-xs text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                  >
+                    Use
+                  </button>
+                  <button
+                    onClick={() => handleRenameTemplate(template)}
+                    className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTemplate(template)}
+                    className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-zinc-700 dark:text-red-400 dark:hover:bg-red-950"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>
       ) : projects.length === 0 ? (
@@ -861,6 +997,25 @@ export default function ProjectsPage() {
                     <path d="M4 6h.01M4 12h.01M4 18h.01" />
                   </svg>
                 </Link>
+                <button
+                  onClick={() => handleSaveAsTemplate(project)}
+                  aria-label="Save as template"
+                  title="Save as template — reuse this project's shape (fields + open tasks)"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="8" y="8" width="12" height="12" rx="2" />
+                    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+                  </svg>
+                </button>
                 <button
                   onClick={() => startEdit(project)}
                   aria-label="Edit project"

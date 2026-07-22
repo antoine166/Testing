@@ -91,6 +91,14 @@ A project belongs to one domain and contains tasks.
   its subprojects and all of their tasks together, the same way domain→project cascade already
   works
 
+### 3.3a Project Templates
+Reusable project shapes for repeating work (client onboarding, program launches — Notion's contribution to the feature set). A template captures the project-level fields (name, description, Purpose/Outcome Vision/Brainstorm, link, domain, priority) plus an ordered list of starter tasks (title/notes/context/priority). **Deliberately date-free**: templates describe shape, not schedule — dates belong to the real project once it exists.
+
+- **Save as template** — icon button on each project card, snapshots the project + its open tasks
+- **Templates list** — collapsed section on the Projects page: Use (prompts for the new project's name) / Rename / Delete (hard delete like recurring-task templates, not trash-backed; already-created projects unaffected)
+- Tables: `project_templates` + `project_template_tasks` (cascade delete)
+- MCP + Coach parity: `list/create/instantiate/update/delete_project_template` on both surfaces (create supports both snapshot-from-project and from-scratch modes)
+
 ### 3.4 Tasks
 The atomic unit of work.
 
