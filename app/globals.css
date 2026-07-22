@@ -46,16 +46,9 @@ body {
   backdrop-filter: blur(20px) saturate(1.8);
 }
 
-/* iOS "inset grouped" list: one rounded container, hairline separators
-   between rows, no per-row borders. Rows inside just pad themselves. */
-.inset-group {
-  background: var(--surface);
-  border-radius: 0.875rem;
-  overflow: hidden;
-}
-.inset-group > :not(:first-child) {
-  border-top: 0.5px solid var(--hairline);
-}
+/* Tasks and habits render as individually separated rounded cards
+   (surface + hairline border), spaced with the list's own gap — not joined
+   into one inset group. */
 
 /* iOS Safari auto-zooms the page when a focused form field's font-size is
    under 16px. Our fields use text-sm (14px) for visual density on desktop;

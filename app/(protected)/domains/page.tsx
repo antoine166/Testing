@@ -477,7 +477,7 @@ export default function DomainsPage() {
                             </span>
                             All tasks ({domainTasks.length})
                           </summary>
-                          <ul className="inset-group mt-1.5 ml-4">
+                          <ul className="mt-1.5 space-y-2 pl-4">
                             {renderGroupedTaskRows(domainTasks, {
                               domains,
                               projects,
@@ -520,7 +520,7 @@ export default function DomainsPage() {
                             {projectTasks.length === 0 ? (
                               <p className="mt-1 pl-4 text-xs text-zinc-500">No open tasks.</p>
                             ) : (
-                              <ul className="inset-group mt-1.5 ml-4">
+                              <ul className="mt-1.5 space-y-2 pl-4">
                                 {renderGroupedTaskRows(projectTasks, {
                                   domains,
                                   projects,

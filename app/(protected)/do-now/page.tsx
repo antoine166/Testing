@@ -134,7 +134,7 @@ export default function DoNowPage() {
             : "Nothing actionable right now — check Inbox, or enjoy the clear runway."}
         </p>
       ) : (
-        <ul className="inset-group">
+        <ul className="space-y-2">
           {renderGroupedTaskRows(filteredTasks, {
             domains,
             projects,

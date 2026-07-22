@@ -39,7 +39,7 @@ export default function AnytimePage() {
       ) : anytimeTasks.length === 0 ? (
         <p className="text-sm text-zinc-500">Nothing here — filed tasks with no date show up when you have them.</p>
       ) : (
-        <ul className="inset-group">
+        <ul className="space-y-2">
           {anytimeTasks.map((task) => (
             <TaskRow
               key={task.id}

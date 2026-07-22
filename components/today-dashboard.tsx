@@ -654,7 +654,7 @@ export default function TodayDashboard() {
           <h2 className="mb-2 text-sm font-semibold text-red-600 dark:text-red-400">
             Overdue ({overdueTasks.length})
           </h2>
-          <ul className="inset-group">
+          <ul className="space-y-2">
             {overdueTasks.map((task) => (
               <TaskRow
                 key={task.id}
@@ -955,7 +955,7 @@ export default function TodayDashboard() {
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   Appointments
                 </h3>
-                <ul className="inset-group">
+                <ul className="space-y-2">
                   {appointmentsToday.map((task) => (
                     <TaskRow
                       key={task.id}
@@ -980,7 +980,7 @@ export default function TodayDashboard() {
                     Planned
                   </h3>
                 )}
-                <ul className="inset-group">
+                <ul className="space-y-2">
                   {plannedToday.map((task) => (
                     <TaskRow
                       key={task.id}
