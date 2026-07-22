@@ -908,6 +908,10 @@ export const TOOLS: Tool[] = [
         type: { type: "string", enum: ["note", "article", "book", "quote", "resource"] },
         tags: { type: "array", items: { type: "string" } },
         folder_id: { type: "string", description: "Optional folder UUID from the context below" },
+        project_id: {
+          type: "string",
+          description: "Attach as a project's support material — shown in that project's Reference section",
+        },
       },
       required: ["title"],
     },
@@ -925,6 +929,10 @@ export const TOOLS: Tool[] = [
         type: { type: "string", enum: ["note", "article", "book", "quote", "resource"] },
         tags: { type: "array", items: { type: "string" }, description: "Empty array clears it" },
         folder_id: { type: "string", description: "Empty string clears it (moves to top level)" },
+        project_id: {
+          type: "string",
+          description: "Attach to a project's Reference section; empty string detaches",
+        },
       },
       required: ["knowledge_item_id"],
     },
@@ -2708,6 +2716,7 @@ export async function executeTool(
         type: typeof input.type === "string" ? input.type : undefined,
         tags: Array.isArray(input.tags) ? input.tags : null,
         folder_id: typeof input.folder_id === "string" ? input.folder_id : null,
+        project_id: typeof input.project_id === "string" ? input.project_id : null,
       })
       .select()
       .single();
@@ -2731,6 +2740,7 @@ export async function executeTool(
     if (typeof input.type === "string") updates.type = input.type;
     if (Array.isArray(input.tags)) updates.tags = input.tags.length ? input.tags : null;
     if (typeof input.folder_id === "string") updates.folder_id = input.folder_id || null;
+    if (typeof input.project_id === "string") updates.project_id = input.project_id || null;
 
     const { data, error } = await supabase
       .from("knowledge_items")

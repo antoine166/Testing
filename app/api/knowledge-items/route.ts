@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       type: typeof body.type === "string" ? body.type : undefined,
       tags: Array.isArray(body.tags) ? body.tags : null,
       folder_id: typeof body.folder_id === "string" ? body.folder_id : null,
+      project_id: typeof body.project_id === "string" ? body.project_id : null,
     })
     .select()
     .single();

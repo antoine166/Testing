@@ -34,6 +34,8 @@ type Project = {
 
 type ProjectTask = { project_id: string | null; status: "todo" | "in_progress" | "done" };
 
+type SupportItem = { id: string; title: string; type: string; url: string | null; project_id: string | null };
+
 type ProjectTemplate = {
   id: string;
   name: string;
@@ -96,22 +98,25 @@ export default function ProjectsPage() {
   const [addingTaskId, setAddingTaskId] = useState<string | null>(null);
 
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
+  const [supportItems, setSupportItems] = useState<SupportItem[]>([]);
 
   async function loadAll() {
     try {
-      const [domainsRes, projectsRes, tasksRes, templatesRes] = await Promise.all([
+      const [domainsRes, projectsRes, tasksRes, templatesRes, itemsRes] = await Promise.all([
         fetch("/api/domains"),
         fetch("/api/projects"),
         fetch("/api/tasks"),
         fetch("/api/project-templates"),
+        fetch("/api/knowledge-items"),
       ]);
-      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok || !templatesRes.ok) {
+      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok || !templatesRes.ok || !itemsRes.ok) {
         throw new Error("Failed to load projects");
       }
       setDomains(await domainsRes.json());
       setProjects(await projectsRes.json());
       setTasks(await tasksRes.json());
       setTemplates(await templatesRes.json());
+      setSupportItems(await itemsRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -128,9 +133,10 @@ export default function ProjectsPage() {
       fetch("/api/projects", { signal: controller.signal }),
       fetch("/api/tasks", { signal: controller.signal }),
       fetch("/api/project-templates", { signal: controller.signal }),
+      fetch("/api/knowledge-items", { signal: controller.signal }),
     ])
-      .then(async ([domainsRes, projectsRes, tasksRes, templatesRes]) => {
-        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok || !templatesRes.ok) {
+      .then(async ([domainsRes, projectsRes, tasksRes, templatesRes, itemsRes]) => {
+        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok || !templatesRes.ok || !itemsRes.ok) {
           throw new Error("Failed to load projects");
         }
         return Promise.all([
@@ -138,19 +144,22 @@ export default function ProjectsPage() {
           projectsRes.json(),
           tasksRes.json(),
           templatesRes.json(),
+          itemsRes.json(),
         ]);
       })
       .then(
-        ([domainsData, projectsData, tasksData, templatesData]: [
+        ([domainsData, projectsData, tasksData, templatesData, itemsData]: [
           Domain[],
           Project[],
           ProjectTask[],
           ProjectTemplate[],
+          SupportItem[],
         ]) => {
           setDomains(domainsData);
           setProjects(projectsData);
           setTasks(tasksData);
           setTemplates(templatesData);
+          setSupportItems(itemsData);
         },
       )
       .catch((err) => {
@@ -162,7 +171,7 @@ export default function ProjectsPage() {
     return () => controller.abort();
   }, []);
 
-  useRealtimeRefresh(["projects", "domains", "tasks", "project_templates"], () => loadAll());
+  useRealtimeRefresh(["projects", "domains", "tasks", "project_templates", "knowledge_items"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1057,6 +1066,37 @@ export default function ProjectsPage() {
                 </button>
               </div>
             </div>
+            {supportItems.some((item) => item.project_id === project.id) && (
+              <div className="mt-2 rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-900/60">
+                <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
+                  Reference
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {supportItems
+                    .filter((item) => item.project_id === project.id)
+                    .map((item) => (
+                      <li key={item.id} className="flex items-center gap-1.5 text-sm">
+                        <span className="text-xs">📖</span>
+                        {item.url ? (
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate text-blue-600 underline dark:text-blue-400"
+                          >
+                            {item.title}
+                          </a>
+                        ) : (
+                          <Link href="/library" className="truncate hover:underline">
+                            {item.title}
+                          </Link>
+                        )}
+                        <span className="text-xs text-zinc-400">{item.type}</span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
             <form
               onSubmit={(e) => handleAddTask(project, e)}
               className="mt-2 flex flex-wrap gap-2"
