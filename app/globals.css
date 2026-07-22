@@ -1,28 +1,60 @@
 @import "tailwindcss";
 
+/* macOS/iOS aesthetic (graphite): Apple system fonts, iOS grouped-list
+   backgrounds (#f2f2f7 light / true black dark), frosted "material" chrome,
+   hairline separators, inset-grouped lists. Chrome stays nearly colorless —
+   color comes from Antoine's domain colors and status accents only. */
 :root {
-  --background: #ffffff;
+  --background: #f2f2f7;
   --foreground: #171717;
+  --surface: #ffffff;
+  --hairline: rgba(60, 60, 67, 0.18);
+  --material: rgba(246, 246, 248, 0.72);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #000000;
     --foreground: #ededed;
+    --surface: #1c1c1e;
+    --hairline: rgba(84, 84, 88, 0.55);
+    --material: rgba(22, 22, 24, 0.72);
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Frosted chrome (sidebar, sticky bars) — macOS Finder / iOS nav-bar
+   material: translucent, blurred, slightly saturated. */
+.material-chrome {
+  background: var(--material);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
+}
+
+/* iOS "inset grouped" list: one rounded container, hairline separators
+   between rows, no per-row borders. Rows inside just pad themselves. */
+.inset-group {
+  background: var(--surface);
+  border-radius: 0.875rem;
+  overflow: hidden;
+}
+.inset-group > :not(:first-child) {
+  border-top: 0.5px solid var(--hairline);
 }
 
 /* iOS Safari auto-zooms the page when a focused form field's font-size is

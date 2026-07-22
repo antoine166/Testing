@@ -51,12 +51,14 @@ const REFERENCE_LINKS = [
   },
 ] as const;
 
-function NavIcon({ icon, bg }: { icon: string; bg: string }) {
+// Graphite chrome: no colored chips — a bare glyph, like macOS sidebars.
+// (The colored version lives in git history if the multicolor look ever
+// comes back.) Domain dots elsewhere keep their real colors: data gets
+// color, chrome doesn't. `bg` is accepted-and-ignored so the NAV config
+// keeps its colors for that potential future.
+function NavIcon({ icon }: { icon: string; bg?: string }) {
   return (
-    <span
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white"
-      style={{ backgroundColor: bg }}
-    >
+    <span className="flex h-6 w-6 shrink-0 items-center justify-center text-sm">
       {icon}
     </span>
   );
@@ -268,7 +270,7 @@ export default function SidebarNav({
   return (
     <>
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-zinc-800 dark:bg-black/90 md:hidden">
+      <div className="material-chrome sticky top-0 z-30 flex items-center justify-between border-b border-[var(--hairline)] px-4 py-3 md:hidden">
         <Link href="/" className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
           Life OS
         </Link>
@@ -285,14 +287,14 @@ export default function SidebarNav({
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
-          <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="material-chrome absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-[var(--hairline)]">
             {sidebarContent}
           </div>
         </div>
       )}
 
       {/* Desktop sidebar */}
-      <div className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 md:block">
+      <div className="material-chrome sticky top-0 hidden h-screen w-64 shrink-0 border-r border-[var(--hairline)] md:block">
         {sidebarContent}
       </div>
     </>

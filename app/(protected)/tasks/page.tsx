@@ -1026,7 +1026,7 @@ export default function TasksPage() {
           {filteredTasks.length === 0 ? (
             <p className="text-sm text-zinc-500">No tasks here yet.</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="inset-group">
               {renderGroupedTaskRows(filteredTasks, {
                 domains,
                 projects,
@@ -1130,7 +1130,7 @@ export default function TasksPage() {
                   💡 GTD&apos;s two-minute rule: if something here takes less than two minutes,
                   just do it now instead of filing it.
                 </p>
-                <ul className="space-y-2">
+                <ul className="inset-group">
                 {selectMode
                   ? inboxTasks.map((task) => (
                       <TaskRow
@@ -1227,7 +1227,7 @@ export default function TasksPage() {
                                 {projectTasks.length === 0 ? (
                                   <p className="text-sm text-zinc-500">No tasks yet.</p>
                                 ) : (
-                                  <ul className="space-y-2">
+                                  <ul className="inset-group">
                                     {renderGroupedTaskRows(projectTasks, {
                                       domains,
                                       projects,
@@ -1251,7 +1251,7 @@ export default function TasksPage() {
                                   No project
                                 </p>
                               )}
-                              <ul className="space-y-2">
+                              <ul className="inset-group">
                                 {renderGroupedTaskRows(unfiledDomainTasks, {
                                   domains,
                                   projects,

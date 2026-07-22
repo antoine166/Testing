@@ -529,7 +529,7 @@ export default function InboxPage() {
               </button>
             </div>
           </div>
-          <ul className="space-y-2">
+          <ul className="inset-group">
             {inboxTasks.map((task) => (
               <TaskRow
                 key={task.id}
