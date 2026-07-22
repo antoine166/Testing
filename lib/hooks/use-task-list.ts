@@ -83,11 +83,13 @@ export function useTaskList() {
     await handleUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
   }
 
-  async function handleDelete(id: string, scope?: "skip" | "following") {
+  async function handleDelete(id: string, scope?: "skip" | "following", skipConfirm = false) {
     // Recurring tasks route through TaskRow's own "Skip this one" / "This +
     // future" picker, which is itself the confirmation step — a plain
     // (non-recurring) delete never shows that picker and still needs one.
-    if (!scope && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
+    // The Clarify flow passes skipConfirm: its Trash button is an explicit,
+    // deliberate choice within a decision flow, so a second dialog is noise.
+    if (!scope && !skipConfirm && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
     const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
     const res = await fetch(url, { method: "DELETE" });
     if (!res.ok) {
@@ -114,20 +116,25 @@ export function useTaskList() {
     return created;
   }
 
-  async function handleConvertToProject(id: string) {
+  async function handleConvertToProject(id: string, skipConfirm = false) {
     if (
+      !skipConfirm &&
       !confirm(
         "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
       )
     )
-      return;
+      return null;
     const res = await fetch(`/api/tasks/${id}/convert-to-project`, { method: "POST" });
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to convert task to project");
-      return;
+      return null;
     }
+    // The created project, so callers (Clarify's "very next action" prompt)
+    // can immediately attach a first task to it.
+    const project: { id: string; domain_id: string | null } = await res.json();
     await loadAll();
+    return project;
   }
 
   async function handleConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
@@ -144,8 +151,9 @@ export function useTaskList() {
     await loadAll();
   }
 
-  async function handleConvertToKnowledgeItem(id: string) {
+  async function handleConvertToKnowledgeItem(id: string, skipConfirm = false) {
     if (
+      !skipConfirm &&
       !confirm(
         "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
       )

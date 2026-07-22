@@ -108,6 +108,20 @@ The atomic unit of work.
 - **Bulk filing**: the Inbox section on the Tasks page has a "Select" mode — check multiple unprocessed tasks and assign them all to one domain in a single action, instead of opening each one individually
 - **Smart-list views** (Things-3-style, see §4 for the sidebar): `/inbox`, `/upcoming`, `/anytime`, `/someday`, `/logbook` each render a filtered slice of the same `tasks` table — no separate storage, just different queries over the fields above. `/tasks` remains as a full by-domain browse view and also supports `?q=` title search from the sidebar's Quick Find
 
+### 3.4a Clarify Mode (Inbox processing)
+GTD's clarify step as a guided flow — the sidebar's workflow-map diagram made interactive. The Inbox page's "⚡ Clarify" button walks the unprocessed list one item at a time through Allen's decision tree; every destination is an existing feature, so the flow adds no new storage:
+
+- **Not actionable** → Trash · Someday/Maybe · Tickler (someday + revisit date) · Reference (files into the Library via convert-to-knowledge-item)
+- **Actionable** →
+  - *Do it now* — under 2 minutes: a live 2:00 countdown, then "Did it" (marks done) or bail out to defer
+  - *Defer it* — rewrite the title as the very next physical action, file to domain/project, context, priority, due (deadline) and scheduled (intention) independently
+  - *Delegate it* — Waiting For with who + optional follow-up date
+  - *It's a project* — converts via the existing endpoint, then immediately prompts for the project's very next action (created as its first task)
+
+Progress counter, per-item Skip, exit anytime. The queue is snapshotted at start so actions elsewhere (other tab, Coach) don't reshuffle mid-flow — items processed externally auto-advance.
+
+**Inbox definition change**: `waiting_for` tasks are excluded from the Inbox — once delegated, an item has been processed and lives on the Waiting For list.
+
 ### 3.5 Today View
 Antoine's daily dashboard.
 
