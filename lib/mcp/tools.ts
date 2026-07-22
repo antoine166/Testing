@@ -2689,10 +2689,15 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         type: z.enum(KNOWLEDGE_TYPES).optional().describe("Defaults to note"),
         tags: z.array(z.string()).optional(),
         folder_id: z.string().uuid().optional(),
+        project_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("Attach as a project's support material — shown in that project's Reference section"),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
-    async ({ title, content, url, type, tags, folder_id }) => {
+    async ({ title, content, url, type, tags, folder_id, project_id }) => {
       const trimmed = title.trim();
       if (!trimmed) return fail("Title is required");
 
@@ -2706,6 +2711,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           type,
           tags: tags ?? null,
           folder_id: folder_id ?? null,
+          project_id: project_id ?? null,
         })
         .select()
         .single();
@@ -2727,6 +2733,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         type: z.enum(KNOWLEDGE_TYPES).optional(),
         tags: z.array(z.string()).nullable().optional(),
         folder_id: z.string().uuid().nullable().optional(),
+        project_id: z
+          .string()
+          .uuid()
+          .nullable()
+          .optional()
+          .describe("Attach to a project's Reference section, or null to detach"),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },

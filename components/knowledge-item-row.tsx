@@ -12,7 +12,10 @@ export type KnowledgeItem = {
   type: KnowledgeType;
   tags: string[] | null;
   folder_id: string | null;
+  project_id: string | null;
 };
+
+export type KnowledgeProject = { id: string; name: string };
 
 export type KnowledgeFolder = { id: string; name: string; parent_id: string | null };
 
@@ -49,11 +52,13 @@ export function parseTags(input: string): string[] {
 export default function KnowledgeItemRow({
   item,
   folders,
+  projects,
   onUpdate,
   onDelete,
 }: {
   item: KnowledgeItem;
   folders: KnowledgeFolder[];
+  projects: KnowledgeProject[];
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
 }) {
@@ -64,6 +69,7 @@ export default function KnowledgeItemRow({
   const [type, setType] = useState<KnowledgeType>(item.type);
   const [tagsInput, setTagsInput] = useState((item.tags ?? []).join(", "));
   const [folderId, setFolderId] = useState(item.folder_id ?? "");
+  const [projectId, setProjectId] = useState(item.project_id ?? "");
 
   function startEdit() {
     setTitle(item.title);
@@ -72,6 +78,7 @@ export default function KnowledgeItemRow({
     setType(item.type);
     setTagsInput((item.tags ?? []).join(", "));
     setFolderId(item.folder_id ?? "");
+    setProjectId(item.project_id ?? "");
     setEditing(true);
   }
 
@@ -84,12 +91,14 @@ export default function KnowledgeItemRow({
       type,
       tags: parseTags(tagsInput),
       folder_id: folderId || null,
+      project_id: projectId || null,
     });
     setEditing(false);
   }
 
   const folderOptions = flattenFolders(folders);
   const currentFolder = folders.find((f) => f.id === item.folder_id);
+  const currentProject = projects.find((p) => p.id === item.project_id);
 
   if (editing) {
     return (
@@ -144,6 +153,19 @@ export default function KnowledgeItemRow({
               </option>
             ))}
           </select>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            title="Attach as project support material — reference that belongs with a project, not on its action list."
+            className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">No project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
           <div className="flex gap-3">
             <button
               onClick={handleSave}
@@ -176,6 +198,9 @@ export default function KnowledgeItemRow({
             </span>
             {currentFolder && (
               <span className="text-xs text-zinc-400">📁 {currentFolder.name}</span>
+            )}
+            {currentProject && (
+              <span className="text-xs text-zinc-400">🗂️ {currentProject.name}</span>
             )}
           </div>
           {item.content && (

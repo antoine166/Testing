@@ -6,6 +6,7 @@ import KnowledgeItemRow, {
   parseTags,
   type KnowledgeItem,
   type KnowledgeFolder,
+  type KnowledgeProject,
   type KnowledgeType,
 } from "@/components/knowledge-item-row";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
@@ -13,6 +14,7 @@ import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 export default function LibraryPage() {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [folders, setFolders] = useState<KnowledgeFolder[]>([]);
+  const [projects, setProjects] = useState<KnowledgeProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,6 +23,7 @@ export default function LibraryPage() {
   const [url, setUrl] = useState("");
   const [type, setType] = useState<KnowledgeType>("note");
   const [tagsInput, setTagsInput] = useState("");
+  const [newItemProjectId, setNewItemProjectId] = useState("");
 
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -29,13 +32,15 @@ export default function LibraryPage() {
 
   async function loadAll() {
     try {
-      const [itemsRes, foldersRes] = await Promise.all([
+      const [itemsRes, foldersRes, projectsRes] = await Promise.all([
         fetch("/api/knowledge-items"),
         fetch("/api/knowledge-folders"),
+        fetch("/api/projects"),
       ]);
-      if (!itemsRes.ok || !foldersRes.ok) throw new Error("Failed to load library");
+      if (!itemsRes.ok || !foldersRes.ok || !projectsRes.ok) throw new Error("Failed to load library");
       setItems(await itemsRes.json());
       setFolders(await foldersRes.json());
+      setProjects(await projectsRes.json());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -50,15 +55,25 @@ export default function LibraryPage() {
     Promise.all([
       fetch("/api/knowledge-items", { signal: controller.signal }),
       fetch("/api/knowledge-folders", { signal: controller.signal }),
+      fetch("/api/projects", { signal: controller.signal }),
     ])
-      .then(async ([itemsRes, foldersRes]) => {
-        if (!itemsRes.ok || !foldersRes.ok) throw new Error("Failed to load library");
-        return Promise.all([itemsRes.json(), foldersRes.json()]);
+      .then(async ([itemsRes, foldersRes, projectsRes]) => {
+        if (!itemsRes.ok || !foldersRes.ok || !projectsRes.ok) {
+          throw new Error("Failed to load library");
+        }
+        return Promise.all([itemsRes.json(), foldersRes.json(), projectsRes.json()]);
       })
-      .then(([itemsData, foldersData]: [KnowledgeItem[], KnowledgeFolder[]]) => {
-        setItems(itemsData);
-        setFolders(foldersData);
-      })
+      .then(
+        ([itemsData, foldersData, projectsData]: [
+          KnowledgeItem[],
+          KnowledgeFolder[],
+          KnowledgeProject[],
+        ]) => {
+          setItems(itemsData);
+          setFolders(foldersData);
+          setProjects(projectsData);
+        },
+      )
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -68,7 +83,7 @@ export default function LibraryPage() {
     return () => controller.abort();
   }, []);
 
-  useRealtimeRefresh(["knowledge_items", "knowledge_folders"], () => loadAll());
+  useRealtimeRefresh(["knowledge_items", "knowledge_folders", "projects"], () => loadAll());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -84,6 +99,7 @@ export default function LibraryPage() {
         type,
         tags: parseTags(tagsInput),
         folder_id: currentFolderId,
+        project_id: newItemProjectId || undefined,
       }),
     });
 
@@ -98,6 +114,7 @@ export default function LibraryPage() {
     setUrl("");
     setType("note");
     setTagsInput("");
+    setNewItemProjectId("");
     await loadAll();
   }
 
@@ -375,6 +392,28 @@ export default function LibraryPage() {
             className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
+        <div>
+          <label
+            htmlFor="item-project"
+            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Project (optional)
+          </label>
+          <select
+            id="item-project"
+            value={newItemProjectId}
+            onChange={(e) => setNewItemProjectId(e.target.value)}
+            title="Attach as project support material — reference that belongs with a project, not on its action list."
+            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">No project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           type="submit"
           className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
@@ -434,6 +473,7 @@ export default function LibraryPage() {
               key={item.id}
               item={item}
               folders={folders}
+              projects={projects}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
             />

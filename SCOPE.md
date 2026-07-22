@@ -222,6 +222,13 @@ A personal second brain for saving things Antoine wants to keep.
 - Search across all items by keyword or tag
 - **Folders** (`knowledge_folders`): nested, arbitrary depth via a self-referencing `parent_id` (like folders on a computer — see §6). A DB trigger (`knowledge_folders_no_cycle`) rejects any insert/update that would make a folder its own ancestor, since the Library page's breadcrumb walks up `parent_id` and would hang on a cycle. Deleting a folder cascades to its subfolders; items inside just become unfiled (`folder_id` null) rather than being deleted
 
+### 3.9a Project Support Material
+GTD separates a project's *support material* (reference, research, notes) from its *action list* — but keeps it findable from the project. `knowledge_items.project_id` (nullable, `on delete set null` so trashing a project never destroys reference material) is that link:
+
+- Library items gain an optional **Project** select (create form + edit form), shown as a 🗂️ chip on the item row
+- Each project card on the Projects page shows a **Reference** section listing its attached items (URL items link out, others link to the Library)
+- MCP + Coach parity: `create_knowledge_item`/`update_knowledge_item` accept `project_id` on both surfaces
+
 ### 3.11 Coach *(Phase 2)*
 AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 

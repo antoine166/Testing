@@ -50,6 +50,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("folder_id" in body) {
     updates.folder_id = typeof body.folder_id === "string" ? body.folder_id : null;
   }
+  if ("project_id" in body) {
+    updates.project_id = typeof body.project_id === "string" ? body.project_id : null;
+  }
 
   const { data, error } = await supabase
     .from("knowledge_items")
