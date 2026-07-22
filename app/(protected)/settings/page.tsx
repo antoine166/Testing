@@ -153,8 +153,11 @@ export default async function SettingsPage({
           Export your data
         </h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Download everything — domains, projects, tasks, habits and their logs,
-          check-ins, routines, checklists, and library items — as a single JSON file.
+          Download everything as a single JSON file — every table that holds your content:
+          domains, projects (and templates), tasks (and attachments metadata, recurring
+          templates), habits and logs, check-ins, routines, checklists, library folders and
+          items, tickler, agendas, contexts, people, workouts and logs, and horizons.
+          Excluded by design: connected-account tokens.
         </p>
         <a
           href="/api/export"

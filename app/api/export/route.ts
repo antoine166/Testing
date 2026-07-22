@@ -1,6 +1,40 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
 
+// Everything, meaning everything: if a table holds user content, it belongs
+// here. (This list drifted badly once — features shipped for weeks without
+// being added — so keep it in the same change as any new table, like the
+// MCP parity rule.) Excluded on purpose: OAuth token tables
+// (gmail_connections, google_calendar_connections, mcp_oauth_*) — secrets
+// don't belong in a download — and task_attachments' actual files (the rows
+// carry storage paths, not bytes; Supabase Storage is the file backup).
+const EXPORT_TABLES = [
+  "domains",
+  "projects",
+  "project_templates",
+  "project_template_tasks",
+  "tasks",
+  "task_attachments",
+  "recurring_task_templates",
+  "habits",
+  "habit_logs",
+  "daily_checkins",
+  "routines",
+  "routine_items",
+  "checklists",
+  "checklist_items",
+  "knowledge_folders",
+  "knowledge_items",
+  "tickler_items",
+  "agenda_items",
+  "contexts",
+  "people",
+  "workouts",
+  "workout_logs",
+  "workout_log_attachments",
+  "horizons",
+] as const;
+
 export async function GET() {
   const { supabase, user } = await requireUser();
 
@@ -8,46 +42,19 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [
-    domains,
-    projects,
-    tasks,
-    habits,
-    habitLogs,
-    dailyCheckins,
-    routines,
-    routineItems,
-    checklists,
-    checklistItems,
-    knowledgeItems,
-  ] = await Promise.all([
-    supabase.from("domains").select("*"),
-    supabase.from("projects").select("*"),
-    supabase.from("tasks").select("*"),
-    supabase.from("habits").select("*"),
-    supabase.from("habit_logs").select("*"),
-    supabase.from("daily_checkins").select("*"),
-    supabase.from("routines").select("*"),
-    supabase.from("routine_items").select("*"),
-    supabase.from("checklists").select("*"),
-    supabase.from("checklist_items").select("*"),
-    supabase.from("knowledge_items").select("*"),
-  ]);
+  const results = await Promise.all(
+    EXPORT_TABLES.map((table) => supabase.from(table).select("*")),
+  );
 
-  const data = {
-    exported_at: new Date().toISOString(),
-    domains: domains.data,
-    projects: projects.data,
-    tasks: tasks.data,
-    habits: habits.data,
-    habit_logs: habitLogs.data,
-    daily_checkins: dailyCheckins.data,
-    routines: routines.data,
-    routine_items: routineItems.data,
-    checklists: checklists.data,
-    checklist_items: checklistItems.data,
-    knowledge_items: knowledgeItems.data,
-  };
+  const failed = results.find((r) => r.error);
+  if (failed?.error) {
+    return NextResponse.json({ error: failed.error.message }, { status: 500 });
+  }
+
+  const data: Record<string, unknown> = { exported_at: new Date().toISOString() };
+  EXPORT_TABLES.forEach((table, i) => {
+    data[table] = results[i].data;
+  });
 
   const filename = `life-os-export-${new Date().toISOString().slice(0, 10)}.json`;
 
