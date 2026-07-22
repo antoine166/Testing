@@ -253,6 +253,242 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
   );
 
   server.registerTool(
+    "list_project_templates",
+    {
+      title: "List project templates",
+      description:
+        "Antoine's reusable project templates (name, fields, and starter tasks). Instantiate one " +
+        "with instantiate_project_template to create a real project from it.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("project_templates")
+        .select("*, project_template_tasks(*)")
+        .eq("user_id", userId)
+        .order("name")
+        .order("sort_order", { referencedTable: "project_template_tasks" });
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_project_template",
+    {
+      title: "Create project template",
+      description:
+        "Create a reusable project template — either snapshot an existing project and its open " +
+        "tasks (pass from_project_id), or define one from scratch (pass name and optionally tasks). " +
+        "Templates are date-free by design: shape, not schedule.",
+      inputSchema: {
+        from_project_id: z.string().uuid().optional().describe("Snapshot this project + its open tasks"),
+        name: z.string().min(1).optional().describe("Template name (required unless from_project_id, where it defaults to the project's name)"),
+        description: z.string().optional(),
+        purpose: z.string().optional(),
+        outcome_vision: z.string().optional(),
+        brainstorm: z.string().optional(),
+        link: z.string().optional(),
+        domain_id: z.string().uuid().optional(),
+        priority: z.enum(["none", "low", "medium", "high"]).optional(),
+        tasks: z
+          .array(
+            z.object({
+              title: z.string().min(1),
+              notes: z.string().optional(),
+              context: z.string().optional(),
+              link: z.string().optional(),
+              priority: z.enum(["none", "low", "medium", "high"]).optional(),
+            }),
+          )
+          .optional()
+          .describe("Starter tasks, in order (ignored when from_project_id is set)"),
+      },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ from_project_id, name, description, purpose, outcome_vision, brainstorm, link, domain_id, priority, tasks }) => {
+      let fields: Record<string, unknown>;
+      let taskRows: Record<string, unknown>[];
+
+      if (from_project_id) {
+        const { data: project, error: projectError } = await admin
+          .from("projects")
+          .select("name, description, purpose, outcome_vision, brainstorm, link, domain_id, priority")
+          .eq("id", from_project_id)
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .single();
+        if (projectError || !project) return fail("Project not found");
+        const { data: projectTasks, error: tasksError } = await admin
+          .from("tasks")
+          .select("title, notes, context, link, priority")
+          .eq("project_id", from_project_id)
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .neq("status", "done")
+          .order("created_at");
+        if (tasksError) return fail(tasksError.message);
+        fields = { ...project, name: name?.trim() || project.name };
+        taskRows = (projectTasks ?? []).map((t, i) => ({ ...t, sort_order: i }));
+      } else {
+        if (!name?.trim()) return fail("name is required when from_project_id isn't set");
+        fields = {
+          name: name.trim(),
+          description,
+          purpose,
+          outcome_vision,
+          brainstorm,
+          link,
+          domain_id: domain_id ?? null,
+          priority,
+        };
+        taskRows = (tasks ?? []).map((t, i) => ({
+          title: t.title.trim(),
+          notes: t.notes ?? null,
+          context: t.context ?? null,
+          link: t.link ?? null,
+          priority: t.priority ?? "none",
+          sort_order: i,
+        }));
+      }
+
+      const { data: template, error } = await admin
+        .from("project_templates")
+        .insert({ ...fields, user_id: userId })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+
+      if (taskRows.length > 0) {
+        const { error: insertError } = await admin.from("project_template_tasks").insert(
+          taskRows.map((t) => ({ ...t, user_id: userId, template_id: template.id })),
+        );
+        if (insertError) return fail(`Template created but its tasks failed: ${insertError.message}`);
+      }
+      return ok({ ...template, task_count: taskRows.length });
+    },
+  );
+
+  server.registerTool(
+    "instantiate_project_template",
+    {
+      title: "Create project from template",
+      description:
+        "Create a real project (plus its starter tasks) from a template. Optional name and " +
+        "domain_id override the template's defaults.",
+      inputSchema: {
+        template_id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        domain_id: z.string().uuid().optional(),
+      },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ template_id, name, domain_id }) => {
+      const { data: template, error: templateError } = await admin
+        .from("project_templates")
+        .select("*, project_template_tasks(*)")
+        .eq("id", template_id)
+        .eq("user_id", userId)
+        .order("sort_order", { referencedTable: "project_template_tasks" })
+        .single();
+      if (templateError || !template) return fail("Template not found");
+
+      const { data: project, error: projectError } = await admin
+        .from("projects")
+        .insert({
+          user_id: userId,
+          name: name?.trim() || template.name,
+          description: template.description,
+          purpose: template.purpose,
+          outcome_vision: template.outcome_vision,
+          brainstorm: template.brainstorm,
+          link: template.link,
+          domain_id: domain_id ?? template.domain_id,
+          priority: template.priority,
+        })
+        .select()
+        .single();
+      if (projectError) return fail(projectError.message);
+
+      const templateTasks = template.project_template_tasks ?? [];
+      if (templateTasks.length > 0) {
+        const { error: tasksError } = await admin.from("tasks").insert(
+          templateTasks.map((t: { title: string; notes: string | null; context: string | null; link: string | null; priority: string }) => ({
+            user_id: userId,
+            project_id: project.id,
+            domain_id: project.domain_id,
+            title: t.title,
+            notes: t.notes,
+            context: t.context,
+            link: t.link,
+            priority: t.priority,
+          })),
+        );
+        if (tasksError) return fail(`Project created but its tasks failed: ${tasksError.message}`);
+      }
+      return ok({ ...project, task_count: templateTasks.length });
+    },
+  );
+
+  server.registerTool(
+    "update_project_template",
+    {
+      title: "Update project template",
+      description: "Rename a project template or update its project-level fields.",
+      inputSchema: {
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        description: z.string().nullable().optional(),
+        purpose: z.string().nullable().optional(),
+        outcome_vision: z.string().nullable().optional(),
+        brainstorm: z.string().nullable().optional(),
+        link: z.string().nullable().optional(),
+        domain_id: z.string().uuid().nullable().optional(),
+        priority: z.enum(["none", "low", "medium", "high"]).optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, ...rest }) => {
+      const updates: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rest)) {
+        if (value !== undefined) updates[key] = value;
+      }
+      if (typeof updates.name === "string") updates.name = updates.name.trim();
+      const { data, error } = await admin
+        .from("project_templates")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_project_template",
+    {
+      title: "Delete project template",
+      description:
+        "Permanently delete a project template (not trash-backed — same as recurring task " +
+        "templates). Projects already created from it are unaffected.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("project_templates")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  server.registerTool(
     "create_project",
     {
       title: "Create project",
