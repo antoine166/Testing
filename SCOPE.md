@@ -232,6 +232,15 @@ GTD separates a project's *support material* (reference, research, notes) from i
 - Each project card on the Projects page shows a **Reference** section listing its attached items (URL items link out, others link to the Library)
 - MCP + Coach parity: `create_knowledge_item`/`update_knowledge_item` accept `project_id` on both surfaces
 
+### 3.10a People
+A lightweight person layer — deliberately **not** a CRM (one was built and removed early on): no interaction logs, no pipeline, just a `people` table (name + notes, trash-backed) that existing objects hang off.
+
+- `tasks.person_id` (set null on delete — trashing a person never eats their tasks) links tasks to a person; set from the People page's "+ Link a task" or via Claude
+- `/people` (nav: 👤 People, next to Agendas): one card per person — ⏳ waiting-on-them tasks (with due follow-up flags), their other open tasks, and 🗣️ open agenda items **matched by name** against `agenda_items.person_name` (agendas predate this table; the name-match is the deliberate v1 seam)
+- Trash: registered as `person` in the generic system (`lib/trash.ts`) — list/restore/purge all just work
+- MCP parity: `list/create/update/delete_person`; `create_task`/`update_task` accept `person_id`
+- The Waiting For `waiting_on` free-text field stays for one-off names that don't deserve a person entry
+
 ### 3.11 Coach *(removed July 2026)*
 The in-app AI Coach (an Anthropic-API-powered chat tab with its own tool surface in `lib/coach/shared.ts`) was **removed at Antoine's request**: it billed against separate Anthropic API credits, not his claude.ai Max subscription, and the MCP connector (3.11a) already gives Claude full access to the app through that subscription. Claude-facing capability now lives in exactly one place: `lib/mcp/tools.ts`.
 
@@ -577,6 +586,18 @@ unique (user_id, email)
 -- have several. Tokens are never returned to the client — read only by the
 -- inbound email webhook (service-role client) or by
 -- /api/gmail/{connect,callback,disconnect} (the owner's own session).
+```
+
+### `people`
+```sql
+id          uuid primary key default gen_random_uuid()
+user_id     uuid references auth.users(id) on delete cascade not null
+name        text not null
+notes       text
+created_at  timestamptz not null default now()
+updated_at  timestamptz not null default now()
+deleted_at  timestamptz   -- soft delete (Trash, 3.12)
+-- tasks.person_id (uuid, on delete set null) links tasks here (3.10a)
 ```
 
 ### `google_calendar_connections`

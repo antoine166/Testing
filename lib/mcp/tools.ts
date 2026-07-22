@@ -690,6 +690,105 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
   );
 
   server.registerTool(
+    "list_people",
+    {
+      title: "List people",
+      description:
+        "Antoine's people list (the lightweight person layer — not a CRM). Each person can have " +
+        "tasks linked via tasks.person_id and agenda items matched by name.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const { data, error } = await admin
+        .from("people")
+        .select("*")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("name");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "create_person",
+    {
+      title: "Create person",
+      description: "Add a person (name + optional notes) to link tasks and agendas against.",
+      inputSchema: {
+        name: z.string().min(1),
+        notes: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ name, notes }) => {
+      const trimmed = name.trim();
+      if (!trimmed) return fail("Name is required");
+      const { data, error } = await admin
+        .from("people")
+        .insert({ user_id: userId, name: trimmed, notes: notes?.trim() ? notes : null })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_person",
+    {
+      title: "Update person",
+      description: "Rename a person or update their notes.",
+      inputSchema: {
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        notes: z.string().nullable().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, name, notes }) => {
+      const updates: Record<string, unknown> = {};
+      if (name !== undefined) {
+        const trimmed = name.trim();
+        if (!trimmed) return fail("Name cannot be empty");
+        updates.name = trimmed;
+      }
+      if (notes !== undefined) updates.notes = notes;
+      const { data, error } = await admin
+        .from("people")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_person",
+    {
+      title: "Delete person",
+      description:
+        "Move a person to trash (30-day recovery via restore_from_trash). Their linked tasks and " +
+        "agenda items are untouched.",
+      inputSchema: { id: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin
+        .from("people")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ trashed: id });
+    },
+  );
+
+  server.registerTool(
     "search",
     {
       title: "Search everything",
@@ -796,6 +895,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .optional()
           .describe("GTD context tag like \"calls\", \"errands\", \"computer\" — free text, no @ prefix."),
         domain_id: z.string().uuid().optional(),
+        person_id: z.string().uuid().optional().describe("Link to a person (list_people)"),
         project_id: z.string().uuid().optional(),
         priority: z.enum(TASK_PRIORITIES).optional(),
         due_date: z.string().optional().describe("YYYY-MM-DD"),
@@ -857,6 +957,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       link,
       context,
       domain_id,
+      person_id,
       project_id,
       priority,
       due_date,
@@ -882,6 +983,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           link: link && link.trim() ? link.trim() : undefined,
           context: context && context.trim() ? context.trim() : undefined,
           domain_id: domain_id ?? null,
+          person_id: person_id ?? null,
           project_id: project_id ?? null,
           priority,
           due_date,
@@ -922,6 +1024,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .optional()
           .describe("GTD context tag (free text, no @ prefix), or null to clear."),
         domain_id: z.string().uuid().nullable().optional(),
+        person_id: z.string().uuid().nullable().optional().describe("Link to a person, or null to unlink"),
         project_id: z.string().uuid().nullable().optional(),
         status: z.enum(TASK_STATUSES).optional(),
         priority: z.enum(TASK_PRIORITIES).optional(),
