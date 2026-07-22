@@ -50,7 +50,7 @@ export default function LogbookPage() {
               <h2 className="mb-2 border-b border-zinc-200 pb-1 text-sm font-semibold text-zinc-700 dark:border-zinc-800 dark:text-zinc-300">
                 {label}
               </h2>
-              <ul className="inset-group">
+              <ul className="space-y-2">
                 {renderGroupedEntries(groupRecurringTasks(monthTasks), {
                   domains,
                   projects,

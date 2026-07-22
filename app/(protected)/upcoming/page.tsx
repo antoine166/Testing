@@ -114,7 +114,7 @@ export default function UpcomingPage() {
                     <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                       Appointments
                     </h3>
-                    <ul className="inset-group">{renderGroupedEntries(appointments, commonProps)}</ul>
+                    <ul className="space-y-2">{renderGroupedEntries(appointments, commonProps)}</ul>
                   </div>
                 )}
                 {planned.length > 0 && (
@@ -124,7 +124,7 @@ export default function UpcomingPage() {
                         Planned
                       </h3>
                     )}
-                    <ul className="inset-group">{renderGroupedEntries(planned, commonProps)}</ul>
+                    <ul className="space-y-2">{renderGroupedEntries(planned, commonProps)}</ul>
                   </>
                 )}
               </div>

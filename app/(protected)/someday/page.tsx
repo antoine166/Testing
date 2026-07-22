@@ -147,7 +147,7 @@ export default function SomedayPage() {
               <h2 className="mb-2 text-sm font-semibold text-amber-700 dark:text-amber-500">
                 🔔 Ready to revisit ({readyToRevisit.length})
               </h2>
-              <ul className="inset-group">
+              <ul className="space-y-2">
                 {readyToRevisit.map((task) => (
                   <TaskRow key={task.id} task={task} {...rowProps} />
                 ))}
@@ -155,7 +155,7 @@ export default function SomedayPage() {
             </div>
           )}
           {rest.length > 0 && (
-            <ul className="inset-group">
+            <ul className="space-y-2">
               {rest.map((task) => (
                 <TaskRow key={task.id} task={task} {...rowProps} />
               ))}
