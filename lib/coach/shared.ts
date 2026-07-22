@@ -10,6 +10,7 @@ import {
 import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
 import { describeRecurrence } from "@/lib/recurring-tasks/types";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
+import { syncTaskCalendarEvent, listGoogleCalendarEvents } from "@/lib/google-calendar/sync";
 
 // Domain restore stays app-only alongside domain deletion.
 const COACH_RESTORABLE_TRASH_TYPES = [
@@ -26,6 +27,21 @@ const COACH_RESTORABLE_TRASH_TYPES = [
 export const MODEL = "claude-sonnet-5";
 
 export const TOOLS: Tool[] = [
+  {
+    name: "list_google_calendar_events",
+    description:
+      "Antoine's real calendar events (from his connected Google Calendar accounts) in a date " +
+      "range — the hard landscape around which tasks get planned. Excludes events Life OS itself " +
+      "pushed from time-blocked tasks. Errors if no account is connected.",
+    input_schema: {
+      type: "object",
+      properties: {
+        start_date: { type: "string", description: "YYYY-MM-DD, inclusive" },
+        end_date: { type: "string", description: "YYYY-MM-DD, inclusive" },
+      },
+      required: ["start_date", "end_date"],
+    },
+  },
   {
     name: "create_task",
     description:
@@ -1413,6 +1429,22 @@ export async function executeTool(
   name: string,
   input: Record<string, unknown>,
 ): Promise<string> {
+  if (name === "list_google_calendar_events") {
+    const start = typeof input.start_date === "string" ? input.start_date : "";
+    const end = typeof input.end_date === "string" ? input.end_date : "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || start > end) {
+      return "Error: start_date and end_date must be YYYY-MM-DD with start_date <= end_date";
+    }
+    const events = await listGoogleCalendarEvents(userId, start, end);
+    if (events === null) {
+      return "Error: no Google Calendar connected — Antoine can connect one in Settings.";
+    }
+    if (events.length === 0) return "No events in that range.";
+    return events
+      .map((e) => `${e.all_day ? e.start : e.start.replace("T", " ").slice(0, 16)} — ${e.title}${e.account ? ` (${e.account})` : ""}`)
+      .join("\n");
+  }
+
   if (name === "create_task") {
     const title = typeof input.title === "string" ? input.title.trim() : "";
     if (!title) return "Error: title is required";
@@ -1453,6 +1485,9 @@ export async function executeTool(
       .single();
 
     if (error) return `Error: ${error.message}`;
+    if (data.scheduled_date && data.scheduled_time) {
+      await syncTaskCalendarEvent(userId, data.id);
+    }
     return `Created task "${data.title}" (${data.domain_id ? "processed" : "in Inbox"}).`;
   }
 
@@ -1727,6 +1762,7 @@ export async function executeTool(
     if (justCompleted && data.recurring_template_id) {
       await generateNextCompletionOccurrence(supabase, data.recurring_template_id, today);
     }
+    await syncTaskCalendarEvent(userId, taskId);
     return `Updated task "${data.title}".`;
   }
 
@@ -1771,6 +1807,7 @@ export async function executeTool(
       .eq("id", taskId);
 
     if (error) return `Error: ${error.message}`;
+    await syncTaskCalendarEvent(userId, taskId);
     return "Moved to Trash.";
   }
 
@@ -1810,6 +1847,7 @@ export async function executeTool(
       return `Project "${project.name}" created, but couldn't trash the original task: ${trashError.message}`;
     }
 
+    await syncTaskCalendarEvent(userId, taskId);
     return `Converted to project "${project.name}".`;
   }
 

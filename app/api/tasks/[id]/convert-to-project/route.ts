@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -59,6 +60,8 @@ export async function POST(_request: Request, { params }: RouteParams) {
       { status: 500 },
     );
   }
+
+  await syncTaskCalendarEvent(user.id, id);
 
   return NextResponse.json(project, { status: 201 });
 }
