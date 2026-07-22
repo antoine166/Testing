@@ -483,11 +483,7 @@ export default function TaskRow({
                 type="date"
                 value={dueDate}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  setDueDate(value);
-                  // Picking a due date with no scheduled date yet assumes
-                  // you'd do it the same day — still freely editable after.
-                  if (value && !scheduledDate) setScheduledDate(value);
+                  setDueDate(e.target.value);
                 }}
                 className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
@@ -500,7 +496,6 @@ export default function TaskRow({
                 onChange={(e) => {
                   const value = e.target.value;
                   setScheduledDate(value);
-                  if (value && !dueDate) setDueDate(value);
                   if (!value) setScheduledTime("");
                 }}
                 title="When you plan to work on it — not a commitment. Only set this if you actually intend to get to it that day; otherwise leave it and pull the task from Anytime when you're ready."

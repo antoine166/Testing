@@ -833,7 +833,6 @@ export default function TodayDashboard() {
                     onChange={(e) => {
                       const value = e.target.value;
                       setNewTaskDueDate(value);
-                      if (value && !newTaskScheduledDate) setNewTaskScheduledDate(value);
                     }}
                     className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
@@ -852,7 +851,6 @@ export default function TodayDashboard() {
                     onChange={(e) => {
                       const value = e.target.value;
                       setNewTaskScheduledDate(value);
-                      if (value && !newTaskDueDate) setNewTaskDueDate(value);
                     }}
                     className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />

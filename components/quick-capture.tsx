@@ -289,7 +289,6 @@ export default function QuickCapture() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setDueDate(value);
-                    if (value && !scheduledDate) setScheduledDate(value);
                   }}
                   aria-label="Due date"
                   title="Due date"
@@ -301,7 +300,6 @@ export default function QuickCapture() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setScheduledDate(value);
-                    if (value && !dueDate) setDueDate(value);
                   }}
                   aria-label="Scheduled date"
                   title="Scheduled date"

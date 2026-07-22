@@ -17,6 +17,7 @@ const SMART_LISTS = [
   { href: "/checkin", label: "Check-in", icon: "🌡️", iconBg: "#84cc16" },
   { href: "/inbox", label: "Inbox", icon: "📥", iconBg: "#3b82f6" },
   { href: "/", label: "Today", icon: "★", iconBg: "#eab308" },
+  { href: "/calendar", label: "Calendar", icon: "🗓️", iconBg: "#dc2626" },
   { href: "/do-now", label: "Do Now", icon: "🎯", iconBg: "#22c55e" },
   { href: "/upcoming", label: "Upcoming", icon: "📅", iconBg: "#ef4444" },
   { href: "/anytime", label: "Anytime", icon: "📚", iconBg: "#14b8a6" },

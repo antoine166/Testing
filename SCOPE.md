@@ -117,6 +117,17 @@ Shows (in order):
 3. Tasks scheduled for today, sorted by priority
 4. Any overdue tasks (past scheduled date, not done)
 
+### 3.5a Calendar (Hard Landscape)
+GTD's calendar, visualized at `/calendar` — week and day views over the existing `tasks` fields (no separate storage). Three visually distinct kinds of entry, per Allen's "hard landscape" rule:
+
+- **Timed blocks** (`scheduled_date` + `scheduled_time`) on the time grid — real appointments and deliberate time blocks
+- **All-day chips** (`scheduled_date` only) in a strip above the grid — intentions ("I plan to work on this today"), kept visually separate so they never masquerade as commitments
+- **Due flags** (`due_date`) — ⚑ deadline markers, styled differently from both; a deadline is a fact, not a plan for your time
+
+Time-blocking: drag a task from the "To schedule" tray (or between slots) on desktop; tap-to-place on mobile. Dropping on the all-day strip clears the time. Blocks are colored by domain and sized by `estimated_minutes` (default 60).
+
+**Due and scheduled dates are deliberately independent** — no auto-filling one from the other (an earlier behavior, removed when this view was added): a calendar of soft intentions dressed as hard commitments is a calendar you learn to ignore.
+
 ### 3.6 Daily Capacity Check-in
 A 10-second prompt Antoine completes each morning.
 
@@ -249,6 +260,7 @@ Life OS
 ─────────────────────
 📥 Inbox        (blue)    ← unprocessed: no domain, not someday, not done
 ★  Today        (yellow)  ← the daily dashboard (check-in/habits/scheduled/overdue), at "/"
+🗓️ Calendar     (red)     ← week/day time grid: timed blocks, all-day chips, due flags (§3.5a)
 📅 Upcoming     (red)     ← scheduled_date in the future, grouped by date
 📚 Anytime      (teal)    ← has a domain, no date, not someday — actionable whenever
 📦 Someday      (amber)   ← tasks explicitly marked "Someday" from the task edit form
