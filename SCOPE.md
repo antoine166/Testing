@@ -271,6 +271,9 @@ Soft delete with a 30-day recovery window, so an accidental delete is never perm
 
 ---
 
+### 3.12a Library Resurfacing
+Notes that come back out (the classic external-brain failure is that they never do): the daily digest surfaces **one Library item a day**. Selection (`lib/knowledge/resurface.ts`) is deterministic per day but rotates through the 30 least-recently-touched items (day-number mod count), so neglected notes get turns instead of one stubborn oldest note repeating. Exposed as `resurfaced_note` on both `GET /api/digest` and MCP's `get_today_summary` (same pick, same story on both surfaces); the morning-digest routine's prompt asks Claude to weave it in as a "remember this?" beat.
+
 ### 3.13 Global Search
 One box, the whole brain: `GET /api/search?q=` runs case-insensitive substring matches across **tasks** (title + notes, including completed — search is how history gets found), **projects** (name/description/purpose/outcome vision/brainstorm), **knowledge items** (title + content), **tickler notes**, and **agenda items**, each bucket capped at 20. The sidebar search field routes to `/search?q=`, which shows grouped results with inline snippets and links into the owning list (done tasks → Logbook, someday → Someday, waiting → Waiting For, etc.). MCP parity: the `search` tool gives Claude the same reach.
 

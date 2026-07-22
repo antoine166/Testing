@@ -11,6 +11,7 @@ import {
 } from "@/lib/workouts/weekly";
 import { TRASH_CONFIG, TRASH_TYPES, type TrashType } from "@/lib/trash";
 import { syncTaskCalendarEvent, listGoogleCalendarEvents } from "@/lib/google-calendar/sync";
+import { pickResurfacedNote } from "@/lib/knowledge/resurface";
 import {
   generateNextCompletionOccurrence,
   seedCompletionTemplate,
@@ -3260,6 +3261,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           title: t.title,
           follow_up_date: t.follow_up_date,
         })),
+        // One Library note a day, resurfaced — deterministic per day, shared
+        // with /api/digest so both surfaces tell the same story.
+        resurfaced_note: await pickResurfacedNote(admin, userId, today),
       });
     },
   );
