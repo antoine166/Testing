@@ -25,7 +25,7 @@ Core value: **capture must be frictionless.** If Quick Capture ever gets more co
 | Database + Auth | Supabase (Postgres + Supabase Auth) |
 | Hosting | Vercel |
 | Styling | Tailwind CSS |
-| AI (Phase 2+) | Anthropic API — `claude-sonnet-5` |
+| AI | Claude via the MCP connector (3.11a) — no server-side API key; the in-app Coach was removed (see 3.11) |
 
 ---
 
@@ -232,30 +232,13 @@ GTD separates a project's *support material* (reference, research, notes) from i
 - Each project card on the Projects page shows a **Reference** section listing its attached items (URL items link out, others link to the Library)
 - MCP + Coach parity: `create_knowledge_item`/`update_knowledge_item` accept `project_id` on both surfaces
 
-### 3.11 Coach *(Phase 2)*
-AI assistant powered by the Anthropic API (`claude-sonnet-5`).
+### 3.11 Coach *(removed July 2026)*
+The in-app AI Coach (an Anthropic-API-powered chat tab with its own tool surface in `lib/coach/shared.ts`) was **removed at Antoine's request**: it billed against separate Anthropic API credits, not his claude.ai Max subscription, and the MCP connector (3.11a) already gives Claude full access to the app through that subscription. Claude-facing capability now lives in exactly one place: `lib/mcp/tools.ts`.
 
-- Has read access to Antoine's domains, projects (including subprojects), tasks, habits, routines,
-  checklists, knowledge library folders, and today's check-in
-- Antoine can ask it questions: "What should I focus on today?", "How are my habits going?"
-- Responds with context-aware coaching, not generic advice
-- **Can also take action** via tool use, broadly: create/update/delete tasks and projects
-  (including subprojects), create/update domains, log/unlog habits, create/update/delete workouts
-  and log/unlog Training Log entries, create/update/delete routines
-  and append steps to them, create/update/delete/reset checklists and append items to them, and
-  create/organize knowledge library items and folders
-- **Every tool call requires Antoine's explicit approve/decline before it runs** — this is the
-  safety mechanism, not a restricted tool list. The app shows exactly what's proposed; Coach never
-  auto-executes
-- Deliberately **not** available to Coach: editing/deleting one existing routine step, checklist
-  item, or knowledge library item (Coach's context lists routines/checklists/folders by name+ID so
-  it can act on them, but not their individual child items — that granularity is app/MCP-only,
-  where a list-then-act tool loop is available). Domain deletion and permanently purging trashed
-  items (bypassing the 30-day recovery window) are excluded on both Coach and MCP — kept app-only
-  as the two genuinely irreversible actions
+What replaced its one load-bearing feature: the Coach's guided Weekly Review became a no-AI guided flow at `/weekly-review` (Get Clear → Get Current → Get Creative), stepping through the app's real numbers — inbox count, calendar, next-action lists, Waiting For follow-ups due, stalled projects, Someday/tickler, horizons — with links into each list. Don't rebuild the Coach or reintroduce `ANTHROPIC_API_KEY` without asking.
 
 ### 3.11a Claude Connector (MCP) *(Phase 2)*
-A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claude.ai or in the Claude Desktop app — not just the in-app Coach tab — and have it read and manage his Life OS data.
+A remote MCP server (`/api/mcp`) so Antoine can talk to Claude on claude.ai or in the Claude Desktop app and have it read and manage his Life OS data — **the** Claude-facing surface of the app (the in-app Coach tab that once complemented it is gone, see 3.11).
 
 - Registered in claude.ai as a custom connector (Settings → Connectors → Add custom connector), URL `https://<vercel-domain>/api/mcp`
 - claude.ai's connector flow requires real OAuth (it auto-registers itself as a client and won't accept a plain shared token), so `/api/mcp` is its own OAuth 2.1 + PKCE authorization server (`/api/mcp/register`, `/api/mcp/authorize`, `/api/mcp/token`, discovery documents at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`) — gated by Antoine's existing Supabase Auth login, not a separate account system
@@ -268,12 +251,12 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claud
   and their items (create/update/delete/reset), the knowledge library (items: create/update/delete;
   folders: create/update), and the daily check-in (read/write). Plus `get_today_summary` for "what
   should I focus on today" style coaching
-- **Deliberately excluded, on both MCP and Coach** — the two genuinely irreversible actions:
+- **Deliberately excluded** — the genuinely irreversible actions:
   domain deletion (cascades to all of that domain's projects/tasks with no MCP-side confirmation
   step) and permanently purging a trashed item before its 30-day recovery window ends. Both stay
   app-only, where Antoine acts on them directly rather than through a tool call
 - Knowledge folder deletion is also excluded (app-only) — unlike knowledge items, folders hard-delete immediately with no trash/recovery step, so it carries the same one-way risk as the two exclusions above
-- No app-side "approve before it runs" step exists here the way it does for the in-app Coach — MCP tool calls execute immediately once Claude decides to call them, with only whatever confirmation habits the MCP client itself (claude.ai / Claude Desktop) provides. That's the tradeoff for the broader scope
+- MCP tool calls execute immediately once Claude decides to call them, with only whatever confirmation habits the MCP client itself (claude.ai / Claude Desktop) provides
 - **Proactive daily digest**: a scheduled Claude Routine (external to this codebase — configured on the Claude platform, not a Vercel cron) fires daily at 12:00 UTC (8am Eastern, will drift an hour across DST since the cron itself has no timezone) and pushes Antoine a short coaching nudge — habits not yet logged (and which are at-risk, see 3.7), anything overdue, one thing to prioritize. As actually configured, it self-binds to a persistent Claude session (rather than spawning fresh each time) that already has the Life OS MCP connector enabled, and calls `get_today_summary` through it directly. `GET /api/digest` (a plain endpoint gated by a shared secret, `DIGEST_ACCESS_TOKEN`, rather than OAuth — for a curl-based routine that isn't tied to any specific Claude session) still exists in this codebase as the originally-designed alternative, unused by the routine as currently configured. Reconfigured directly on the Claude platform if the time, content, or mechanism needs to change, not in this repo
 
 ### 3.12 Trash *(Phase 4)*
@@ -309,7 +292,7 @@ Life OS
   Project name
 + New List                         ← links to /domains
 ─────────────────────
-Habits · Training Log · Routines · Checklists · Check-in · Library · Coach · Analytics · Trash · Settings
+Habits · Training Log · Weekly Review · Routines · Checklists · Check-in · Library · Analytics · Trash · Settings
 ─────────────────────
 user@email · Log out
 ```
@@ -317,7 +300,7 @@ user@email · Log out
 - Only Inbox and Today show a count badge, matching Things
 - The Inbox/Upcoming/Anytime/Someday/Logbook views and the `someday` flag are covered in §3.4 (Tasks)
 - Quick Capture stays a floating "+" button (`components/quick-capture.tsx`), unaffected by this — frictionless capture doesn't touch navigation
-- Domains/Projects, Habits, Routines, Checklists, Library, Coach, Analytics, Check-in, Trash, and Settings all keep their existing internal page designs for now — this redesign covers the navigation shell and the Tasks views, not every page's visual style
+- Domains/Projects, Habits, Routines, Checklists, Library, Analytics, Check-in, Trash, and Settings all keep their existing internal page designs for now — this redesign covers the navigation shell and the Tasks views, not every page's visual style
 
 ---
 
@@ -728,13 +711,13 @@ Supabase is called **server-side only** (via the service-role client or the user
 ### Phase 2 — Routines, Library, Coach
 - [x] Routines builder + Today view integration (due-today routines with their steps surface on `/`, via `components/today-dashboard.tsx`)
 - [x] Knowledge library (CRUD + search + tags, plus nested folders — 3.9)
-- [x] Coach (Anthropic API) — now full read/write per 3.11, not read-only as originally scoped; see 3.11 for current tool scope
+- [x] ~~Coach (Anthropic API)~~ — built, then removed July 2026 (see 3.11); Claude access is via the MCP connector (3.11a)
 - [x] Claude Connector (MCP) — remote MCP server for claude.ai / Claude Desktop (3.11a), also expanded to full read/write per 3.11a
 
 ### Phase 4 — Polish
 - [ ] Supabase Realtime (live updates across tabs) — infra shipped (publication membership, `REPLICA IDENTITY FULL`); a cross-tab bug (edits not propagating) was root-caused to the client never forwarding its JWT to Realtime on `INITIAL_SESSION` and a fix shipped, pending live confirmation
 - [x] Mobile UX pass (touch targets, hover-only controls, wrapping fixes audited and fixed); no dedicated live-device QA pass yet
-- [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window); weekly review is covered conversationally by Coach's Weekly Review mode (3.11) rather than a separate static view
+- [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window); weekly review is a guided no-AI flow at `/weekly-review` (see 3.11)
 - [x] Data export (`GET /api/export` — full JSON export of all content types)
 - [x] Trash / soft delete with 30-day recovery (3.12)
 - [x] Task image attachments (3.4), including from forwarded emails (3.1a)

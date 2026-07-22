@@ -1,5 +1,5 @@
 // GTD: every active project must always have a next action. Shared by
-// Coach's Weekly Review (lib/coach/shared.ts) and the Projects/Domains
+// Weekly Review page (app/(protected)/weekly-review) and the Projects/Domains
 // pages, so "stalled" means the same thing whether it's caught by a weekly
 // sweep or flagged the moment it happens — one predicate, not two that can
 // drift apart.

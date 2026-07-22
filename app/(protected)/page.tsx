@@ -18,7 +18,7 @@ export default async function Home() {
           <p className="text-sm text-zinc-500">Signed in as {user?.email}</p>
         </div>
         <Link
-          href="/coach?mode=weekly-review"
+          href="/weekly-review"
           className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
         >
           🔭 Start Weekly Review
