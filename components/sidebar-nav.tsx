@@ -32,6 +32,7 @@ const SMART_LISTS = [
 
 const UTILITY_LINKS = [
   { href: "/agendas", label: "Agendas", icon: "🗣️", iconBg: "#0d9488" },
+  { href: "/people", label: "People", icon: "👤", iconBg: "#2563eb" },
   { href: "/projects", label: "All Projects", icon: "🗂️", iconBg: "#0891b2" },
   { href: "/tasks", label: "All Tasks", icon: "📋", iconBg: "#6366f1" },
   { href: "/analytics", label: "Analytics", icon: "📈", iconBg: "#f43f5e" },

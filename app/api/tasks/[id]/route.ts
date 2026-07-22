@@ -62,6 +62,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("domain_id" in body) {
     updates.domain_id = typeof body.domain_id === "string" ? body.domain_id : null;
   }
+  if ("person_id" in body) {
+    updates.person_id = typeof body.person_id === "string" ? body.person_id : null;
+  }
   if (typeof body.priority === "string") {
     updates.priority = body.priority;
   }

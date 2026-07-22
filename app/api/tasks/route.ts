@@ -47,6 +47,7 @@ export async function POST(request: Request) {
         typeof body.context === "string" && body.context.trim() ? body.context.trim() : undefined,
       project_id: typeof body.project_id === "string" ? body.project_id : null,
       domain_id: typeof body.domain_id === "string" ? body.domain_id : null,
+      person_id: typeof body.person_id === "string" ? body.person_id : null,
       status: typeof body.status === "string" ? body.status : undefined,
       priority: typeof body.priority === "string" ? body.priority : undefined,
       due_date: typeof body.due_date === "string" ? body.due_date : undefined,
