@@ -279,11 +279,18 @@ export default function TaskRow({
   // Un-completing (in views where done tasks are still shown) stays instant.
   const [completing, setCompleting] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
+  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Holds the click-time "commit the completion" closure while the animation
+  // plays, so an early unmount (fast navigation away) can still fire the save
+  // instead of silently dropping it.
+  const pendingCommitRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     return () => {
+      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
       if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+      pendingCommitRef.current?.();
     };
   }, []);
 
@@ -309,13 +316,21 @@ export default function TaskRow({
     }
     if (completing) return;
     setCompleting(true);
-    // Fire the real update immediately — never delay the actual save behind
-    // the animation, or navigating away quickly (before the timeout below
-    // fires) would silently cancel the completion. The timeout only paces
-    // the fade-out visually; on a fast reload the row may just unmount a
-    // little before it finishes fading, which is a fine tradeoff.
-    onToggleDone(task);
-    completeTimeoutRef.current = setTimeout(() => setFadingOut(true), 900);
+
+    // Play the animation *before* saving. Views that hide done tasks refetch
+    // and unmount this row the instant the update lands, so firing the save
+    // on click (as this used to) removed the row before the strikethrough
+    // and fade ever showed. Sequence instead: checkmark pop + strikethrough
+    // (~0–300ms) → fade + shrink (450ms) → commit the save (1150ms), by which
+    // point the row is already invisible when the parent drops it.
+    const commit = () => {
+      if (pendingCommitRef.current !== commit) return; // already committed
+      pendingCommitRef.current = null;
+      onToggleDone(task);
+    };
+    pendingCommitRef.current = commit; // so an early unmount still saves it
+    fadeTimeoutRef.current = setTimeout(() => setFadingOut(true), 450);
+    completeTimeoutRef.current = setTimeout(commit, 1150);
   }
   const [title, setTitle] = useState(task.title);
   const [link, setLink] = useState(task.link ?? "");
