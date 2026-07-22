@@ -684,7 +684,7 @@ export default function TaskRow({
             {completing && (
               <span
                 aria-hidden="true"
-                className="absolute left-0 top-1/2 h-px w-full origin-left scale-x-0 animate-[task-strike_250ms_ease-out_forwards] bg-zinc-900 dark:bg-zinc-100"
+                className="task-strike-line absolute left-0 top-1/2 h-px w-full bg-zinc-900 dark:bg-zinc-100"
               />
             )}
           </p>
