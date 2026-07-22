@@ -412,7 +412,7 @@ export default function TaskRow({
 
   if (editing) {
     return (
-      <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <li className="bg-[var(--surface)] px-4 py-3">
         <div className="space-y-2">
           <div className="flex items-start justify-between gap-2">
             <input
@@ -632,7 +632,7 @@ export default function TaskRow({
 
   return (
     <li
-      className={`flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 transition-all duration-700 dark:border-zinc-800 ${
+      className={`flex items-start justify-between gap-3 bg-[var(--surface)] px-4 py-3 transition-all duration-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
         fadingOut ? "scale-95 opacity-0" : "scale-100 opacity-100"
       }`}
     >
