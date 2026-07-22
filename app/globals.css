@@ -84,3 +84,14 @@ body {
     transform: scaleX(1);
   }
 }
+
+/* The strikethrough line owns its transform here, NOT via Tailwind's
+   `scale-x-0` utility. In Tailwind v4 that utility emits the modern `scale`
+   property (`scale: 0 1`), which is independent of — and multiplies with —
+   the `transform: scaleX()` this keyframe animates, so the line stayed at
+   zero width forever. `both` fill-mode applies the 0% (zero-width) state
+   immediately so there's no first-frame flash of a full-width line. */
+.task-strike-line {
+  transform-origin: left;
+  animation: task-strike 250ms ease-out both;
+}
