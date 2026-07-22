@@ -130,6 +130,9 @@ Progress counter, per-item Skip, exit anytime. The queue is snapshotted at start
 
 **Inbox definition change**: `waiting_for` tasks are excluded from the Inbox — once delegated, an item has been processed and lives on the Waiting For list.
 
+### 3.4b Mind Sweep (guided capture)
+Allen's "incompletion trigger lists" as a guided flow — the capture-side partner to Clarify Mode (3.4a). The Inbox's "🧠 Mind Sweep" button (also offered when the inbox is empty — that's the point) walks ~18 condensed trigger prompts (Professional → Personal → wrap-up), each with a rapid-capture box: type, Enter, captured to the Inbox as-is. Deliberately no organizing mid-sweep (no domain/priority/date fields) — capture and clarify are separate steps, and the end screen offers "⚡ Clarify them now" to run the new items straight through Clarify Mode. No schema changes; capture parity for Claude/Coach already exists via create_task.
+
 ### 3.5 Today View
 Antoine's daily dashboard.
 

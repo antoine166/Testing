@@ -10,6 +10,7 @@ import RecurrenceFields, {
 import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
 import ClarifyFlow from "@/components/clarify-flow";
+import MindSweepFlow from "@/components/mind-sweep-flow";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
@@ -70,6 +71,7 @@ export default function InboxPage() {
   // Snapshot of ids when Clarify starts, so the flow's order and progress
   // count stay stable while individual actions reshuffle the live list.
   const [clarifyQueue, setClarifyQueue] = useState<string[] | null>(null);
+  const [sweeping, setSweeping] = useState(false);
 
   function resetForm() {
     setTitle("");
@@ -470,6 +472,15 @@ export default function InboxPage() {
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>
+      ) : sweeping ? (
+        <MindSweepFlow
+          onCreateTask={createTask}
+          onStartClarify={() => {
+            setSweeping(false);
+            setClarifyQueue(inboxTasks.map((t) => t.id));
+          }}
+          onExit={() => setSweeping(false)}
+        />
       ) : clarifyQueue ? (
         <ClarifyFlow
           queue={clarifyQueue}
@@ -485,7 +496,16 @@ export default function InboxPage() {
           onExit={() => setClarifyQueue(null)}
         />
       ) : inboxTasks.length === 0 ? (
-        <p className="text-sm text-zinc-500">Nothing unprocessed — inbox is clear.</p>
+        <div className="space-y-3">
+          <p className="text-sm text-zinc-500">Nothing unprocessed — inbox is clear.</p>
+          <button
+            onClick={() => setSweeping(true)}
+            title="GTD mind sweep — guided trigger list, rapid capture to the Inbox"
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            🧠 Mind Sweep — empty your head
+          </button>
+        </div>
       ) : (
         <>
           <div className="mb-3 flex items-center justify-between gap-2">
@@ -493,12 +513,21 @@ export default function InboxPage() {
               💡 GTD&apos;s two-minute rule: if something here takes less than two minutes, just do
               it now instead of filing it.
             </p>
-            <button
-              onClick={() => setClarifyQueue(inboxTasks.map((t) => t.id))}
-              className="shrink-0 rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-            >
-              ⚡ Clarify ({inboxTasks.length})
-            </button>
+            <div className="flex shrink-0 gap-2">
+              <button
+                onClick={() => setSweeping(true)}
+                title="GTD mind sweep — guided trigger list, rapid capture to the Inbox"
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              >
+                🧠 Mind Sweep
+              </button>
+              <button
+                onClick={() => setClarifyQueue(inboxTasks.map((t) => t.id))}
+                className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              >
+                ⚡ Clarify ({inboxTasks.length})
+              </button>
+            </div>
           </div>
           <ul className="space-y-2">
             {inboxTasks.map((task) => (
