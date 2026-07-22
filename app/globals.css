@@ -95,3 +95,50 @@ body {
   transform-origin: left;
   animation: task-strike 250ms ease-out both;
 }
+
+/* Task completion, final beat: after the check + strikethrough, the row
+   flicks off to the right like dealing a card off a deck (replaces the old
+   fade-and-shrink). ease-in accelerates it away. */
+.task-swipe-out {
+  transition:
+    transform 550ms cubic-bezier(0.4, 0, 1, 1),
+    opacity 550ms ease-in;
+  transform: translateX(110%);
+  opacity: 0;
+}
+
+/* Habit log: a progress ring sweeps to its new fill. Any change to the
+   stroke offset (0→full for daily; proportional for times/week) animates.
+   The pop is a one-shot scale bump when a log lands — no Tailwind `scale-*`
+   utility on this element, so the transform is uncontested. */
+.habit-ring-progress {
+  transition: stroke-dashoffset 550ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.habit-ring-pop {
+  animation: habit-ring-pop 420ms ease-out;
+}
+@keyframes habit-ring-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Calmer days / accessibility: keep the state change, drop the motion. */
+@media (prefers-reduced-motion: reduce) {
+  .task-swipe-out {
+    transition: opacity 200ms ease;
+    transform: none;
+  }
+  .habit-ring-progress {
+    transition: none;
+  }
+  .habit-ring-pop {
+    animation: none;
+  }
+}

@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import Link from "next/link";
 import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
 import { todayLocal } from "@/lib/date";
+import { tapHaptic } from "@/lib/haptics";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -316,6 +317,7 @@ export default function TaskRow({
     }
     if (completing) return;
     setCompleting(true);
+    tapHaptic();
 
     // Play the animation *before* saving. Views that hide done tasks refetch
     // and unmount this row the instant the update lands, so firing the save
@@ -632,8 +634,8 @@ export default function TaskRow({
 
   return (
     <li
-      className={`flex items-start justify-between gap-3 rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3 transition-all duration-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
-        fadingOut ? "scale-95 opacity-0" : "scale-100 opacity-100"
+      className={`flex items-start justify-between gap-3 rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+        fadingOut ? "task-swipe-out" : ""
       }`}
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">

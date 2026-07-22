@@ -9,6 +9,73 @@ import {
   type HabitFrequency,
 } from "@/lib/habits/streaks";
 import { lastSevenDays } from "@/lib/date";
+import { tapHaptic } from "@/lib/haptics";
+
+const RING_R = 9;
+const RING_C = 2 * Math.PI * RING_R;
+
+/** The log control: a ring that sweeps to its fill (0→full for daily/
+ *  specific-days; proportional to the weekly target for times_per_week),
+ *  with a scale pop when a log lands. Replaces the plain checkbox. */
+function HabitRing({
+  fraction,
+  popping,
+  onClick,
+  label,
+}: {
+  fraction: number;
+  popping: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  const clamped = Math.max(0, Math.min(1, fraction));
+  const full = clamped >= 1;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      aria-pressed={full}
+      className={`relative shrink-0 ${popping ? "habit-ring-pop" : ""}`}
+    >
+      <svg width="26" height="26" viewBox="0 0 26 26" className="-rotate-90">
+        <circle
+          cx="13"
+          cy="13"
+          r={RING_R}
+          fill="none"
+          strokeWidth="2.5"
+          className="stroke-zinc-200 dark:stroke-zinc-700"
+        />
+        <circle
+          cx="13"
+          cy="13"
+          r={RING_R}
+          fill="none"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          className="habit-ring-progress stroke-emerald-500"
+          strokeDasharray={RING_C}
+          strokeDashoffset={RING_C * (1 - clamped)}
+        />
+      </svg>
+      {full && (
+        <svg
+          viewBox="0 0 24 24"
+          className="pointer-events-none absolute inset-0 m-auto h-3 w-3 text-emerald-500"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 12l5 5L20 6" />
+        </svg>
+      )}
+    </button>
+  );
+}
 
 function weekdayOf(dateStr: string): number {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -135,6 +202,25 @@ export default function HabitRow({
   const loggedToday = logs.some((l) => l.logged_date === today);
   const { current, longest } = computeStreak(habit, logs, today);
   const weekCount = habit.frequency === "times_per_week" ? countThisWeek(logs, today) : 0;
+  const [popping, setPopping] = useState(false);
+
+  const ringFraction =
+    habit.frequency === "times_per_week"
+      ? weekCount / (habit.target_count ?? 1)
+      : loggedToday
+        ? 1
+        : 0;
+
+  function handleRingClick() {
+    // Pop + buzz only when adding a log (not when un-logging today).
+    if (!loggedToday) {
+      setPopping(true);
+      tapHaptic();
+      setTimeout(() => setPopping(false), 450);
+    }
+    onToggle(habit, today, loggedToday);
+  }
+
   const domain = habit.domain_id ? domains.find((d) => d.id === habit.domain_id) : null;
   const displayColor = domain?.color ?? "#d4d4d8";
   const atRisk = isAtRisk(habit, logs, today);
@@ -260,10 +346,11 @@ export default function HabitRow({
           : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
-      <input
-        type="checkbox"
-        checked={loggedToday}
-        onChange={() => onToggle(habit, today, loggedToday)}
+      <HabitRing
+        fraction={ringFraction}
+        popping={popping}
+        onClick={handleRingClick}
+        label={loggedToday ? "Unlog today" : "Log today"}
       />
       <span
         className="h-4 w-4 shrink-0 rounded-full"
