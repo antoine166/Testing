@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { constantTimeEqual } from "@/lib/mcp/oauth";
+import { pickResurfacedNote } from "@/lib/knowledge/resurface";
 import { todayLocal, daysSince } from "@/lib/date";
 import { isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
 
@@ -84,5 +85,7 @@ export async function GET(request: Request) {
       days_waiting: daysSince(t.waiting_since),
     })),
     due_follow_ups: dueFollowUps.map((t) => ({ title: t.title, follow_up_date: t.follow_up_date })),
+    // One Library note a day, resurfaced — see lib/knowledge/resurface.ts.
+    resurfaced_note: await pickResurfacedNote(admin, owner.id, today),
   });
 }
