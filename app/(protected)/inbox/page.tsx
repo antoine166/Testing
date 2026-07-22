@@ -9,6 +9,7 @@ import RecurrenceFields, {
 } from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
+import ClarifyFlow from "@/components/clarify-flow";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
@@ -60,9 +61,15 @@ export default function InboxPage() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
+  // waiting_for is excluded: once delegated, an item lives on the Waiting
+  // For list — it's been processed, so it no longer belongs in the inbox.
   const inboxTasks = tasks.filter(
-    (t) => !t.domain_id && !t.someday && t.status !== "done",
+    (t) => !t.domain_id && !t.someday && !t.waiting_for && t.status !== "done",
   );
+
+  // Snapshot of ids when Clarify starts, so the flow's order and progress
+  // count stay stable while individual actions reshuffle the live list.
+  const [clarifyQueue, setClarifyQueue] = useState<string[] | null>(null);
 
   function resetForm() {
     setTitle("");
@@ -463,14 +470,36 @@ export default function InboxPage() {
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>
+      ) : clarifyQueue ? (
+        <ClarifyFlow
+          queue={clarifyQueue}
+          tasks={tasks}
+          domains={domains}
+          projects={projects}
+          onUpdate={handleUpdate}
+          onTrash={(id) => handleDelete(id, undefined, true)}
+          onToggleDone={toggleDone}
+          onConvertToProject={(id) => handleConvertToProject(id, true)}
+          onConvertToReference={(id) => handleConvertToKnowledgeItem(id, true)}
+          onCreateTask={createTask}
+          onExit={() => setClarifyQueue(null)}
+        />
       ) : inboxTasks.length === 0 ? (
         <p className="text-sm text-zinc-500">Nothing unprocessed — inbox is clear.</p>
       ) : (
         <>
-          <p className="mb-3 text-xs text-zinc-500">
-            💡 GTD&apos;s two-minute rule: if something here takes less than two minutes, just do
-            it now instead of filing it.
-          </p>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-xs text-zinc-500">
+              💡 GTD&apos;s two-minute rule: if something here takes less than two minutes, just do
+              it now instead of filing it.
+            </p>
+            <button
+              onClick={() => setClarifyQueue(inboxTasks.map((t) => t.id))}
+              className="shrink-0 rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            >
+              ⚡ Clarify ({inboxTasks.length})
+            </button>
+          </div>
           <ul className="space-y-2">
             {inboxTasks.map((task) => (
               <TaskRow
