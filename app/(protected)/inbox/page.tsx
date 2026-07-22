@@ -347,7 +347,6 @@ export default function InboxPage() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setDueDate(value);
-                    if (value && !scheduledDate) setScheduledDate(value);
                   }}
                   className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
@@ -366,7 +365,6 @@ export default function InboxPage() {
                   onChange={(e) => {
                     const value = e.target.value;
                     setScheduledDate(value);
-                    if (value && !dueDate) setDueDate(value);
                   }}
                   className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
