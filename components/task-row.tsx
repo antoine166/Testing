@@ -8,6 +8,9 @@ import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
 } from "@/components/recurrence-fields";
+import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
+import WaitingForFields from "@/components/waiting-for-fields";
+import TaskExtraFields from "@/components/task-extra-fields";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -41,7 +44,7 @@ export type Task = {
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
-export type TaskProject = { id: string; name: string };
+export type TaskProject = { id: string; name: string; domain_id: string | null };
 
 type Attachment = {
   id: string;
@@ -269,11 +272,62 @@ export default function TaskRow({
   const [showRecurrencePicker, setShowRecurrencePicker] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
   const attachmentRef = useRef<AttachmentStripHandle>(null);
+
+  // Completion animation: checkmark + strikethrough play immediately, then
+  // a brief fade before the real update actually fires — so marking a task
+  // done feels satisfying instead of the row just vanishing on reload.
+  // Un-completing (in views where done tasks are still shown) stays instant.
+  const [completing, setCompleting] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
+  const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+    };
+  }, []);
+
+  // Views that filter out done tasks unmount this row once the server
+  // confirms completion, so the fade-out is the last thing seen. Views that
+  // keep showing done tasks (Logbook, the full Tasks browse) don't unmount
+  // it — without this, it'd stay invisible forever instead of settling
+  // into its normal "done" look once the fade has had a moment to play.
+  useEffect(() => {
+    if (task.status === "done" && (completing || fadingOut)) {
+      const timeout = setTimeout(() => {
+        setCompleting(false);
+        setFadingOut(false);
+      }, 700);
+      return () => clearTimeout(timeout);
+    }
+  }, [task.status, completing, fadingOut]);
+
+  function handleToggleClick() {
+    if (task.status === "done") {
+      onToggleDone(task);
+      return;
+    }
+    if (completing) return;
+    setCompleting(true);
+    // Fire the real update immediately — never delay the actual save behind
+    // the animation, or navigating away quickly (before the timeout below
+    // fires) would silently cancel the completion. The timeout only paces
+    // the fade-out visually; on a fast reload the row may just unmount a
+    // little before it finishes fading, which is a fine tradeoff.
+    onToggleDone(task);
+    completeTimeoutRef.current = setTimeout(() => setFadingOut(true), 900);
+  }
   const [title, setTitle] = useState(task.title);
   const [link, setLink] = useState(task.link ?? "");
   const [notes, setNotes] = useState(task.notes ?? "");
-  const [domainId, setDomainId] = useState(task.domain_id ?? "");
-  const [projectId, setProjectId] = useState(task.project_id ?? "");
+  const {
+    domainId,
+    projectId,
+    setDomainId,
+    setProjectId,
+    filteredProjects,
+    reset: resetDomainProject,
+  } = useDomainProjectCascade(projects, task.domain_id ?? "", task.project_id ?? "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
@@ -292,8 +346,7 @@ export default function TaskRow({
     setTitle(task.title);
     setLink(task.link ?? "");
     setNotes(task.notes ?? "");
-    setDomainId(task.domain_id ?? "");
-    setProjectId(task.project_id ?? "");
+    resetDomainProject(task.domain_id ?? "", task.project_id ?? "");
     setStatus(task.status);
     setPriority(task.priority);
     setDueDate(task.due_date ?? "");
@@ -407,7 +460,7 @@ export default function TaskRow({
               className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             >
               <option value="">No project</option>
-              {projects.map((p) => (
+              {filteredProjects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -477,77 +530,27 @@ export default function TaskRow({
                 </option>
               ))}
             </select>
-            <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <input
-                type="checkbox"
-                checked={someday}
-                onChange={(e) => setSomeday(e.target.checked)}
-              />
-              Someday
-            </label>
-            {someday && (
-              <input
-                type="date"
-                value={revisitDate}
-                onChange={(e) => setRevisitDate(e.target.value)}
-                title="Revisit date — resurface this for reconsideration on this date (GTD tickler file)"
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            )}
-            <label className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <input
-                type="checkbox"
-                checked={waitingFor}
-                onChange={(e) => setWaitingFor(e.target.checked)}
-              />
-              Waiting for
-            </label>
-            {waitingFor && (
-              <input
-                value={waitingOn}
-                onChange={(e) => setWaitingOn(e.target.value)}
-                placeholder="Waiting on who?"
-                title="Who this is delegated to — makes 'everything I'm waiting on from X' a real filter"
-                className="w-36 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            )}
-            {waitingFor && (
-              <input
-                type="date"
-                value={followUpDate}
-                onChange={(e) => setFollowUpDate(e.target.value)}
-                title="Follow up date — actively prompt a nudge on this date instead of just tracking elapsed days"
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            )}
-            <input
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              list="task-contexts"
-              placeholder="Context (optional) — e.g. Errands, Deep Work"
-              className="min-w-40 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <input
-              type="number"
-              min={1}
-              value={estimatedMinutes}
-              onChange={(e) => setEstimatedMinutes(e.target.value)}
-              placeholder="Est. min"
-              title="Estimated minutes"
-              className="w-24 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <select
-              value={energyLevel}
-              onChange={(e) => setEnergyLevel(e.target.value as TaskEnergy | "")}
-              title="Energy required"
-              className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              <option value="">Energy...</option>
-              <option value="low">Low energy</option>
-              <option value="medium">Medium energy</option>
-              <option value="high">High energy</option>
-            </select>
           </div>
+          <WaitingForFields
+            waitingFor={waitingFor}
+            onWaitingForChange={setWaitingFor}
+            waitingOn={waitingOn}
+            onWaitingOnChange={setWaitingOn}
+            followUpDate={followUpDate}
+            onFollowUpDateChange={setFollowUpDate}
+          />
+          <TaskExtraFields
+            someday={someday}
+            onSomedayChange={setSomeday}
+            revisitDate={revisitDate}
+            onRevisitDateChange={setRevisitDate}
+            context={context}
+            onContextChange={setContext}
+            estimatedMinutes={estimatedMinutes}
+            onEstimatedMinutesChange={setEstimatedMinutes}
+            energyLevel={energyLevel}
+            onEnergyLevelChange={setEnergyLevel}
+          />
           <AttachmentStrip taskId={task.id} />
           {onConvertToProject && (
             <button
@@ -618,7 +621,11 @@ export default function TaskRow({
   }
 
   return (
-    <li className="flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+    <li
+      className={`flex items-start justify-between gap-3 rounded-md border border-zinc-200 px-4 py-3 transition-all duration-700 dark:border-zinc-800 ${
+        fadingOut ? "scale-95 opacity-0" : "scale-100 opacity-100"
+      }`}
+    >
       <div className="flex min-w-0 flex-1 items-start gap-3">
         {selectable && (
           <input
@@ -632,20 +639,21 @@ export default function TaskRow({
         )}
         <button
           type="button"
-          onClick={() => onToggleDone(task)}
-          aria-pressed={task.status === "done"}
+          onClick={handleToggleClick}
+          disabled={completing}
+          aria-pressed={task.status === "done" || completing}
           aria-label={task.status === "done" ? "Mark not done" : "Mark done"}
           title={task.status === "done" ? "Mark not done" : "Mark done"}
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-            task.status === "done"
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-200 ${
+            task.status === "done" || completing
               ? "border-blue-500 bg-blue-500 text-white"
               : "border-zinc-300 hover:border-blue-400 dark:border-zinc-600"
           }`}
         >
-          {task.status === "done" && (
+          {(task.status === "done" || completing) && (
             <svg
               viewBox="0 0 12 12"
-              className="h-3 w-3"
+              className={`h-3 w-3 ${completing ? "animate-[task-check-pop_300ms_ease-out]" : ""}`}
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -658,11 +666,17 @@ export default function TaskRow({
         </button>
         <div className="min-w-0 flex-1">
           <p
-            className={`break-words text-sm font-medium text-zinc-900 dark:text-zinc-100 ${
-              task.status === "done" ? "line-through opacity-60" : ""
+            className={`relative break-words text-sm font-medium text-zinc-900 dark:text-zinc-100 ${
+              completing ? "" : task.status === "done" ? "line-through opacity-60" : ""
             }`}
           >
             {task.title}
+            {completing && (
+              <span
+                aria-hidden="true"
+                className="absolute left-0 top-1/2 h-px w-full origin-left scale-x-0 animate-[task-strike_250ms_ease-out_forwards] bg-zinc-900 dark:bg-zinc-100"
+              />
+            )}
           </p>
           {task.link && (
             <a

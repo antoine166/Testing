@@ -38,6 +38,19 @@ type Checkin = {
   focus_level: number;
 };
 
+type Workout = { id: string; name: string };
+
+type WorkoutLogAttachment = { id: string; filename: string; url: string | null };
+
+type WorkoutLog = {
+  id: string;
+  workout_id: string;
+  logged_date: string;
+  duration_minutes: number | null;
+  notes: string | null;
+  attachments: WorkoutLogAttachment[];
+};
+
 const WINDOW_OPTIONS = [28, 90, 365] as const;
 
 export default function AnalyticsPage() {
@@ -46,6 +59,8 @@ export default function AnalyticsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState<(typeof WINDOW_OPTIONS)[number]>(28);
@@ -61,14 +76,25 @@ export default function AnalyticsPage() {
   async function loadAll(signal?: AbortSignal) {
     try {
       const opts = { signal };
-      const [habitsRes, logsRes, tasksRes, checkinsRes, domainsRes] = await Promise.all([
-        fetch("/api/habits", opts),
-        fetch("/api/habit-logs", opts),
-        fetch("/api/tasks", opts),
-        fetch("/api/checkins", opts),
-        fetch("/api/domains", opts),
-      ]);
-      if (!habitsRes.ok || !logsRes.ok || !tasksRes.ok || !checkinsRes.ok || !domainsRes.ok) {
+      const [habitsRes, logsRes, tasksRes, checkinsRes, domainsRes, workoutsRes, workoutLogsRes] =
+        await Promise.all([
+          fetch("/api/habits", opts),
+          fetch("/api/habit-logs", opts),
+          fetch("/api/tasks", opts),
+          fetch("/api/checkins", opts),
+          fetch("/api/domains", opts),
+          fetch("/api/workouts", opts),
+          fetch("/api/workout-logs", opts),
+        ]);
+      if (
+        !habitsRes.ok ||
+        !logsRes.ok ||
+        !tasksRes.ok ||
+        !checkinsRes.ok ||
+        !domainsRes.ok ||
+        !workoutsRes.ok ||
+        !workoutLogsRes.ok
+      ) {
         throw new Error("Failed to load analytics");
       }
       setHabits(await habitsRes.json());
@@ -76,6 +102,8 @@ export default function AnalyticsPage() {
       setTasks(await tasksRes.json());
       setCheckins(await checkinsRes.json());
       setDomains(await domainsRes.json());
+      setWorkouts(await workoutsRes.json());
+      setWorkoutLogs(await workoutLogsRes.json());
       setError(null);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -95,9 +123,19 @@ export default function AnalyticsPage() {
       fetch("/api/tasks", opts),
       fetch("/api/checkins", opts),
       fetch("/api/domains", opts),
+      fetch("/api/workouts", opts),
+      fetch("/api/workout-logs", opts),
     ])
-      .then(async ([habitsRes, logsRes, tasksRes, checkinsRes, domainsRes]) => {
-        if (!habitsRes.ok || !logsRes.ok || !tasksRes.ok || !checkinsRes.ok || !domainsRes.ok) {
+      .then(async ([habitsRes, logsRes, tasksRes, checkinsRes, domainsRes, workoutsRes, workoutLogsRes]) => {
+        if (
+          !habitsRes.ok ||
+          !logsRes.ok ||
+          !tasksRes.ok ||
+          !checkinsRes.ok ||
+          !domainsRes.ok ||
+          !workoutsRes.ok ||
+          !workoutLogsRes.ok
+        ) {
           throw new Error("Failed to load analytics");
         }
         return Promise.all([
@@ -106,14 +144,18 @@ export default function AnalyticsPage() {
           tasksRes.json(),
           checkinsRes.json(),
           domainsRes.json(),
+          workoutsRes.json(),
+          workoutLogsRes.json(),
         ]);
       })
-      .then(([habitsData, logsData, tasksData, checkinsData, domainsData]) => {
+      .then(([habitsData, logsData, tasksData, checkinsData, domainsData, workoutsData, workoutLogsData]) => {
         setHabits(habitsData);
         setLogs(logsData);
         setTasks(tasksData);
         setCheckins(checkinsData);
         setDomains(domainsData);
+        setWorkouts(workoutsData);
+        setWorkoutLogs(workoutLogsData);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -124,8 +166,9 @@ export default function AnalyticsPage() {
     return () => controller.abort();
   }, []);
 
-  useRealtimeRefresh(["habits", "habit_logs", "tasks", "daily_checkins", "domains"], () =>
-    loadAll(),
+  useRealtimeRefresh(
+    ["habits", "habit_logs", "tasks", "daily_checkins", "domains", "workouts", "workout_logs"],
+    () => loadAll(),
   );
 
   if (loading) {
@@ -307,6 +350,59 @@ export default function AnalyticsPage() {
                       ))}
                     </div>
                   </div>
+                </li>
+              );
+            })}
+        </ul>
+      )}
+
+      <h2 className="mb-3 mt-8 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        Workouts
+      </h2>
+      {workoutLogs.length === 0 ? (
+        <p className="text-sm text-zinc-500">No training logged yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {workoutLogs
+            .slice()
+            .sort((a, b) => b.logged_date.localeCompare(a.logged_date))
+            .map((log) => {
+              const workoutName =
+                workouts.find((w) => w.id === log.workout_id)?.name ?? "(deleted workout)";
+              return (
+                <li
+                  key={log.id}
+                  className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {workoutName}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {log.logged_date}
+                      {log.duration_minutes != null ? ` · ${log.duration_minutes} min` : ""}
+                    </p>
+                  </div>
+                  {log.notes && (
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">
+                      {log.notes}
+                    </p>
+                  )}
+                  {log.attachments.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {log.attachments.map((a) =>
+                        a.url ? (
+                          <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={a.url}
+                              alt={a.filename}
+                              className="h-14 w-14 rounded-md object-cover"
+                            />
+                          </a>
+                        ) : null,
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}

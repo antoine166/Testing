@@ -2,12 +2,14 @@
 
 import { useState, type FormEvent } from "react";
 import SmartListHeader from "@/components/smart-list-header";
-import TaskRow, { type TaskPriority } from "@/components/task-row";
+import TaskRow, { type TaskPriority, type TaskEnergy } from "@/components/task-row";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
 } from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
+import TaskExtraFields from "@/components/task-extra-fields";
+import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
@@ -33,14 +35,26 @@ export default function InboxPage() {
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
   const [notes, setNotes] = useState("");
-  const [domainId, setDomainId] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const {
+    domainId,
+    projectId,
+    setDomainId,
+    setProjectId,
+    filteredProjects,
+    reset: resetDomainProject,
+  } = useDomainProjectCascade(projects);
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [waitingFor, setWaitingFor] = useState(false);
+  const [waitingOn, setWaitingOn] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
+  const [someday, setSomeday] = useState(false);
+  const [revisitDate, setRevisitDate] = useState("");
+  const [context, setContext] = useState("");
+  const [estimatedMinutes, setEstimatedMinutes] = useState("");
+  const [energyLevel, setEnergyLevel] = useState<TaskEnergy | "">("");
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -54,14 +68,19 @@ export default function InboxPage() {
     setTitle("");
     setLink("");
     setNotes("");
-    setDomainId("");
-    setProjectId("");
+    resetDomainProject();
     setPriority("none");
     setDueDate("");
     setScheduledDate("");
     setImage(null);
     setWaitingFor(false);
+    setWaitingOn("");
     setFollowUpDate("");
+    setSomeday(false);
+    setRevisitDate("");
+    setContext("");
+    setEstimatedMinutes("");
+    setEnergyLevel("");
     setIsRecurring(false);
     setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
@@ -139,7 +158,13 @@ export default function InboxPage() {
       due_date: dueDate || undefined,
       scheduled_date: scheduledDate || undefined,
       waiting_for: waitingFor || undefined,
+      waiting_on: waitingFor && waitingOn.trim() ? waitingOn.trim() : undefined,
       follow_up_date: waitingFor && followUpDate ? followUpDate : undefined,
+      someday: someday || undefined,
+      revisit_date: someday && revisitDate ? revisitDate : undefined,
+      context: context.trim() || undefined,
+      estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : undefined,
+      energy_level: energyLevel || undefined,
     });
     if (!created) {
       setSubmitting(false);
@@ -278,7 +303,7 @@ export default function InboxPage() {
                 className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               >
                 <option value="">No project</option>
-                {projects.map((p) => (
+                {filteredProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -350,8 +375,24 @@ export default function InboxPage() {
                 <WaitingForFields
                   waitingFor={waitingFor}
                   onWaitingForChange={setWaitingFor}
+                  waitingOn={waitingOn}
+                  onWaitingOnChange={setWaitingOn}
                   followUpDate={followUpDate}
                   onFollowUpDateChange={setFollowUpDate}
+                />
+              )}
+              {captureMode === "task" && (
+                <TaskExtraFields
+                  someday={someday}
+                  onSomedayChange={setSomeday}
+                  revisitDate={revisitDate}
+                  onRevisitDateChange={setRevisitDate}
+                  context={context}
+                  onContextChange={setContext}
+                  estimatedMinutes={estimatedMinutes}
+                  onEstimatedMinutesChange={setEstimatedMinutes}
+                  energyLevel={energyLevel}
+                  onEnergyLevelChange={setEnergyLevel}
                 />
               )}
               {captureMode === "task" && (

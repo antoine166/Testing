@@ -12,6 +12,7 @@ import TaskRow, {
   type TaskDomain,
   type TaskProject,
   type TaskPriority,
+  type TaskEnergy,
 } from "@/components/task-row";
 import { type Routine } from "@/components/routine-card";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
@@ -20,6 +21,8 @@ import RecurrenceFields, {
   type RecurrencePatternDraft,
 } from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
+import TaskExtraFields from "@/components/task-extra-fields";
+import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 
 type Checkin = {
   date: string;
@@ -111,14 +114,26 @@ export default function TodayDashboard() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskLink, setNewTaskLink] = useState("");
   const [newTaskNotes, setNewTaskNotes] = useState("");
-  const [newTaskDomainId, setNewTaskDomainId] = useState("");
-  const [newTaskProjectId, setNewTaskProjectId] = useState("");
+  const {
+    domainId: newTaskDomainId,
+    projectId: newTaskProjectId,
+    setDomainId: setNewTaskDomainId,
+    setProjectId: setNewTaskProjectId,
+    filteredProjects: newTaskFilteredProjects,
+    reset: resetNewTaskDomainProject,
+  } = useDomainProjectCascade(projects);
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("none");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskScheduledDate, setNewTaskScheduledDate] = useState(today);
   const [newTaskImage, setNewTaskImage] = useState<File | null>(null);
   const [newTaskWaitingFor, setNewTaskWaitingFor] = useState(false);
+  const [newTaskWaitingOn, setNewTaskWaitingOn] = useState("");
   const [newTaskFollowUpDate, setNewTaskFollowUpDate] = useState("");
+  const [newTaskSomeday, setNewTaskSomeday] = useState(false);
+  const [newTaskRevisitDate, setNewTaskRevisitDate] = useState("");
+  const [newTaskContext, setNewTaskContext] = useState("");
+  const [newTaskEstimatedMinutes, setNewTaskEstimatedMinutes] = useState("");
+  const [newTaskEnergyLevel, setNewTaskEnergyLevel] = useState<TaskEnergy | "">("");
   const [addingTask, setAddingTask] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
@@ -382,14 +397,19 @@ export default function TodayDashboard() {
     setNewTaskTitle("");
     setNewTaskLink("");
     setNewTaskNotes("");
-    setNewTaskDomainId("");
-    setNewTaskProjectId("");
+    resetNewTaskDomainProject();
     setNewTaskPriority("none");
     setNewTaskDueDate("");
     setNewTaskScheduledDate(today);
     setNewTaskImage(null);
     setNewTaskWaitingFor(false);
+    setNewTaskWaitingOn("");
     setNewTaskFollowUpDate("");
+    setNewTaskSomeday(false);
+    setNewTaskRevisitDate("");
+    setNewTaskContext("");
+    setNewTaskEstimatedMinutes("");
+    setNewTaskEnergyLevel("");
     setIsRecurring(false);
     setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
@@ -470,7 +490,13 @@ export default function TodayDashboard() {
         due_date: newTaskDueDate || undefined,
         scheduled_date: newTaskScheduledDate || undefined,
         waiting_for: newTaskWaitingFor || undefined,
+        waiting_on: newTaskWaitingFor && newTaskWaitingOn.trim() ? newTaskWaitingOn.trim() : undefined,
         follow_up_date: newTaskWaitingFor && newTaskFollowUpDate ? newTaskFollowUpDate : undefined,
+        someday: newTaskSomeday || undefined,
+        revisit_date: newTaskSomeday && newTaskRevisitDate ? newTaskRevisitDate : undefined,
+        context: newTaskContext.trim() || undefined,
+        estimated_minutes: newTaskEstimatedMinutes ? Number(newTaskEstimatedMinutes) : undefined,
+        energy_level: newTaskEnergyLevel || undefined,
       }),
     });
 
@@ -763,7 +789,7 @@ export default function TodayDashboard() {
                   className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 >
                   <option value="">No project</option>
-                  {projects.map((p) => (
+                  {newTaskFilteredProjects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -835,8 +861,24 @@ export default function TodayDashboard() {
                   <WaitingForFields
                     waitingFor={newTaskWaitingFor}
                     onWaitingForChange={setNewTaskWaitingFor}
+                    waitingOn={newTaskWaitingOn}
+                    onWaitingOnChange={setNewTaskWaitingOn}
                     followUpDate={newTaskFollowUpDate}
                     onFollowUpDateChange={setNewTaskFollowUpDate}
+                  />
+                )}
+                {captureMode === "task" && (
+                  <TaskExtraFields
+                    someday={newTaskSomeday}
+                    onSomedayChange={setNewTaskSomeday}
+                    revisitDate={newTaskRevisitDate}
+                    onRevisitDateChange={setNewTaskRevisitDate}
+                    context={newTaskContext}
+                    onContextChange={setNewTaskContext}
+                    estimatedMinutes={newTaskEstimatedMinutes}
+                    onEstimatedMinutesChange={setNewTaskEstimatedMinutes}
+                    energyLevel={newTaskEnergyLevel}
+                    onEnergyLevelChange={setNewTaskEnergyLevel}
                   />
                 )}
                 {captureMode === "task" && (

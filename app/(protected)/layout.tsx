@@ -5,6 +5,7 @@ import QuickCapture from "@/components/quick-capture";
 import SidebarNav from "@/components/sidebar-nav";
 import RealtimeLayoutRefresher from "@/components/realtime-layout-refresher";
 import RealtimeIndicator from "@/components/realtime-indicator";
+import OfflineQueueIndicator from "@/components/offline-queue-indicator";
 import { todayLocal } from "@/lib/date";
 
 export default async function ProtectedLayout({
@@ -88,6 +89,7 @@ export default async function ProtectedLayout({
       <QuickCapture />
       <RealtimeLayoutRefresher />
       <RealtimeIndicator />
+      <OfflineQueueIndicator />
     </>
   );
 }

@@ -1,0 +1,62 @@
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/supabase/require-user";
+
+export async function GET() {
+  const { supabase, user } = await requireUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data, error } = await supabase
+    .from("workouts")
+    .select("*")
+    .is("deleted_at", null)
+    .order("name");
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json(data);
+}
+
+export async function POST(request: Request) {
+  const { supabase, user } = await requireUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+
+  if (!name) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  const weeklyTarget = typeof body.weekly_target === "number" ? body.weekly_target : null;
+  if (weeklyTarget !== null && (!Number.isInteger(weeklyTarget) || weeklyTarget < 1)) {
+    return NextResponse.json(
+      { error: "weekly_target must be a positive integer" },
+      { status: 400 },
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("workouts")
+    .insert({
+      user_id: user.id,
+      name,
+      icon: typeof body.icon === "string" ? body.icon : undefined,
+      weekly_target: weeklyTarget,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json(data, { status: 201 });
+}

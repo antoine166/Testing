@@ -16,6 +16,7 @@ const COACH_RESTORABLE_TRASH_TYPES = [
   "project",
   "task",
   "habit",
+  "workout",
   "routine",
   "checklist",
   "knowledge-item",
@@ -192,6 +193,80 @@ export const TOOLS: Tool[] = [
         habit_id: { type: "string", description: "The habit's UUID from the context below" },
       },
       required: ["habit_id"],
+    },
+  },
+  {
+    name: "create_workout",
+    description: "Add a new named workout to Antoine's Training Log catalog (e.g. \"Leg Day\").",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        icon: { type: "string" },
+        weekly_target: {
+          type: "number",
+          description: "Times per week he's aiming for this workout. Omit for no goal.",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "update_workout",
+    description:
+      "Rename or update an existing workout in the Training Log catalog, including its weekly " +
+      "goal — adjust this as his training progresses (e.g. he says 'bump GPP Lift to twice a week').",
+    input_schema: {
+      type: "object",
+      properties: {
+        workout_id: { type: "string", description: "The workout's UUID from the context below" },
+        name: { type: "string" },
+        icon: { type: "string" },
+        weekly_target: {
+          type: "number",
+          description: "Times per week he's aiming for. Pass 0 to clear the goal.",
+        },
+      },
+      required: ["workout_id"],
+    },
+  },
+  {
+    name: "delete_workout",
+    description: "Move a workout (and its log history) to Trash, referenced by its UUID. Recoverable for 30 days.",
+    input_schema: {
+      type: "object",
+      properties: { workout_id: { type: "string" } },
+      required: ["workout_id"],
+    },
+  },
+  {
+    name: "log_workout",
+    description:
+      "Log that Antoine did a specific workout from his Training Log catalog today (e.g. " +
+      "'I did GPP Lift'). Match against the workout catalog below. Optional duration in minutes " +
+      "and notes. Can be called again for the same workout today for a second session (e.g. AM/PM).",
+    input_schema: {
+      type: "object",
+      properties: {
+        workout_id: { type: "string", description: "The workout's UUID from the context below" },
+        duration_minutes: { type: "number" },
+        notes: { type: "string" },
+      },
+      required: ["workout_id"],
+    },
+  },
+  {
+    name: "unlog_workout",
+    description:
+      "Undo today's workout log entry, e.g. if Antoine says he didn't actually do it or logged " +
+      "it by mistake. If it was logged more than once today, this removes just the most recently " +
+      "added one, not all of them.",
+    input_schema: {
+      type: "object",
+      properties: {
+        workout_id: { type: "string", description: "The workout's UUID from the context below" },
+      },
+      required: ["workout_id"],
     },
   },
   {
@@ -1081,6 +1156,8 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
     recurringRes,
     ticklerRes,
     contextsRes,
+    workoutsRes,
+    workoutLogsRes,
   ] = await Promise.all([
     supabase.from("domains").select("id, name"),
     supabase
@@ -1116,6 +1193,16 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
       .is("deleted_at", null)
       .order("revisit_date"),
     supabase.from("contexts").select("id, name").order("name"),
+    supabase
+      .from("workouts")
+      .select("id, name, weekly_target")
+      .is("deleted_at", null)
+      .order("name"),
+    supabase
+      .from("workout_logs")
+      .select("workout_id, logged_date, duration_minutes, notes, workouts(name)")
+      .gte("logged_date", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
+      .order("logged_date", { ascending: false }),
   ]);
 
   const domains = domainsRes.data ?? [];
@@ -1131,6 +1218,8 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   const recurringTemplates = recurringRes.data ?? [];
   const ticklerItems = ticklerRes.data ?? [];
   const contexts = contextsRes.data ?? [];
+  const workouts = workoutsRes.data ?? [];
+  const workoutLogs = workoutLogsRes.data ?? [];
   const openTasks = tasks.filter((t) => t.status !== "done");
   const openAgendaItems = agendaItems.filter((a) => !a.done);
 
@@ -1192,6 +1281,30 @@ export async function buildContext(supabase: SupabaseClient, today: string, mode
   lines.push("\nActive habits:");
   lines.push(
     habits.length ? habits.map((h) => `- ${h.id} ${h.name} (${h.frequency})`).join("\n") : "(none)",
+  );
+
+  lines.push("\nTraining Log — workout catalog:");
+  lines.push(
+    workouts.length
+      ? workouts
+          .map((w) => `- ${w.id} ${w.name}${w.weekly_target ? ` (goal: ${w.weekly_target}x/week)` : ""}`)
+          .join("\n")
+      : "(none)",
+  );
+
+  lines.push("\nTraining Log — logged in the last 7 days:");
+  lines.push(
+    workoutLogs.length
+      ? workoutLogs
+          .map((l) => {
+            const workoutName =
+              (l as unknown as { workouts: { name: string } | null }).workouts?.name ?? "?";
+            return `- ${l.logged_date} ${workoutName}${
+              l.duration_minutes != null ? ` (${l.duration_minutes} min)` : ""
+            }${l.notes ? ` — ${l.notes}` : ""}`;
+          })
+          .join("\n")
+      : "(none)",
   );
 
   lines.push("\nRoutines:");
@@ -1463,6 +1576,102 @@ export async function executeTool(
     const { error } = await supabase.from("habit_logs").delete().eq("id", mostRecent.id);
     if (error) return `Error: ${error.message}`;
     return "Undone. If it was logged more than once today (extra credit), that removed the most recent one.";
+  }
+
+  if (name === "create_workout") {
+    const workoutName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!workoutName) return "Error: name is required";
+
+    const { data, error } = await supabase
+      .from("workouts")
+      .insert({
+        user_id: userId,
+        name: workoutName,
+        icon: typeof input.icon === "string" ? input.icon : undefined,
+        weekly_target: typeof input.weekly_target === "number" ? input.weekly_target : null,
+      })
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Added "${data.name}" to the training catalog${
+      data.weekly_target ? ` with a goal of ${data.weekly_target}x/week` : ""
+    }.`;
+  }
+
+  if (name === "update_workout") {
+    const workoutId = typeof input.workout_id === "string" ? input.workout_id : "";
+    if (!workoutId) return "Error: workout_id is required";
+
+    const updates: Record<string, unknown> = {};
+    if (typeof input.name === "string") {
+      const trimmed = input.name.trim();
+      if (!trimmed) return "Error: name cannot be empty";
+      updates.name = trimmed;
+    }
+    if (typeof input.icon === "string") updates.icon = input.icon;
+    if (typeof input.weekly_target === "number") {
+      updates.weekly_target = input.weekly_target > 0 ? input.weekly_target : null;
+    }
+
+    const { data, error } = await supabase
+      .from("workouts")
+      .update(updates)
+      .eq("id", workoutId)
+      .select()
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    return `Updated workout "${data.name}".`;
+  }
+
+  if (name === "delete_workout") {
+    const workoutId = typeof input.workout_id === "string" ? input.workout_id : "";
+    if (!workoutId) return "Error: workout_id is required";
+
+    const { error } = await supabase
+      .from("workouts")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", workoutId);
+
+    if (error) return `Error: ${error.message}`;
+    return "Moved to Trash.";
+  }
+
+  if (name === "log_workout") {
+    const workoutId = typeof input.workout_id === "string" ? input.workout_id : "";
+    if (!workoutId) return "Error: workout_id is required";
+
+    const { error } = await supabase.from("workout_logs").insert({
+      user_id: userId,
+      workout_id: workoutId,
+      logged_date: today,
+      duration_minutes: typeof input.duration_minutes === "number" ? input.duration_minutes : null,
+      notes: typeof input.notes === "string" ? input.notes : null,
+    });
+
+    if (error) return `Error: ${error.message}`;
+    return "Logged.";
+  }
+
+  if (name === "unlog_workout") {
+    const workoutId = typeof input.workout_id === "string" ? input.workout_id : "";
+    if (!workoutId) return "Error: workout_id is required";
+
+    const { data: mostRecent } = await supabase
+      .from("workout_logs")
+      .select("id")
+      .eq("workout_id", workoutId)
+      .eq("logged_date", today)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!mostRecent) return "Wasn't logged today — nothing to undo.";
+
+    const { error } = await supabase.from("workout_logs").delete().eq("id", mostRecent.id);
+    if (error) return `Error: ${error.message}`;
+    return "Undone. If it was logged more than once today, that removed the most recent one.";
   }
 
   if (name === "update_task") {

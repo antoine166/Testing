@@ -3,6 +3,7 @@ export type TrashType =
   | "project"
   | "task"
   | "habit"
+  | "workout"
   | "routine"
   | "checklist"
   | "knowledge-item"
@@ -13,6 +14,7 @@ export const TRASH_TYPES: TrashType[] = [
   "project",
   "task",
   "habit",
+  "workout",
   "routine",
   "checklist",
   "knowledge-item",
@@ -48,6 +50,7 @@ export const TRASH_CONFIG: Record<TrashType, TrashConfig> = {
   },
   task: { table: "tasks", nameField: "title" },
   habit: { table: "habits", nameField: "name" },
+  workout: { table: "workouts", nameField: "name" },
   routine: { table: "routines", nameField: "name" },
   checklist: { table: "checklists", nameField: "name" },
   "knowledge-item": { table: "knowledge_items", nameField: "title" },

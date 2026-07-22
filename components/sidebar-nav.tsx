@@ -25,6 +25,7 @@ const SMART_LISTS = [
   { href: "/trash", label: "Trash", icon: "🗑️", iconBg: "#71717a" },
   { href: "/waiting-for", label: "Waiting For", icon: "⏳", iconBg: "#f97316" },
   { href: "/habits", label: "Habits", icon: "🔁", iconBg: "#ec4899" },
+  { href: "/training-log", label: "Training Log", icon: "🏋️", iconBg: "#f59e0b" },
   { href: "/coach", label: "Coach", icon: "🧭", iconBg: "#06b6d4" },
 ] as const;
 

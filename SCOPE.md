@@ -40,6 +40,7 @@ The most important feature. Available from everywhere in the app.
 - On submit → saved as a task with no domain assigned, which makes it an inbox item (see 3.4)
 - If a domain is set at capture time, the task is already "processed" and skips the inbox
 - Must be dismissible with `Escape`
+- **Offline queueing**: if the save request fails with a network error (not a real server rejection — an invalid submission still surfaces its error normally), the capture is stashed in IndexedDB (`lib/offline-queue.ts`) instead of lost, including a photo attachment if one was added. It replays automatically against the real API the moment the browser reports it's back online (or on next app load), oldest first — a network error mid-replay stops the run and leaves the rest queued for later, while a genuine server rejection (4xx/5xx) drops just that one entry rather than retrying forever. A persistent badge (`components/offline-queue-indicator.tsx`, same visual language as the realtime "Synced" pulse) shows how many captures are waiting, so it's never a silent black box. This is Quick-Capture-only — the app has no general offline data access (see 8)
 
 ### 3.1a Email Capture
 A second frictionless-capture path: forward or send an email, it becomes an inbox task, no app needed.
@@ -101,6 +102,8 @@ The atomic unit of work.
 - **Scheduled date**: the date Antoine plans to work on it (drives the Today view)
 - **Someday** (`tasks.someday`, boolean): Things-3-style deferred/backlog flag, set from the task's edit form. Orthogonal to domain filing — a task can be under a domain and still be Someday. A someday task is excluded from Inbox and Anytime so it doesn't clutter either
 - Tasks can exist without a project (standalone / domain-only) as long as a domain is set
+- **Domain/project cascade** (`lib/hooks/use-domain-project-cascade.ts`): picking a domain narrows the project picker to that domain's projects (clearing the current project if it no longer belongs); picking a project jumps the domain to match it automatically, since a project always belongs to exactly one domain. Shared by every domain+project picker in the app — the task edit form and every task create form
+- **Create/edit field parity**: every task create form (Tasks, Inbox, Today) exposes the same field set as the task edit form — domain/project, priority, due/scheduled date+time, waiting-for (+ who + follow-up date), someday (+ revisit date), context, estimated minutes, energy level, image attachment, make recurring — via shared components (`components/waiting-for-fields.tsx`, `components/task-extra-fields.tsx`) so the two don't drift apart. Quick Capture (3.1) is the deliberate exception and stays minimal by design. A recurring task template's create/edit form gets the domain/project cascade too, but not the other edit-only fields (someday, context, estimated minutes, energy level, waiting-for) — `recurring_task_templates` has no columns for them, since those are per-occurrence details, not part of the repeating pattern
 - **Image attachments**: any task can have one or more images attached (uploaded manually, or pulled in automatically from a forwarded email's attachments — see 3.1a). Stored in Supabase Storage, viewed via short-lived signed URLs since the bucket is private
 - **Bulk filing**: the Inbox section on the Tasks page has a "Select" mode — check multiple unprocessed tasks and assign them all to one domain in a single action, instead of opening each one individually
 - **Smart-list views** (Things-3-style, see §4 for the sidebar): `/inbox`, `/upcoming`, `/anytime`, `/someday`, `/logbook` each render a filtered slice of the same `tasks` table — no separate storage, just different queries over the fields above. `/tasks` remains as a full by-domain browse view and also supports `?q=` title search from the sidebar's Quick Find
@@ -143,6 +146,20 @@ Simple habit tracker with streak counting.
 - **"Don't break it twice"** (James Clear, *Atomic Habits*) — a habit is **at risk** when its most recent required occurrence was missed and today isn't logged yet (`lib/habits/streaks.ts` → `isAtRisk`): one more miss would be two in a row, the point a slip turns into a broken habit. For `times_per_week`, "at risk" is time-aware, not just "under target so far" — it only fires once there are no more spare days left in the week to still hit the target (e.g. 4x/week with 0 done: safe through Wednesday, at risk starting Thursday), so it doesn't false-alarm early in the week. Surfaced three ways: (1) the habit row gets an amber border + a frequency-appropriate warning note + ⚠️ (vs. 🔥 for a healthy active streak), (2) the Today view sorts at-risk habits first and calls out the count, (3) the MCP connector's `list_habits`/`get_today_summary` include an `at_risk` flag so the Coach/Claude digest can prioritize the same way
 - **Weekly checkbox row**: each habit row shows a strip of checkboxes sized to its cadence — 7 for `daily`, one per required weekday for `specific_days` (both tied to specific dates within the current Mon–Sun week, individually clickable to log/unlog that day — including past days, not just today), or `target_count` plain progress boxes for `times_per_week` (a fill-level tally, not date-specific, since any day counts)
 
+### 3.7a Training Log
+A simple log of named workouts, separate from Habits (no domain tagging, and unlike Habits' `daily`/`specific_days`/`times_per_week` frequency modes, a workout has at most one flavor of goal — weekly count — described below).
+
+- **Catalog** (`workouts`): a flat, user-editable list of workout names (e.g. "GPP Lift", "Nordic 4x4") — add/rename/delete anytime via a "+ New Workout" field, no fixed set
+- **Logging**: pick a date (defaults to today) and check off which catalog workouts were done that day — a checklist, not a form. Checking an item creates a log entry; unchecking removes the most recent one for that workout+day
+- Each log entry (`workout_logs`) optionally carries a duration (minutes) and notes — both optional, filled in via an expandable section under the checked item, not required to log
+- The same workout can be logged more than once on the same day (e.g. an AM/PM session) via a "log another session" affordance, once already checked
+- **Weekly goal** (`workouts.weekly_target`, optional int): how many times per week Antoine's aiming to do a given workout — set at creation or edited anytime from the catalog ("adaptable as I progress through my training"), same in spirit as a `times_per_week` habit's `target_count` but kept as a standalone field/calculation (`lib/workouts/weekly.ts`) rather than sharing Habits' frequency machinery, since workouts have no other frequency modes to unify with. Each workout row shows "N/target this week" (Monday-Sunday calendar week, same convention as habits) plus a 🔥 streak of consecutive weeks the goal was hit — the in-progress current week counts once it's already hit target, and doesn't break the streak just for not being over yet. Also has Habits' "don't break it twice" (3.7) at-risk warning: an amber border + ⚠️ + a "Running out of days" note once there are no more spare days left in the week to still hit target, surfaced the same three ways as habits (row styling, and `list_workouts`'s `at_risk` flag for Coach/MCP — no Today view integration for Training Log yet, so no third surface there). Seeded defaults: CNS 1x/week, Full Breath Cardio 4x/week, GPP Lift 1x/week, Nordic 4x4 2x/week, Speed Session 1x/week
+- **Image attachments**: a log entry can have one or more images attached, same Storage-backed pattern as task image attachments (3.4) — a private bucket, signed URLs, one metadata row per image
+- **History**: the Training Log page lists logged days (most recent first) below the day-picker, filtered to a selectable window — 7/14/28/74/148 days, defaulting to 7 — and the Analytics page (§11 Phase 4) shows workout name + notes + images together under one "Workouts" section
+- Deleting a workout from the catalog moves it (and its log entries) to Trash together — recoverable for 30 days, same as everything else in 3.12
+- Sidebar entry "Training Log" sits between Habits and Coach (see §4)
+- Full Coach + MCP parity: catalog CRUD (including the weekly goal), log/unlog, and a training-history read tool — no app-only exceptions here (image upload is the one MCP/Coach gap, matching task image attachments, which are also app-only for uploads)
+
 ### 3.8 Routines *(Phase 2)*
 Ordered sequences of steps (tasks, habits, or notes) tied to a time of day.
 
@@ -174,7 +191,8 @@ AI assistant powered by the Anthropic API (`claude-sonnet-5`).
 - Antoine can ask it questions: "What should I focus on today?", "How are my habits going?"
 - Responds with context-aware coaching, not generic advice
 - **Can also take action** via tool use, broadly: create/update/delete tasks and projects
-  (including subprojects), create/update domains, log/unlog habits, create/update/delete routines
+  (including subprojects), create/update domains, log/unlog habits, create/update/delete workouts
+  and log/unlog Training Log entries, create/update/delete routines
   and append steps to them, create/update/delete/reset checklists and append items to them, and
   create/organize knowledge library items and folders
 - **Every tool call requires Antoine's explicit approve/decline before it runs** — this is the
@@ -194,12 +212,13 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claud
 - claude.ai's connector flow requires real OAuth (it auto-registers itself as a client and won't accept a plain shared token), so `/api/mcp` is its own OAuth 2.1 + PKCE authorization server (`/api/mcp/register`, `/api/mcp/authorize`, `/api/mcp/token`, discovery documents at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`) — gated by Antoine's existing Supabase Auth login, not a separate account system
 - Authorization codes and tokens are stored as SHA-256 hashes (`mcp_oauth_clients`/`mcp_oauth_codes`/`mcp_oauth_tokens`); access tokens last 1 hour, refresh tokens 6 months with rotation on use
 - **Full CRUD across nearly the entire app**, unlike the in-app Coach: tasks and habits
-  (create/update/complete/delete, log/unlog), projects and subprojects (create/update/delete,
-  cascading to a project's subprojects and their tasks together), domains (create/update only —
-  see below), routines and their steps (create/update/delete), checklists and their items
-  (create/update/delete/reset), the knowledge library (items: create/update/delete; folders:
-  create/update), and the daily check-in (read/write). Plus `get_today_summary` for "what should I
-  focus on today" style coaching
+  (create/update/complete/delete, log/unlog), workouts and Training Log entries
+  (create/update/delete, log/unlog, plus a training-history read tool), projects and subprojects
+  (create/update/delete, cascading to a project's subprojects and their tasks together), domains
+  (create/update only — see below), routines and their steps (create/update/delete), checklists
+  and their items (create/update/delete/reset), the knowledge library (items: create/update/delete;
+  folders: create/update), and the daily check-in (read/write). Plus `get_today_summary` for "what
+  should I focus on today" style coaching
 - **Deliberately excluded, on both MCP and Coach** — the two genuinely irreversible actions:
   domain deletion (cascades to all of that domain's projects/tasks with no MCP-side confirmation
   step) and permanently purging a trashed item before its 30-day recovery window ends. Both stay
@@ -211,7 +230,7 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude directly on claud
 ### 3.12 Trash *(Phase 4)*
 Soft delete with a 30-day recovery window, so an accidental delete is never permanent by mistake.
 
-- Applies to: domains, projects, tasks, habits, routines, knowledge library items
+- Applies to: domains, projects, tasks, habits, workouts, routines, knowledge library items
 - Deleting one of these sets `deleted_at` instead of removing the row; it disappears from normal views but is recoverable
 - Domains and projects cascade: deleting a domain trashes its projects and tasks together (and restoring the domain restores all of them together); deleting a project cascades to its tasks the same way
 - Child records that aren't independently trashable (habit logs, routine steps) aren't given their own trash entry — they simply go with their parent when it's permanently purged
@@ -240,7 +259,7 @@ Life OS
   Project name
 + New List                         ← links to /domains
 ─────────────────────
-Habits · Routines · Checklists · Check-in · Library · Coach · Analytics · Trash · Settings
+Habits · Training Log · Routines · Checklists · Check-in · Library · Coach · Analytics · Trash · Settings
 ─────────────────────
 user@email · Log out
 ```
@@ -369,6 +388,50 @@ habit_id     uuid references habits(id) on delete cascade
 logged_date  date not null
 created_at   timestamptz default now()
 unique (user_id, habit_id, logged_date)
+```
+
+---
+
+### `workouts`
+```sql
+id             uuid primary key default gen_random_uuid()
+user_id        uuid references auth.users(id) on delete cascade
+name           text not null
+icon           text
+weekly_target  int    -- optional goal, times/week; check (weekly_target is null or > 0)
+created_at     timestamptz default now()
+deleted_at     timestamptz   -- soft delete (Trash, 3.12); its logs go with it on purge (FK cascade)
+```
+
+---
+
+### `workout_logs`
+```sql
+id                uuid primary key default gen_random_uuid()
+user_id           uuid references auth.users(id) on delete cascade
+workout_id        uuid references workouts(id) on delete cascade
+logged_date       date not null
+duration_minutes  int
+notes             text
+created_at        timestamptz default now()
+-- no unique constraint: the same workout can be logged more than once on
+-- the same day (e.g. an AM/PM session)
+```
+
+---
+
+### `workout_log_attachments`
+```sql
+id              uuid primary key default gen_random_uuid()
+user_id         uuid references auth.users(id) on delete cascade
+workout_log_id  uuid references workout_logs(id) on delete cascade
+storage_path    text not null    -- path in the private "workout-log-attachments" Storage bucket
+filename        text not null
+content_type    text
+size            int
+created_at      timestamptz default now()
+-- not independently trashable — goes with its log entry on purge, same
+-- Storage-cleanup caveat as task_attachments (3.4)
 ```
 
 ---
@@ -508,7 +571,8 @@ create policy "owner_delete" on table_name
 
 - **No drag-and-drop in Phase 1** — too complex; manual ordering is fine
 - **No notifications in Phase 1** — no push, email, or reminders yet
-- **No mobile app** — mobile-responsive web only
+- **No mobile app** — mobile-responsive web only, but installable as a PWA (`app/manifest.ts`) — "Add to Home Screen" on iOS/iPadOS Safari, "Add to Dock" on macOS Safari 17+, or "Install" on Chrome — for an app-like icon with no browser chrome. On Android, installing also enables the Web Share Target API (`share_target` in the manifest → `/share-capture`) so any app's native Share sheet can send a link/selection straight to the Inbox; iOS Safari doesn't support that API yet
+- **No general offline data access** — everything is live from Supabase and auth-gated, so there's no safe way to serve stale data offline. A minimal service worker (`public/sw.js`) only swaps the browser's default "no internet" error for a friendlier branded one (`public/offline.html`) on navigation; it doesn't cache app data. The one deliberate exception is Quick Capture's offline queue (see 3.1) — capture specifically is important enough to work regardless of connection
 - **Dark mode** — default; light mode is a future nice-to-have
 - **Keyboard shortcut `C`** — opens Quick Capture from anywhere
 - **Escape** — closes any modal
@@ -604,6 +668,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Trash / soft delete with 30-day recovery (3.12)
 - [x] Task image attachments (3.4), including from forwarded emails (3.1a)
 - [x] Checklists (3.8a)
+- [x] Training Log (3.7a) — workout catalog + daily logging with image attachments
 
 ---
 

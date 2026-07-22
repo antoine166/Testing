@@ -3,14 +3,18 @@
 type Props = {
   waitingFor: boolean;
   onWaitingForChange: (value: boolean) => void;
+  waitingOn: string;
+  onWaitingOnChange: (value: string) => void;
   followUpDate: string;
   onFollowUpDateChange: (value: string) => void;
 };
 
-/** "Waiting for" + optional follow-up date, shared by every task create form (Tasks, Inbox, Today). */
+/** "Waiting for" + who + optional follow-up date, shared by every task create/edit form. */
 export default function WaitingForFields({
   waitingFor,
   onWaitingForChange,
+  waitingOn,
+  onWaitingOnChange,
   followUpDate,
   onFollowUpDateChange,
 }: Props) {
@@ -24,6 +28,15 @@ export default function WaitingForFields({
         />
         Waiting for
       </label>
+      {waitingFor && (
+        <input
+          value={waitingOn}
+          onChange={(e) => onWaitingOnChange(e.target.value)}
+          placeholder="Waiting on who?"
+          title="Who this is delegated to — makes 'everything I'm waiting on from X' a real filter"
+          className="w-36 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+        />
+      )}
       {waitingFor && (
         <input
           type="date"
