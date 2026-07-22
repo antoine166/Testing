@@ -114,7 +114,7 @@ The atomic unit of work.
 - **Create/edit field parity**: every task create form (Tasks, Inbox, Today) exposes the same field set as the task edit form — domain/project, priority, due/scheduled date+time, waiting-for (+ who + follow-up date), someday (+ revisit date), context, estimated minutes, energy level, image attachment, make recurring — via shared components (`components/waiting-for-fields.tsx`, `components/task-extra-fields.tsx`) so the two don't drift apart. Quick Capture (3.1) is the deliberate exception and stays minimal by design. A recurring task template's create/edit form gets the domain/project cascade too, but not the other edit-only fields (someday, context, estimated minutes, energy level, waiting-for) — `recurring_task_templates` has no columns for them, since those are per-occurrence details, not part of the repeating pattern
 - **Image attachments**: any task can have one or more images attached (uploaded manually, or pulled in automatically from a forwarded email's attachments — see 3.1a). Stored in Supabase Storage, viewed via short-lived signed URLs since the bucket is private
 - **Bulk filing**: the Inbox section on the Tasks page has a "Select" mode — check multiple unprocessed tasks and assign them all to one domain in a single action, instead of opening each one individually
-- **Smart-list views** (Things-3-style, see §4 for the sidebar): `/inbox`, `/upcoming`, `/anytime`, `/someday`, `/logbook` each render a filtered slice of the same `tasks` table — no separate storage, just different queries over the fields above. `/tasks` remains as a full by-domain browse view and also supports `?q=` title search from the sidebar's Quick Find
+- **Smart-list views** (Things-3-style, see §4 for the sidebar): `/inbox`, `/upcoming`, `/anytime`, `/someday`, `/logbook` each render a filtered slice of the same `tasks` table — no separate storage, just different queries over the fields above. `/tasks` remains as a full by-domain browse view and still supports `?q=` title filtering (used by global search's task links)
 
 ### 3.4a Clarify Mode (Inbox processing)
 GTD's clarify step as a guided flow — the sidebar's workflow-map diagram made interactive. The Inbox page's "⚡ Clarify" button walks the unprocessed list one item at a time through Allen's decision tree; every destination is an existing feature, so the flow adds no new storage:
@@ -271,13 +271,18 @@ Soft delete with a 30-day recovery window, so an accidental delete is never perm
 
 ---
 
+### 3.13 Global Search
+One box, the whole brain: `GET /api/search?q=` runs case-insensitive substring matches across **tasks** (title + notes, including completed — search is how history gets found), **projects** (name/description/purpose/outcome vision/brainstorm), **knowledge items** (title + content), **tickler notes**, and **agenda items**, each bucket capped at 20. The sidebar search field routes to `/search?q=`, which shows grouped results with inline snippets and links into the owning list (done tasks → Logbook, someday → Someday, waiting → Waiting For, etc.). MCP parity: the `search` tool gives Claude the same reach.
+
+---
+
 ## 4. Navigation (Sidebar)
 
 Things-3-inspired: a left sidebar (`components/sidebar-nav.tsx`) instead of a top nav bar, collapsible to a slide-over on mobile. Structure:
 
 ```
 Life OS
-🔍 Quick Find             ← searches task titles, jumps to /tasks?q=
+🔍 Search everything      ← global search, jumps to /search?q= (3.13)
 ─────────────────────
 📥 Inbox        (blue)    ← unprocessed: no domain, not someday, not done
 ★  Today        (yellow)  ← the daily dashboard (check-in/habits/scheduled/overdue), at "/"

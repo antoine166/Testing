@@ -95,7 +95,7 @@ export default function SidebarNav({
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
-    router.push(`/tasks?q=${encodeURIComponent(query.trim())}`);
+    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
     setMobileOpen(false);
   }
 
@@ -113,7 +113,7 @@ export default function SidebarNav({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Quick Find"
+          placeholder="Search everything"
           className="w-full rounded-lg bg-zinc-100 px-3 py-1.5 text-sm text-zinc-700 placeholder:text-zinc-400 focus:outline-none dark:bg-zinc-900 dark:text-zinc-300"
         />
       </form>
