@@ -77,6 +77,20 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if ("link" in body) {
     updates.link = typeof body.link === "string" && body.link.trim() ? body.link.trim() : null;
   }
+  if ("review_every_days" in body) {
+    const n = Number(body.review_every_days);
+    if (body.review_every_days !== null && (!Number.isInteger(n) || n <= 0)) {
+      return NextResponse.json(
+        { error: "review_every_days must be a positive whole number or null" },
+        { status: 400 },
+      );
+    }
+    (updates as Record<string, unknown>).review_every_days =
+      body.review_every_days === null ? null : n;
+  }
+  if (body.mark_reviewed === true) {
+    updates.last_reviewed_at = new Date().toISOString();
+  }
 
   const { data, error } = await supabase
     .from("projects")

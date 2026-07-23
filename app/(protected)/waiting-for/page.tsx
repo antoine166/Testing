@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import SmartListHeader from "@/components/smart-list-header";
-import TaskRow from "@/components/task-row";
+import TaskRow, { type Task } from "@/components/task-row";
 import { useTaskList } from "@/lib/hooks/use-task-list";
-import { todayLocal } from "@/lib/date";
+import { todayLocal, daysSince } from "@/lib/date";
 
 export default function WaitingForPage() {
   const {
@@ -22,6 +22,57 @@ export default function WaitingForPage() {
   } = useTaskList();
 
   const [personFilter, setPersonFilter] = useState("");
+  const [agendaAdded, setAgendaAdded] = useState<Set<string>>(new Set());
+  const [agendaError, setAgendaError] = useState<string | null>(null);
+
+  // GTD's two person-facing lists, connected: when a Waiting For item has
+  // gone stale, the natural next move is "bring it up with them" — which
+  // is exactly what Agendas hold. One tap turns the stale wait into an
+  // agenda item for that person.
+  async function addToAgenda(task: Task) {
+    if (!task.waiting_on) return;
+    const res = await fetch("/api/agenda-items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        person_name: task.waiting_on,
+        note: `Follow up: ${task.title}`,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setAgendaError(body.error ?? "Failed to add agenda item");
+      return;
+    }
+    setAgendaError(null);
+    setAgendaAdded((prev) => new Set(prev).add(task.id));
+  }
+
+  function agendaHandoff(task: Task) {
+    // Offered once the wait is old enough that a nudge is warranted — a
+    // week (matching the digest's "stale" threshold) or a follow-up due.
+    const stale =
+      (task.waiting_since && daysSince(task.waiting_since) >= 7) ||
+      (task.follow_up_date && task.follow_up_date <= today);
+    if (!task.waiting_on || !stale) return null;
+    return (
+      <li className="-mt-1 ml-8 list-none text-xs text-zinc-500">
+        {agendaAdded.has(task.id) ? (
+          <span className="text-emerald-600 dark:text-emerald-400">
+            ✓ On the agenda for {task.waiting_on}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => addToAgenda(task)}
+            className="underline hover:text-zinc-700 dark:hover:text-zinc-300"
+          >
+            🗣️ Add to agenda for {task.waiting_on} →
+          </button>
+        )}
+      </li>
+    );
+  }
 
   const today = todayLocal();
   const allWaitingTasks = tasks
@@ -77,9 +128,9 @@ export default function WaitingForPage() {
         </div>
       )}
 
-      {error && (
+      {(error || agendaError) && (
         <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
-          {error}
+          {error ?? agendaError}
         </p>
       )}
 
@@ -101,7 +152,10 @@ export default function WaitingForPage() {
               </h2>
               <ul className="space-y-2">
                 {readyToFollowUp.map((task) => (
-                  <TaskRow key={task.id} task={task} {...rowProps} />
+                  <Fragment key={task.id}>
+                    <TaskRow task={task} {...rowProps} />
+                    {agendaHandoff(task)}
+                  </Fragment>
                 ))}
               </ul>
             </div>
@@ -109,7 +163,10 @@ export default function WaitingForPage() {
           {rest.length > 0 && (
             <ul className="space-y-2">
               {rest.map((task) => (
-                <TaskRow key={task.id} task={task} {...rowProps} />
+                <Fragment key={task.id}>
+                  <TaskRow task={task} {...rowProps} />
+                  {agendaHandoff(task)}
+                </Fragment>
               ))}
             </ul>
           )}

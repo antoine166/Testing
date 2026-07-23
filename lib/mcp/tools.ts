@@ -4,6 +4,9 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { todayLocal, daysSince } from "@/lib/date";
 import { computeStreak, isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
+import { findStalledProjectIds } from "@/lib/projects/stalled";
+import { looksLikeTopic } from "@/lib/tasks/next-action-shape";
+import { reviewStreakWeeks } from "@/lib/reviews/streak";
 import {
   computeWeeklyGoalStreak,
   countThisWeek,
@@ -598,10 +601,23 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         due_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
         scheduled_date: z.string().nullable().optional().describe("YYYY-MM-DD or null to clear"),
         link: z.string().nullable().optional().describe("Related URL, or null to clear."),
+        review_every_days: z
+          .number()
+          .int()
+          .positive()
+          .nullable()
+          .optional()
+          .describe(
+            "Review cadence in days — how often this project needs a look in the Weekly Review. null = due at every review (the default).",
+          ),
+        mark_reviewed: z
+          .boolean()
+          .optional()
+          .describe("true stamps last_reviewed_at = now, marking the project reviewed."),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ id, name, link, ...rest }) => {
+    async ({ id, name, link, mark_reviewed, ...rest }) => {
       const updates: Record<string, unknown> = { ...rest };
       if (name !== undefined) {
         const trimmed = name.trim();
@@ -610,6 +626,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       }
       if (link !== undefined) {
         updates.link = link && link.trim() ? link.trim() : null;
+      }
+      if (mark_reviewed === true) {
+        updates.last_reviewed_at = new Date().toISOString();
       }
 
       const { data, error } = await admin
@@ -3393,6 +3412,163 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         // with /api/digest so both surfaces tell the same story.
         resurfaced_note: await pickResurfacedNote(admin, userId, today),
       });
+    },
+  );
+
+  server.registerTool(
+    "get_review_snapshot",
+    {
+      title: "Get Weekly Review snapshot",
+      description:
+        "The same numbers the app's Weekly Review flow (/weekly-review) steps through, so Claude " +
+        "can walk Antoine through a review conversationally: inbox state, next-action list size, " +
+        "topic-shaped task titles needing a rewrite, Waiting For follow-ups due, stalled projects, " +
+        "projects due for their per-project review cadence, Someday/tickler items ready to " +
+        "revisit, per-domain (Areas of Focus) health, and the review streak. Use log_weekly_review " +
+        "at the end so a Claude-guided review counts toward the streak like an app-guided one.",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const today = todayLocal();
+      const [tasksRes, projectsRes, domainsRes, logsRes, ticklerRes] = await Promise.all([
+        admin.from("tasks").select("*").eq("user_id", userId).is("deleted_at", null),
+        admin.from("projects").select("*").eq("user_id", userId).is("deleted_at", null),
+        admin.from("domains").select("id, name, color").eq("user_id", userId).is("deleted_at", null),
+        admin
+          .from("weekly_review_logs")
+          .select("completed_at, stats")
+          .eq("user_id", userId)
+          .order("completed_at", { ascending: false })
+          .limit(104),
+        admin
+          .from("tickler_items")
+          .select("id, note, revisit_date")
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .lte("revisit_date", today),
+      ]);
+      const firstError =
+        tasksRes.error ?? projectsRes.error ?? domainsRes.error ?? logsRes.error ?? ticklerRes.error;
+      if (firstError) return fail(firstError.message);
+
+      // Post-error-check, all four are present; ?? [] narrows the types.
+      const tasks = tasksRes.data ?? [];
+      const projects = projectsRes.data ?? [];
+      const domainRows = domainsRes.data ?? [];
+      const reviewLogRows = logsRes.data ?? [];
+      const open = tasks.filter((t) => t.status !== "done");
+      const inbox = open.filter((t) => !t.domain_id && !t.someday && !t.waiting_for);
+      const waiting = open.filter((t) => t.waiting_for);
+      const somedayTasks = open.filter((t) => t.someday);
+      const activeProjects = projects.filter((p) => p.status === "active");
+      const stalledIds = findStalledProjectIds(
+        projects,
+        open.map((t) => ({ project_id: t.project_id, status: t.status })),
+      );
+
+      return ok({
+        date: today,
+        inbox: {
+          count: inbox.length,
+          oldest_days: inbox.length
+            ? Math.max(...inbox.map((t) => daysSince(t.created_at.slice(0, 10))))
+            : null,
+        },
+        anytime_count: open.filter(
+          (t) => t.domain_id && !t.someday && !t.waiting_for && !t.scheduled_date,
+        ).length,
+        // Titles that read as topics, not physical next actions — candidates
+        // for a rewrite during the review.
+        topic_shaped_tasks: open
+          .filter((t) => t.domain_id && !t.someday && !t.waiting_for && looksLikeTopic(t.title))
+          .map((t) => ({ id: t.id, title: t.title })),
+        waiting_for: {
+          count: waiting.length,
+          due_follow_ups: waiting
+            .filter((t) => t.follow_up_date && t.follow_up_date <= today)
+            .map((t) => ({ id: t.id, title: t.title, follow_up_date: t.follow_up_date })),
+        },
+        stalled_projects: activeProjects
+          .filter((p) => stalledIds.has(p.id))
+          .map((p) => ({ id: p.id, name: p.name })),
+        // Per-project review cadence: null cadence = due at every review.
+        projects_due_for_review: activeProjects
+          .filter(
+            (p) =>
+              !p.last_reviewed_at ||
+              !p.review_every_days ||
+              daysSince(p.last_reviewed_at.slice(0, 10)) >= p.review_every_days,
+          )
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            review_every_days: p.review_every_days,
+            last_reviewed_at: p.last_reviewed_at,
+          })),
+        someday: {
+          count: somedayTasks.length,
+          ready_to_revisit: somedayTasks
+            .filter((t) => t.revisit_date && t.revisit_date <= today)
+            .map((t) => ({ id: t.id, title: t.title, revisit_date: t.revisit_date })),
+        },
+        tickler_due: ticklerRes.data,
+        // Areas of Focus (Horizon 2) health: a domain with no next actions
+        // or nothing finished in 14+ days is going cold.
+        domain_health: domainRows.map((d) => {
+          const nextActions = open.filter(
+            (t) => t.domain_id === d.id && !t.someday && !t.waiting_for,
+          ).length;
+          const doneDates = tasks
+            .filter((t) => t.domain_id === d.id && t.status === "done" && t.completed_at)
+            .map((t) => (t.completed_at as string).slice(0, 10))
+            .sort();
+          const lastDone = doneDates.at(-1) ?? null;
+          const daysQuiet = lastDone ? daysSince(lastDone) : null;
+          return {
+            id: d.id,
+            name: d.name,
+            active_projects: activeProjects.filter((p) => p.domain_id === d.id).length,
+            next_actions: nextActions,
+            days_since_last_completion: daysQuiet,
+            cold: nextActions === 0 || daysQuiet === null || daysQuiet >= 14,
+          };
+        }),
+        review_history: {
+          last_review_at: reviewLogRows[0]?.completed_at ?? null,
+          streak_weeks: reviewStreakWeeks(
+            reviewLogRows.map((l) => l.completed_at),
+            today,
+          ),
+        },
+      });
+    },
+  );
+
+  server.registerTool(
+    "log_weekly_review",
+    {
+      title: "Log a completed Weekly Review",
+      description:
+        "Record that a Weekly Review was completed (now) so it counts toward the review streak " +
+        "and the Today-view nudge resets — the same record the app's /weekly-review flow writes. " +
+        "Call this when a Claude-guided review wraps up. Optionally pass stats (e.g. counts from " +
+        "get_review_snapshot) to snapshot the system state at review time.",
+      inputSchema: {
+        stats: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("Optional snapshot of review-time numbers (inbox_count, stalled_count...)"),
+      },
+      annotations: { readOnlyHint: false },
+    },
+    async ({ stats }) => {
+      const { data, error } = await admin
+        .from("weekly_review_logs")
+        .insert({ user_id: userId, stats: stats ?? null })
+        .select()
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
     },
   );
 

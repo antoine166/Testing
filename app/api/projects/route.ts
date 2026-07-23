@@ -54,6 +54,10 @@ export async function POST(request: Request) {
       scheduled_date:
         typeof body.scheduled_date === "string" ? body.scheduled_date : undefined,
       link: typeof body.link === "string" && body.link.trim() ? body.link.trim() : undefined,
+      review_every_days:
+        Number.isInteger(body.review_every_days) && body.review_every_days > 0
+          ? body.review_every_days
+          : undefined,
     })
     .select()
     .single();

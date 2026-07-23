@@ -40,6 +40,7 @@ The most important feature. Available from everywhere in the app.
 - On submit → saved as a task with no domain assigned, which makes it an inbox item (see 3.4)
 - If a domain is set at capture time, the task is already "processed" and skips the inbox
 - Must be dismissible with `Escape`
+- **Voice capture**: a 🎤 button beside the title field dictates via the Web Speech API (browser-native, no server, no API key) — final transcript appends to whatever's already typed. Feature-detected: the button simply doesn't render in browsers without speech recognition
 - **Offline queueing**: if the save request fails with a network error (not a real server rejection — an invalid submission still surfaces its error normally), the capture is stashed in IndexedDB (`lib/offline-queue.ts`) instead of lost, including a photo attachment if one was added. It replays automatically against the real API the moment the browser reports it's back online (or on next app load), oldest first — a network error mid-replay stops the run and leaves the rest queued for later, while a genuine server rejection (4xx/5xx) drops just that one entry rather than retrying forever. A persistent badge (`components/offline-queue-indicator.tsx`, same visual language as the realtime "Synced" pulse) shows how many captures are waiting, so it's never a silent black box. This is Quick-Capture-only — the app has no general offline data access (see 8)
 
 ### 3.1a Email Capture
@@ -153,6 +154,16 @@ Shows (in order):
 
 **Tickler resurfacing**: the tickler file's contract is that a note *reappears on its date without being looked for* — so `tickler_items` whose `revisit_date` has arrived render as an amber "Tickler — resurfaced today" card near the top of Today, each with inline **Make it a task** (the existing convert endpoint — lands in the Inbox to go through Clarify like anything else) and **Not yet — next week** (pushes `revisit_date` a week out from *today*, not from the original date). Someday *tasks* whose `revisit_date` arrived keep their existing banner link to `/someday`. MCP parity: `get_today_summary` returns the same two buckets (`tickler_due`, `ready_to_revisit`) so the daily digest tells the same story.
 
+**Other Today nudges/actions**: (1) a Weekly Review banner appears when it's been 8+ days since the last logged review (or ever — see 3.5b's sibling, the review history in 3.11); (2) after 5pm, if anything scheduled for today (or overdue) is still undecided, a "🌙 Wrap the day" banner links to the Daily Shutdown (3.5b); (3) the Overdue section header has bulk triage — "All → today" and "All → Anytime" — so the pile gets one decision instead of learned blindness.
+
+### 3.5b Daily Shutdown
+The evening bookend to the morning check-in, at `/shutdown` (sidebar: 🌙 Shutdown). A 60-second guided flow whose one job is preventing drift:
+
+1. **Decide the leftovers** — every unfinished task scheduled today-or-earlier gets an explicit decision (✓ Did it / → Tomorrow / → Anytime / 📦 Someday). Advancing is gated on deciding them all (a "skip tonight" escape hatch exists but is deliberately unglamorous)
+2. **Log what you did** — one-tap logging for due-today habits not yet logged
+3. **Empty your head** — rapid capture straight to the Inbox
+No new storage — it's pure orchestration over tasks/habits/capture.
+
 ### 3.5a Calendar (Hard Landscape)
 GTD's calendar, visualized at `/calendar` — week and day views over the existing `tasks` fields (no separate storage). Three visually distinct kinds of entry, per Allen's "hard landscape" rule:
 
@@ -172,6 +183,8 @@ Time-blocking: drag a task from the "To schedule" tray (or between slots) on des
 
 ### 3.6 Daily Capacity Check-in
 A 10-second prompt Antoine completes each morning.
+
+**The check-in now drives Do Now**: on a low-energy morning (energy ≤ 3), Do Now pre-selects its energy filter to match (1–2 → low, 3 → medium; 4–5 leaves it wide open), with a visible "pre-filtered from this morning's check-in" note and a one-click clear. Touching the filter manually always wins. This closed the "stored for future insights use" loop the field was created with.
 
 - Energy level: 1–5
 - Focus level: 1–5
@@ -251,11 +264,16 @@ A lightweight person layer — deliberately **not** a CRM (one was built and rem
 - Trash: registered as `person` in the generic system (`lib/trash.ts`) — list/restore/purge all just work
 - MCP parity: `list/create/update/delete_person`; `create_task`/`update_task` accept `person_id`
 - The Waiting For `waiting_on` free-text field stays for one-off names that don't deserve a person entry
+- **Waiting For → Agenda handoff**: on the Waiting For page, a stale item (7+ days waiting, or follow-up date due) with a known `waiting_on` shows a one-tap "🗣️ Add to agenda for {person}" line under its row — creating an agenda item ("Follow up: {task title}") for the next conversation with them, connecting the app's two person-facing lists
 
 ### 3.11 Coach *(removed July 2026)*
 The in-app AI Coach (an Anthropic-API-powered chat tab with its own tool surface in `lib/coach/shared.ts`) was **removed at Antoine's request**: it billed against separate Anthropic API credits, not his claude.ai Max subscription, and the MCP connector (3.11a) already gives Claude full access to the app through that subscription. Claude-facing capability now lives in exactly one place: `lib/mcp/tools.ts`.
 
-What replaced its one load-bearing feature: the Coach's guided Weekly Review became a no-AI guided flow at `/weekly-review` (Get Clear → Get Current → Get Creative), stepping through the app's real numbers — inbox count, calendar, next-action lists, a "Make fuzzy actions physical" pass (processed tasks whose titles still read as topics per `lib/tasks/next-action-shape.ts`, each linking into `/tasks?q=` to rewrite), Waiting For follow-ups due, stalled projects, Someday/tickler, horizons — with links into each list. Don't rebuild the Coach or reintroduce `ANTHROPIC_API_KEY` without asking.
+What replaced its one load-bearing feature: the Coach's guided Weekly Review became a no-AI guided flow at `/weekly-review` (Get Clear → Get Current → Get Creative), stepping through the app's real numbers — inbox count, calendar, next-action lists, a "Make fuzzy actions physical" pass (processed tasks whose titles still read as topics per `lib/tasks/next-action-shape.ts`, each linking into `/tasks?q=` to rewrite), Waiting For follow-ups due, stalled projects (each with a 🧭 "Plan it" link into the Natural Planning flow), a **project-by-project review pass** (only projects *due* per their cadence — `projects.review_every_days`, null = every review — each with a "Mark reviewed" button stamping `last_reviewed_at`), Someday/tickler, an **Areas of Focus health check** (per-domain: active projects, next actions, days since last completion; 🥶 flags a domain with no next actions or 14+ quiet days), horizons — with links into each list. Don't rebuild the Coach or reintroduce `ANTHROPIC_API_KEY` without asking.
+
+**The review is itself tracked** (`weekly_review_logs`): "Finish review" logs a row with a stats snapshot, the header shows a 🔥 weekly streak (same Monday-Sunday, in-progress-week-grace math as habits — `lib/reviews/streak.ts`) and days-since-last, Today nudges when it's 8+ days, and Analytics' System-trust row scores it. MCP parity: `get_review_snapshot` (every number above, for a Claude-guided conversational review) and `log_weekly_review` (so that review counts toward the same streak); `update_project` gained `review_every_days` + `mark_reviewed`.
+
+**Natural Planning Model flow** (`/plan?project=`): Allen's five phases as a guided flow — purpose → outcome vision → brainstorm (writing to the project's existing fields) → organize (guidance over the brainstorm) → next actions (creates real tasks, with the topic-shape nudge, at least one required). Reached from a project card's 🧭 button or a stalled project in the review.
 
 ### 3.11a Claude Connector (MCP) *(Phase 2)*
 A remote MCP server (`/api/mcp`) so Antoine can talk to Claude on claude.ai or in the Claude Desktop app and have it read and manage his Life OS data — **the** Claude-facing surface of the app (the in-app Coach tab that once complemented it is gone, see 3.11).
@@ -322,7 +340,9 @@ Life OS
   Project name
 + New List                         ← links to /domains
 ─────────────────────
-Habits · Training Log · Weekly Review · Routines · Checklists · Check-in · Library · Analytics · Trash · Settings
+Habits · Training Log · Weekly Review · Shutdown · Routines · Checklists · Check-in · Library · Analytics · Trash · Settings
+─────────────────────
+📘 User Guide (/guide) · 🗺️ GTD Workflow Map (pdf)
 ─────────────────────
 user@email · Log out
 ```
@@ -376,6 +396,9 @@ description        text
 status             text not null default 'active'
                    -- check: active | someday | completed | archived
 due_date           date
+review_every_days  int      -- per-project review cadence (3.11): how often the Weekly
+                   -- Review shows it. null = due at every review
+last_reviewed_at   timestamptz  -- stamped by "Mark reviewed" (app or MCP)
 created_at         timestamptz default now()
 updated_at         timestamptz default now()
 deleted_at         timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its
@@ -398,6 +421,10 @@ priority        text not null default 'none'
                 -- check: none | low | medium | high
 due_date        date
 scheduled_date  date    -- the day Antoine plans to work on it
+clarified_at    timestamptz  -- when the task left the Inbox (domain assigned).
+                -- Stamped by a DB trigger (tasks_set_clarified_at) on the
+                -- null→domain transition so every write surface behaves the
+                -- same; powers Analytics' capture→clarify latency metric
 completed_at    timestamptz
 -- inbox = domain_id is null (unprocessed, GTD-style). project_id may be
 -- null independently — a processed task can be domain-only, no project.
@@ -495,6 +522,20 @@ size            int
 created_at      timestamptz default now()
 -- not independently trashable — goes with its log entry on purge, same
 -- Storage-cleanup caveat as task_attachments (3.4)
+```
+
+---
+
+### `weekly_review_logs`
+```sql
+id            uuid primary key default gen_random_uuid()
+user_id       uuid not null references auth.users(id) on delete cascade
+completed_at  timestamptz not null default now()
+stats         jsonb   -- snapshot of review-time numbers (inbox_count, stalled_count...)
+-- One row per completed Weekly Review (3.11) — written by the app flow's
+-- "Finish review" or MCP's log_weekly_review. Powers the streak, the
+-- Today-view nudge, and Analytics' System-trust row. No soft delete —
+-- it's a log, not content.
 ```
 
 ---
@@ -759,7 +800,8 @@ Supabase is called **server-side only** (via the service-role client or the user
 ### Phase 4 — Polish
 - [ ] Supabase Realtime (live updates across tabs) — infra shipped (publication membership, `REPLICA IDENTITY FULL`); a cross-tab bug (edits not propagating) was root-caused to the client never forwarding its JWT to Realtime on `INITIAL_SESSION` and a fix shipped, pending live confirmation
 - [x] Mobile UX pass (touch targets, hover-only controls, wrapping fixes audited and fixed); no dedicated live-device QA pass yet
-- [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window); weekly review is a guided no-AI flow at `/weekly-review` (see 3.11)
+- [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window, plus a **System-trust** row: median capture→clarify latency via `tasks.clarified_at`, inbox count + oldest age, stalled projects, review streak); weekly review is a guided no-AI flow at `/weekly-review` with history/streak/cadence (see 3.11)
+- [x] Daily Shutdown ritual (3.5b), Contexts view (3.4c), Do Now energy pre-filter (3.6), Natural Planning flow (3.11), voice capture (3.1), Waiting For → Agenda handoff (3.10a), in-app User Guide (`/guide`)
 - [x] Data export (`GET /api/export` — full JSON export of all content types)
 - [x] Trash / soft delete with 30-day recovery (3.12)
 - [x] Task image attachments (3.4), including from forwarded emails (3.1a)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SmartListHeader from "@/components/smart-list-header";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import { useTaskList } from "@/lib/hooks/use-task-list";
@@ -47,8 +47,31 @@ export default function DoNowPage() {
   const [contextFilter, setContextFilter] = useState("");
   const [timeFilter, setTimeFilter] = useState("");
   const [energyFilter, setEnergyFilter] = useState("");
+  // Set when today's check-in pre-selected the energy filter, so the page
+  // can say why it's filtered (and offer to clear it). Cleared the moment
+  // the filter is touched manually.
+  const [autoEnergy, setAutoEnergy] = useState<number | null>(null);
 
   const today = todayLocal();
+
+  // Close the check-in loop: the morning energy level (1-5) has been
+  // "stored for future insights" since Phase 1 — this is the insight. A
+  // low-energy day pre-filters Do Now to what's actually doable, instead
+  // of showing high-energy work you'll bounce off of.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/checkins?date=${today}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((checkin: { energy_level: number } | null) => {
+        if (!checkin || checkin.energy_level > 3) return; // 4-5: no limit needed
+        setEnergyFilter(checkin.energy_level <= 2 ? "low" : "medium");
+        setAutoEnergy(checkin.energy_level);
+      })
+      .catch(() => {
+        // No check-in / fetch failed — filters just start wide open.
+      });
+    return () => controller.abort();
+  }, [today]);
 
   const actionableTasks = tasks.filter(
     (t) =>
@@ -108,7 +131,10 @@ export default function DoNowPage() {
         </select>
         <select
           value={energyFilter}
-          onChange={(e) => setEnergyFilter(e.target.value)}
+          onChange={(e) => {
+            setEnergyFilter(e.target.value);
+            setAutoEnergy(null);
+          }}
           className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         >
           {ENERGY_OPTIONS.map((o) => (
@@ -118,6 +144,23 @@ export default function DoNowPage() {
           ))}
         </select>
       </div>
+
+      {autoEnergy !== null && (
+        <p className="mb-4 text-xs text-zinc-500">
+          🌡️ Pre-filtered to {energyFilter}-energy actions from this morning&apos;s check-in
+          (energy {autoEnergy}/5).{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setEnergyFilter("");
+              setAutoEnergy(null);
+            }}
+            className="underline"
+          >
+            Show everything
+          </button>
+        </p>
+      )}
 
       {error && (
         <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
