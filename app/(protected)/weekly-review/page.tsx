@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
+import { looksLikeTopic } from "@/lib/tasks/next-action-shape";
 import { todayLocal } from "@/lib/date";
 
 // GTD's Weekly Review as a guided, no-AI flow: Get Clear → Get Current →
@@ -90,6 +91,11 @@ export default function WeeklyReviewPage() {
   const anytimeCount = open.filter(
     (t) => t.domain_id && !t.someday && !t.waiting_for && !t.scheduled_date,
   ).length;
+  // Processed tasks whose titles still read as topics ("Mom", "taxes") —
+  // they left the Inbox without the clarify question really being answered.
+  const topicShaped = open.filter(
+    (t) => t.domain_id && !t.someday && !t.waiting_for && looksLikeTopic(t.title),
+  );
 
   const steps: { phase: string; title: string; body: React.ReactNode }[] = [
     {
@@ -162,6 +168,46 @@ export default function WeeklyReviewPage() {
           <Link href="/anytime" className="mt-2 inline-block text-sm text-blue-600 underline dark:text-blue-400">
             📚 Open Anytime →
           </Link>
+        </>
+      ),
+    },
+    {
+      phase: "Get Current",
+      title: "Make fuzzy actions physical",
+      body: (
+        <>
+          <p className="text-sm">
+            {topicShaped.length === 0 ? (
+              <span className="text-emerald-600 dark:text-emerald-400">
+                ✓ Every next action reads like an action.
+              </span>
+            ) : (
+              <>
+                <span className="font-semibold">{topicShaped.length}</span> task
+                {topicShaped.length === 1 ? "" : "s"} still read{topicShaped.length === 1 ? "s" : ""} like a{" "}
+                <em>topic</em>, not a physical next action. &ldquo;Mom&rdquo; isn&apos;t doable —
+                &ldquo;Call Mom about Thanksgiving&rdquo; is. Rewrite each so it starts with a
+                visible verb.
+              </>
+            )}
+          </p>
+          {topicShaped.length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {topicShaped.slice(0, 8).map((t) => (
+                <li key={t.id} className="text-sm text-zinc-500">
+                  <Link
+                    href={`/tasks?q=${encodeURIComponent(t.title)}`}
+                    className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                  >
+                    {t.title}
+                  </Link>
+                </li>
+              ))}
+              {topicShaped.length > 8 && (
+                <li className="text-sm text-zinc-500">…and {topicShaped.length - 8} more.</li>
+              )}
+            </ul>
+          )}
         </>
       ),
     },

@@ -665,6 +665,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         status: z.enum(TASK_STATUSES).optional().describe("Filter by status. Omit to get todo + in_progress only."),
         domain_id: z.string().uuid().optional(),
         project_id: z.string().uuid().optional(),
+        context: z
+          .string()
+          .optional()
+          .describe(
+            "Filter by GTD context, exact match without the @ (e.g. \"Phone\", \"Errands\") — see list_contexts for the available names",
+          ),
         scheduled_date: z.string().optional().describe("Exact scheduled date, YYYY-MM-DD"),
         scheduled_on_or_before: z
           .string()
@@ -674,11 +680,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ status, domain_id, project_id, scheduled_date, scheduled_on_or_before, limit }) => {
+    async ({ status, domain_id, project_id, context, scheduled_date, scheduled_on_or_before, limit }) => {
       let query = admin.from("tasks").select("*").eq("user_id", userId).is("deleted_at", null);
       query = status ? query.eq("status", status) : query.neq("status", "done");
       if (domain_id) query = query.eq("domain_id", domain_id);
       if (project_id) query = query.eq("project_id", project_id);
+      if (context) query = query.eq("context", context);
       if (scheduled_date) query = query.eq("scheduled_date", scheduled_date);
       if (scheduled_on_or_before) {
         query = query.lte("scheduled_date", scheduled_on_or_before).not("scheduled_date", "is", null);
@@ -3295,20 +3302,27 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     {
       title: "Get today's summary",
       description:
-        "Everything relevant to coaching Antoine right now: today's check-in, habits due today, tasks scheduled today, overdue tasks, and anything Waiting For that's stalled a week or more. Use this first for \"what should I focus on today\" style questions.",
+        "Everything relevant to coaching Antoine right now: today's check-in, habits due today, tasks scheduled today, overdue tasks, anything Waiting For that's stalled a week or more, and tickler-file notes / Someday tasks whose revisit date has arrived. Use this first for \"what should I focus on today\" style questions.",
       annotations: { readOnlyHint: true },
     },
     async () => {
       const today = todayLocal();
 
-      const [checkinRes, habitsRes, tasksRes] = await Promise.all([
+      const [checkinRes, habitsRes, tasksRes, ticklerRes] = await Promise.all([
         admin.from("daily_checkins").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
         admin.from("habits").select("*").eq("user_id", userId).is("deleted_at", null).eq("active", true),
         admin.from("tasks").select("*").eq("user_id", userId).is("deleted_at", null).neq("status", "done"),
+        admin
+          .from("tickler_items")
+          .select("id, note, revisit_date")
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .lte("revisit_date", today),
       ]);
       if (checkinRes.error) return fail(checkinRes.error.message);
       if (habitsRes.error) return fail(habitsRes.error.message);
       if (tasksRes.error) return fail(tasksRes.error.message);
+      if (ticklerRes.error) return fail(ticklerRes.error.message);
 
       const habits = habitsRes.data;
       const { data: logs, error: logsError } = await admin
@@ -3346,6 +3360,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       const dueFollowUps = tasks.filter(
         (t) => t.waiting_for && t.follow_up_date && t.follow_up_date <= today,
       );
+      // The tickler file's contract: things resurface on their date without
+      // being looked for — same buckets the Today view shows.
+      const readyToRevisit = tasks.filter(
+        (t) => t.someday && t.revisit_date && t.revisit_date <= today,
+      );
 
       return ok({
         date: today,
@@ -3363,6 +3382,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           id: t.id,
           title: t.title,
           follow_up_date: t.follow_up_date,
+        })),
+        tickler_due: ticklerRes.data,
+        ready_to_revisit: readyToRevisit.map((t) => ({
+          id: t.id,
+          title: t.title,
+          revisit_date: t.revisit_date,
         })),
         // One Library note a day, resurfaced — deterministic per day, shared
         // with /api/digest so both surfaces tell the same story.

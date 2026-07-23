@@ -39,6 +39,8 @@ type RoutineItem = {
   sort_order: number;
 };
 
+type TicklerItem = { id: string; note: string; revisit_date: string };
+
 const PRIORITY_RANK: Record<TaskPriority, number> = {
   high: 0,
   medium: 1,
@@ -56,7 +58,7 @@ function currentTimeOfDay(): "morning" | "afternoon" | "evening" {
 }
 
 async function fetchDashboardData(today: string, opts?: RequestInit) {
-  const [checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes, routinesRes] =
+  const [checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes, routinesRes, ticklerRes] =
     await Promise.all([
       fetch(`/api/checkins?date=${today}`, opts),
       fetch("/api/habits", opts),
@@ -65,6 +67,7 @@ async function fetchDashboardData(today: string, opts?: RequestInit) {
       fetch("/api/domains", opts),
       fetch("/api/projects", opts),
       fetch("/api/routines", opts),
+      fetch("/api/tickler-items", opts),
     ]);
 
   if (
@@ -74,22 +77,25 @@ async function fetchDashboardData(today: string, opts?: RequestInit) {
     !tasksRes.ok ||
     !domainsRes.ok ||
     !projectsRes.ok ||
-    !routinesRes.ok
+    !routinesRes.ok ||
+    !ticklerRes.ok
   ) {
     throw new Error("Failed to load today's data");
   }
 
-  const [checkin, habits, logs, tasks, domains, projects, routines] = await Promise.all([
-    checkinRes.json(),
-    habitsRes.json(),
-    logsRes.json(),
-    tasksRes.json(),
-    domainsRes.json(),
-    projectsRes.json(),
-    routinesRes.json(),
-  ]);
+  const [checkin, habits, logs, tasks, domains, projects, routines, ticklerItems] =
+    await Promise.all([
+      checkinRes.json(),
+      habitsRes.json(),
+      logsRes.json(),
+      tasksRes.json(),
+      domainsRes.json(),
+      projectsRes.json(),
+      routinesRes.json(),
+      ticklerRes.json(),
+    ]);
 
-  return { checkin, habits, logs, tasks, domains, projects, routines };
+  return { checkin, habits, logs, tasks, domains, projects, routines, ticklerItems };
 }
 
 export default function TodayDashboard() {
@@ -103,6 +109,7 @@ export default function TodayDashboard() {
   const [projects, setProjects] = useState<TaskProject[]>([]);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [routineItems, setRoutineItems] = useState<Record<string, RoutineItem[]>>({});
+  const [ticklerItems, setTicklerItems] = useState<TicklerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -148,6 +155,7 @@ export default function TodayDashboard() {
       setDomains(data.domains);
       setProjects(data.projects);
       setRoutines(data.routines);
+      setTicklerItems(data.ticklerItems);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -168,6 +176,7 @@ export default function TodayDashboard() {
         setDomains(data.domains);
         setProjects(data.projects);
         setRoutines(data.routines);
+        setTicklerItems(data.ticklerItems);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -188,6 +197,7 @@ export default function TodayDashboard() {
       "projects",
       "routines",
       "routine_items",
+      "tickler_items",
     ],
     () => loadAll(),
   );
@@ -520,6 +530,35 @@ export default function TodayDashboard() {
     await loadAll();
   }
 
+  async function handleTicklerConvert(id: string) {
+    const res = await fetch(`/api/tickler-items/${id}/convert-to-task`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert to task");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleTicklerSnooze(id: string) {
+    // Push the revisit date a week out from today (not from the original
+    // date — an item three weeks overdue shouldn't need three snoozes).
+    const [y, m, d] = today.split("-").map(Number);
+    const next = new Date(y, m - 1, d + 7);
+    const nextDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    const res = await fetch(`/api/tickler-items/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revisit_date: nextDate }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to snooze tickler item");
+      return;
+    }
+    await loadAll();
+  }
+
   if (loading) {
     return <p className="text-sm text-zinc-500">Loading...</p>;
   }
@@ -559,6 +598,12 @@ export default function TodayDashboard() {
   const readyToRevisitCount = tasks.filter(
     (t) => t.someday && t.status !== "done" && t.revisit_date && t.revisit_date <= today,
   ).length;
+  // The tickler file's contract is that its notes *reappear on their date
+  // without being looked for* — so due notes render right here, actionable
+  // inline, instead of waiting to be noticed on the Someday page.
+  const ticklerDue = ticklerItems
+    .filter((t) => t.revisit_date <= today)
+    .sort((a, b) => a.revisit_date.localeCompare(b.revisit_date));
   // GTD's Waiting For is only useful if it prompts an actual follow-up —
   // an explicit follow_up_date is that active nudge, surfaced the same
   // way the tickler file surfaces a Someday item that's come due.
@@ -609,6 +654,37 @@ export default function TodayDashboard() {
           🔔 {readyToRevisitCount} Someday {readyToRevisitCount === 1 ? "item" : "items"} ready to
           revisit →
         </Link>
+      )}
+
+      {ticklerDue.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950">
+          <p className="mb-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
+            🗂️ Tickler — resurfaced today
+          </p>
+          <ul className="space-y-1.5">
+            {ticklerDue.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <span className="text-sm text-amber-900 dark:text-amber-200">{item.note}</span>
+                <span className="flex shrink-0 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleTicklerConvert(item.id)}
+                    className="text-xs font-medium text-amber-800 underline hover:text-amber-950 dark:text-amber-300 dark:hover:text-amber-100"
+                  >
+                    Make it a task
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTicklerSnooze(item.id)}
+                    className="text-xs font-medium text-amber-700 underline hover:text-amber-950 dark:text-amber-400 dark:hover:text-amber-100"
+                  >
+                    Not yet — next week
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {readyToFollowUpCount > 0 && (
