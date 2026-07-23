@@ -19,6 +19,7 @@ const SMART_LISTS = [
   { href: "/", label: "Today", icon: "★", iconBg: "#eab308" },
   { href: "/calendar", label: "Calendar", icon: "🗓️", iconBg: "#dc2626" },
   { href: "/do-now", label: "Do Now", icon: "🎯", iconBg: "#22c55e" },
+  { href: "/contexts", label: "Contexts", icon: "@", iconBg: "#65a30d" },
   { href: "/upcoming", label: "Upcoming", icon: "📅", iconBg: "#ef4444" },
   { href: "/anytime", label: "Anytime", icon: "📚", iconBg: "#14b8a6" },
   { href: "/someday", label: "Someday / Tickler", icon: "📦", iconBg: "#d97706" },
@@ -28,6 +29,7 @@ const SMART_LISTS = [
   { href: "/habits", label: "Habits", icon: "🔁", iconBg: "#ec4899" },
   { href: "/training-log", label: "Training Log", icon: "🏋️", iconBg: "#f59e0b" },
   { href: "/weekly-review", label: "Weekly Review", icon: "🔭", iconBg: "#06b6d4" },
+  { href: "/shutdown", label: "Shutdown", icon: "🌙", iconBg: "#334155" },
 ] as const;
 
 const UTILITY_LINKS = [
@@ -51,6 +53,10 @@ const REFERENCE_LINKS = [
     iconBg: "#ca8a04",
   },
 ] as const;
+
+// Internal reference pages — same visual row as REFERENCE_LINKS but routed
+// with <Link> instead of target="_blank".
+const GUIDE_LINK = { href: "/guide", label: "User Guide", icon: "📘", iconBg: "#1d4ed8" } as const;
 
 // Graphite chrome: no colored chips — a bare glyph, like macOS sidebars.
 // (The colored version lives in git history if the multicolor look ever
@@ -240,6 +246,18 @@ export default function SidebarNav({
       </div>
 
       <div className="mt-3 space-y-0.5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+        <Link
+          href={GUIDE_LINK.href}
+          onClick={() => setMobileOpen(false)}
+          className={`flex items-center gap-2.5 rounded-md px-2 py-1 text-sm ${
+            pathname === GUIDE_LINK.href
+              ? "font-medium text-zinc-950 dark:text-zinc-50"
+              : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:bg-zinc-900"
+          }`}
+        >
+          <NavIcon icon={GUIDE_LINK.icon} bg={GUIDE_LINK.iconBg} />
+          {GUIDE_LINK.label}
+        </Link>
         {REFERENCE_LINKS.map((link) => (
           <a
             key={link.href}

@@ -108,25 +108,68 @@ body {
 }
 
 /* Habit log: a progress ring sweeps to its new fill. Any change to the
-   stroke offset (0→full for daily; proportional for times/week) animates.
-   The pop is a one-shot scale bump when a log lands — no Tailwind `scale-*`
-   utility on this element, so the transform is uncontested. */
+   stroke offset (0→full for daily; proportional for times/week) animates. */
 .habit-ring-progress {
   transition: stroke-dashoffset 550ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.habit-ring-pop {
-  animation: habit-ring-pop 420ms ease-out;
-}
-@keyframes habit-ring-pop {
+
+/* Habit completion reward: a fist punches in and LANDS on the ring — a
+   habit-specific gesture, distinct from a task's checkmark-and-strikethrough.
+   Three synchronized beats: the fist flies in and impacts (~scale 1.6 at
+   landing), an emerald burst ring radiates from the point of contact, and
+   the whole row flashes green. */
+@keyframes habit-punch {
   0% {
-    transform: scale(1);
+    transform: translateX(-70%) scale(0.2) rotate(-30deg);
+    opacity: 0;
   }
-  40% {
-    transform: scale(1.28);
+  50% {
+    transform: translateX(0) scale(1.65) rotate(10deg);
+    opacity: 1;
+  } /* impact */
+  68% {
+    transform: translateX(0) scale(1.2) rotate(-6deg);
+    opacity: 1;
   }
   100% {
-    transform: scale(1);
+    transform: translateX(0) scale(1.4) rotate(0deg);
+    opacity: 0;
   }
+}
+.habit-punch {
+  animation: habit-punch 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes habit-burst {
+  0% {
+    transform: scale(0.35);
+    opacity: 0;
+  }
+  45% {
+    opacity: 0.85;
+  } /* becomes visible as the fist lands */
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+.habit-burst {
+  animation: habit-burst 520ms ease-out 130ms both;
+}
+
+@keyframes habit-row-flash {
+  0% {
+    background-color: transparent;
+  }
+  30% {
+    background-color: rgb(16 185 129 / 0.18);
+  } /* emerald flash at impact */
+  100% {
+    background-color: transparent;
+  }
+}
+.habit-row-flash {
+  animation: habit-row-flash 650ms ease-out;
 }
 
 /* Calmer days / accessibility: keep the state change, drop the motion. */
@@ -138,7 +181,9 @@ body {
   .habit-ring-progress {
     transition: none;
   }
-  .habit-ring-pop {
+  .habit-punch,
+  .habit-burst,
+  .habit-row-flash {
     animation: none;
   }
 }

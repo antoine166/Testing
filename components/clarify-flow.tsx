@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { Task, TaskDomain, TaskProject, TaskPriority } from "@/components/task-row";
+import { looksLikeTopic, TOPIC_NUDGE } from "@/lib/tasks/next-action-shape";
+import { useContexts } from "@/lib/hooks/use-contexts";
 
 // GTD's clarify step as a guided flow: the workflow-map diagram made
 // interactive. One inbox item at a time, Allen's decision tree as buttons —
@@ -49,6 +51,7 @@ export default function ClarifyFlow({
   const [panel, setPanel] = useState<Panel>("decide");
   const [busy, setBusy] = useState(false);
   const [processed, setProcessed] = useState(0);
+  const locations = useContexts();
 
   // Per-item panel state
   const [deferTitle, setDeferTitle] = useState("");
@@ -155,6 +158,11 @@ export default function ClarifyFlow({
   const projectOptions = deferDomain
     ? projects.filter((p) => !p.domain_id || p.domain_id === deferDomain)
     : projects;
+  // Preserve a current value that isn't in the list as a selectable option.
+  const locationOptions =
+    deferContext && !locations.includes(deferContext)
+      ? [deferContext, ...locations]
+      : locations;
 
   const buttonBase =
     "rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50";
@@ -300,6 +308,9 @@ export default function ClarifyFlow({
               className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
           </label>
+          {looksLikeTopic(deferTitle) && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">{TOPIC_NUDGE}</p>
+          )}
           <div className="flex flex-wrap gap-2">
             <label className="text-xs text-zinc-500">
               Domain
@@ -335,13 +346,20 @@ export default function ClarifyFlow({
               </select>
             </label>
             <label className="text-xs text-zinc-500">
-              Context
-              <input
+              Location
+              <select
                 value={deferContext}
                 onChange={(e) => setDeferContext(e.target.value)}
-                placeholder="@calls, @errands…"
-                className="ml-1 w-28 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
+                title="Location — where / with what you can do it"
+                className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                <option value="">Location…</option>
+                {locationOptions.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="text-xs text-zinc-500">
               Priority
@@ -513,6 +531,9 @@ export default function ClarifyFlow({
             placeholder='e.g. "Email Sarah for the venue shortlist"'
             className="w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
+          {looksLikeTopic(nextAction) && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">{TOPIC_NUDGE}</p>
+          )}
           <div className="flex gap-2">
             <button
               disabled={busy || !nextAction.trim()}

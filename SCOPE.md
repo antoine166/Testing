@@ -40,6 +40,7 @@ The most important feature. Available from everywhere in the app.
 - On submit → saved as a task with no domain assigned, which makes it an inbox item (see 3.4)
 - If a domain is set at capture time, the task is already "processed" and skips the inbox
 - Must be dismissible with `Escape`
+- **Voice capture**: a 🎤 button beside the title field dictates via the Web Speech API (browser-native, no server, no API key) — final transcript appends to whatever's already typed. Feature-detected: the button simply doesn't render in browsers without speech recognition
 - **Offline queueing**: if the save request fails with a network error (not a real server rejection — an invalid submission still surfaces its error normally), the capture is stashed in IndexedDB (`lib/offline-queue.ts`) instead of lost, including a photo attachment if one was added. It replays automatically against the real API the moment the browser reports it's back online (or on next app load), oldest first — a network error mid-replay stops the run and leaves the rest queued for later, while a genuine server rejection (4xx/5xx) drops just that one entry rather than retrying forever. A persistent badge (`components/offline-queue-indicator.tsx`, same visual language as the realtime "Synced" pulse) shows how many captures are waiting, so it's never a silent black box. This is Quick-Capture-only — the app has no general offline data access (see 8)
 
 ### 3.1a Email Capture
@@ -111,10 +112,10 @@ The atomic unit of work.
 - **Someday** (`tasks.someday`, boolean): Things-3-style deferred/backlog flag, set from the task's edit form. Orthogonal to domain filing — a task can be under a domain and still be Someday. A someday task is excluded from Inbox and Anytime so it doesn't clutter either
 - Tasks can exist without a project (standalone / domain-only) as long as a domain is set
 - **Domain/project cascade** (`lib/hooks/use-domain-project-cascade.ts`): picking a domain narrows the project picker to that domain's projects (clearing the current project if it no longer belongs); picking a project jumps the domain to match it automatically, since a project always belongs to exactly one domain. Shared by every domain+project picker in the app — the task edit form and every task create form
-- **Create/edit field parity**: every task create form (Tasks, Inbox, Today) exposes the same field set as the task edit form — domain/project, priority, due/scheduled date+time, waiting-for (+ who + follow-up date), someday (+ revisit date), context, estimated minutes, energy level, image attachment, make recurring — via shared components (`components/waiting-for-fields.tsx`, `components/task-extra-fields.tsx`) so the two don't drift apart. Quick Capture (3.1) is the deliberate exception and stays minimal by design. A recurring task template's create/edit form gets the domain/project cascade too, but not the other edit-only fields (someday, context, estimated minutes, energy level, waiting-for) — `recurring_task_templates` has no columns for them, since those are per-occurrence details, not part of the repeating pattern
+- **Create/edit field parity**: every task create form (Tasks, Inbox, Today) exposes the same field set as the task edit form — domain/project, priority, due/scheduled date+time, waiting-for (+ who + follow-up date), someday (+ revisit date), the Context trio (Time/Energy/Location — see 3.4b-context; `context` + `estimated_minutes` + `energy_level`), image attachment, make recurring — via shared components (`components/waiting-for-fields.tsx`, `components/task-extra-fields.tsx`) so the two don't drift apart. Quick Capture (3.1) is the deliberate exception and stays minimal by design. A recurring task template's create/edit form gets the domain/project cascade too, but not the other edit-only fields (someday, context, estimated minutes, energy level, waiting-for) — `recurring_task_templates` has no columns for them, since those are per-occurrence details, not part of the repeating pattern
 - **Image attachments**: any task can have one or more images attached (uploaded manually, or pulled in automatically from a forwarded email's attachments — see 3.1a). Stored in Supabase Storage, viewed via short-lived signed URLs since the bucket is private
 - **Bulk filing**: the Inbox section on the Tasks page has a "Select" mode — check multiple unprocessed tasks and assign them all to one domain in a single action, instead of opening each one individually
-- **Smart-list views** (Things-3-style, see §4 for the sidebar): `/inbox`, `/upcoming`, `/anytime`, `/someday`, `/logbook` each render a filtered slice of the same `tasks` table — no separate storage, just different queries over the fields above. `/tasks` remains as a full by-domain browse view and still supports `?q=` title filtering (used by global search's task links)
+- **Smart-list views** (Things-3-style, see §4 for the sidebar): `/inbox`, `/upcoming`, `/anytime`, `/someday`, `/logbook`, `/contexts` (3.4c) each render a filtered slice of the same `tasks` table — no separate storage, just different queries over the fields above. `/tasks` remains as a full by-domain browse view and still supports `?q=` title filtering (used by global search's task links)
 
 ### 3.4a Clarify Mode (Inbox processing)
 GTD's clarify step as a guided flow — the sidebar's workflow-map diagram made interactive. The Inbox page's "⚡ Clarify" button walks the unprocessed list one item at a time through Allen's decision tree; every destination is an existing feature, so the flow adds no new storage:
@@ -122,7 +123,7 @@ GTD's clarify step as a guided flow — the sidebar's workflow-map diagram made 
 - **Not actionable** → Trash · Someday/Maybe · Tickler (someday + revisit date) · Reference (files into the Library via convert-to-knowledge-item)
 - **Actionable** →
   - *Do it now* — under 2 minutes: a live 2:00 countdown, then "Did it" (marks done) or bail out to defer
-  - *Defer it* — rewrite the title as the very next physical action, file to domain/project, context, priority, due (deadline) and scheduled (intention) independently
+  - *Defer it* — rewrite the title as the very next physical action, file to domain/project, context, priority, due (deadline) and scheduled (intention) independently. If the title still reads as a *topic* rather than an action ("Mom", "taxes" — `lib/tasks/next-action-shape.ts`, a deliberately quiet heuristic: single word, or ≤3 words not starting with an action verb), a non-blocking amber nudge appears under the input — never a validation error, since capture/clarify speed beats enforcement. The same nudge appears on the "project's very next action" input, and the Weekly Review has a matching step (3.11)
   - *Delegate it* — Waiting For with who + optional follow-up date
   - *It's a project* — converts via the existing endpoint, then immediately prompts for the project's very next action (created as its first task)
 
@@ -133,6 +134,22 @@ Progress counter, per-item Skip, exit anytime. The queue is snapshotted at start
 ### 3.4b Mind Sweep (guided capture)
 Allen's "incompletion trigger lists" as a guided flow — the capture-side partner to Clarify Mode (3.4a). The Inbox's "🧠 Mind Sweep" button (also offered when the inbox is empty — that's the point) walks ~18 condensed trigger prompts (Professional → Personal → wrap-up), each with a rapid-capture box: type, Enter, captured to the Inbox as-is. Deliberately no organizing mid-sweep (no domain/priority/date fields) — capture and clarify are separate steps, and the end screen offers "⚡ Clarify them now" to run the new items straight through Clarify Mode. No schema changes; capture parity for Claude/Coach already exists via create_task.
 
+### 3.4b-context The "Context" trio (Time · Energy · Location)
+GTD's three *limiting criteria* are captured as three structured dropdowns in the task form's "Context" section (`components/task-extra-fields.tsx`, shared across every create/edit surface and the Clarify flow's Defer panel):
+- **Time** — buckets 0–15 / 15–30 / 30–60 / 60+ min. Still *stored* as an int in `tasks.estimated_minutes` (the Calendar sizes blocks from it, Do Now filters on it — `lib/tasks/context-options.ts` maps each bucket to a representative value: 15/30/60/90); the dropdown just picks the bucket, and a legacy non-bucket value round-trips to its nearest bucket without being mutated unless the user changes it
+- **Energy** — Low / Medium / High (`tasks.energy_level`)
+- **Location** — the GTD context proper (`tasks.context`), a dropdown sourced from the editable `contexts` list (`lib/hooks/use-contexts.ts` → `GET /api/contexts`), **seeded with Computer / Home / Gym / Phone / Errands** and manageable in Settings. An unknown current value (legacy free text) is preserved as an extra selectable option so nothing silently blanks. Migration `20260723020000_context_locations.sql` cleaned the old seed (which had mixed time/energy entries) down to the five locations
+- Do Now's three filters and the `/contexts` smart list read these same fields; MCP's `context` field on create/update_task accepts a location name (free text still allowed for Claude)
+
+### 3.4c Contexts view
+GTD's Location lists (Computer, Home, Gym, Phone, Errands…) as a browsable smart list at `/contexts` — the complement to Do Now. Do Now answers "given where I am right now, pick *one* thing (location × time × energy)"; Contexts answers "show me the whole Errands list before I leave the house."
+
+- Same **actionable-now inventory** as Do Now (not done, not Someday, not Waiting For, not scheduled for the future) — the two definitions must stay in agreement
+- Pills across the top: All · one per context · No context. "All" shows sections per context (empty ones hidden); a single context shows just that list (including when empty — an empty @Calls list is information)
+- The context universe is the union of the standalone `contexts` table (managed in Settings, so a context exists before any task uses it) and any free-text `tasks.context` value already in use
+- **No context** bucket is deliberate: an untagged action is invisible to context filtering, so the page makes them visible and fixable (context is editable on each task row)
+- MCP parity: `list_tasks` accepts a `context` filter (exact name, no `@`), pairing with the existing `list_contexts`
+
 ### 3.5 Today View
 Antoine's daily dashboard.
 
@@ -141,6 +158,18 @@ Shows (in order):
 2. Habits due today with one-tap check-off
 3. Tasks scheduled for today, sorted by priority
 4. Any overdue tasks (past scheduled date, not done)
+
+**Tickler resurfacing**: the tickler file's contract is that a note *reappears on its date without being looked for* — so `tickler_items` whose `revisit_date` has arrived render as an amber "Tickler — resurfaced today" card near the top of Today, each with inline **Make it a task** (the existing convert endpoint — lands in the Inbox to go through Clarify like anything else) and **Not yet — next week** (pushes `revisit_date` a week out from *today*, not from the original date). Someday *tasks* whose `revisit_date` arrived keep their existing banner link to `/someday`. MCP parity: `get_today_summary` returns the same two buckets (`tickler_due`, `ready_to_revisit`) so the daily digest tells the same story.
+
+**Other Today nudges/actions**: (1) a Weekly Review banner appears when it's been 8+ days since the last logged review (or ever — see 3.5b's sibling, the review history in 3.11); (2) after 7:30pm, if anything scheduled for today (or overdue) is still undecided, a "🌙 Wrap the day" banner links to the Daily Shutdown (3.5b); (3) the Overdue section header has bulk triage — "All → today" and "All → Anytime" — so the pile gets one decision instead of learned blindness.
+
+### 3.5b Daily Shutdown
+The evening bookend to the morning check-in, at `/shutdown` (sidebar: 🌙 Shutdown). A 60-second guided flow whose one job is preventing drift:
+
+1. **Decide the leftovers** — every unfinished task scheduled today-or-earlier gets an explicit decision (✓ Did it / → Tomorrow / → Anytime / 📦 Someday). Advancing is gated on deciding them all (a "skip tonight" escape hatch exists but is deliberately unglamorous)
+2. **Log what you did** — one-tap logging for due-today habits not yet logged
+3. **Empty your head** — rapid capture straight to the Inbox
+No new storage — it's pure orchestration over tasks/habits/capture.
 
 ### 3.5a Calendar (Hard Landscape)
 GTD's calendar, visualized at `/calendar` — week and day views over the existing `tasks` fields (no separate storage). Three visually distinct kinds of entry, per Allen's "hard landscape" rule:
@@ -161,6 +190,8 @@ Time-blocking: drag a task from the "To schedule" tray (or between slots) on des
 
 ### 3.6 Daily Capacity Check-in
 A 10-second prompt Antoine completes each morning.
+
+**The check-in now drives Do Now**: on a low-energy morning (energy ≤ 3), Do Now pre-selects its energy filter to match (1–2 → low, 3 → medium; 4–5 leaves it wide open), with a visible "pre-filtered from this morning's check-in" note and a one-click clear. Touching the filter manually always wins. This closed the "stored for future insights use" loop the field was created with.
 
 - Energy level: 1–5
 - Focus level: 1–5
@@ -240,11 +271,16 @@ A lightweight person layer — deliberately **not** a CRM (one was built and rem
 - Trash: registered as `person` in the generic system (`lib/trash.ts`) — list/restore/purge all just work
 - MCP parity: `list/create/update/delete_person`; `create_task`/`update_task` accept `person_id`
 - The Waiting For `waiting_on` free-text field stays for one-off names that don't deserve a person entry
+- **Waiting For → Agenda handoff**: on the Waiting For page, a stale item (7+ days waiting, or follow-up date due) with a known `waiting_on` shows a one-tap "🗣️ Add to agenda for {person}" line under its row — creating an agenda item ("Follow up: {task title}") for the next conversation with them, connecting the app's two person-facing lists
 
 ### 3.11 Coach *(removed July 2026)*
 The in-app AI Coach (an Anthropic-API-powered chat tab with its own tool surface in `lib/coach/shared.ts`) was **removed at Antoine's request**: it billed against separate Anthropic API credits, not his claude.ai Max subscription, and the MCP connector (3.11a) already gives Claude full access to the app through that subscription. Claude-facing capability now lives in exactly one place: `lib/mcp/tools.ts`.
 
-What replaced its one load-bearing feature: the Coach's guided Weekly Review became a no-AI guided flow at `/weekly-review` (Get Clear → Get Current → Get Creative), stepping through the app's real numbers — inbox count, calendar, next-action lists, Waiting For follow-ups due, stalled projects, Someday/tickler, horizons — with links into each list. Don't rebuild the Coach or reintroduce `ANTHROPIC_API_KEY` without asking.
+What replaced its one load-bearing feature: the Coach's guided Weekly Review became a no-AI guided flow at `/weekly-review` (Get Clear → Get Current → Get Creative), stepping through the app's real numbers — inbox count, calendar, next-action lists, a "Make fuzzy actions physical" pass (processed tasks whose titles still read as topics per `lib/tasks/next-action-shape.ts`, each linking into `/tasks?q=` to rewrite), Waiting For follow-ups due, stalled projects (each with a 🧭 "Plan it" link into the Natural Planning flow), a **project-by-project review pass** (only projects *due* per their cadence — `projects.review_every_days`, null = every review — each with a "Mark reviewed" button stamping `last_reviewed_at`), Someday/tickler, an **Areas of Focus health check** (per-domain: active projects, next actions, days since last completion; 🥶 flags a domain with no next actions or 14+ quiet days), horizons — with links into each list. Don't rebuild the Coach or reintroduce `ANTHROPIC_API_KEY` without asking.
+
+**The review is itself tracked** (`weekly_review_logs`): "Finish review" logs a row with a stats snapshot, the header shows a 🔥 weekly streak (same Monday-Sunday, in-progress-week-grace math as habits — `lib/reviews/streak.ts`) and days-since-last, Today nudges when it's 8+ days, and Analytics' System-trust row scores it. MCP parity: `get_review_snapshot` (every number above, for a Claude-guided conversational review) and `log_weekly_review` (so that review counts toward the same streak); `update_project` gained `review_every_days` + `mark_reviewed`.
+
+**Natural Planning Model flow** (`/plan?project=`): Allen's five phases as a guided flow — purpose → outcome vision → brainstorm (writing to the project's existing fields) → organize (guidance over the brainstorm) → next actions (creates real tasks, with the topic-shape nudge, at least one required). Reached from a project card's 🧭 button or a stalled project in the review.
 
 ### 3.11a Claude Connector (MCP) *(Phase 2)*
 A remote MCP server (`/api/mcp`) so Antoine can talk to Claude on claude.ai or in the Claude Desktop app and have it read and manage his Life OS data — **the** Claude-facing surface of the app (the in-app Coach tab that once complemented it is gone, see 3.11).
@@ -299,6 +335,8 @@ Life OS
 📥 Inbox        (blue)    ← unprocessed: no domain, not someday, not done
 ★  Today        (yellow)  ← the daily dashboard (check-in/habits/scheduled/overdue), at "/"
 🗓️ Calendar     (red)     ← week/day time grid: timed blocks, all-day chips, due flags (§3.5a)
+🎯 Do Now       (green)   ← actionable-now filtered by context × time × energy (GTD's Limiting Criteria)
+@  Contexts     (lime)    ← the same inventory as full per-context lists (§3.4c)
 📅 Upcoming     (red)     ← scheduled_date in the future, grouped by date
 📚 Anytime      (teal)    ← has a domain, no date, not someday — actionable whenever
 📦 Someday      (amber)   ← tasks explicitly marked "Someday" from the task edit form
@@ -309,7 +347,9 @@ Life OS
   Project name
 + New List                         ← links to /domains
 ─────────────────────
-Habits · Training Log · Weekly Review · Routines · Checklists · Check-in · Library · Analytics · Trash · Settings
+Habits · Training Log · Weekly Review · Shutdown · Routines · Checklists · Check-in · Library · Analytics · Trash · Settings
+─────────────────────
+📘 User Guide (/guide) · 🗺️ GTD Workflow Map (pdf)
 ─────────────────────
 user@email · Log out
 ```
@@ -363,6 +403,9 @@ description        text
 status             text not null default 'active'
                    -- check: active | someday | completed | archived
 due_date           date
+review_every_days  int      -- per-project review cadence (3.11): how often the Weekly
+                   -- Review shows it. null = due at every review
+last_reviewed_at   timestamptz  -- stamped by "Mark reviewed" (app or MCP)
 created_at         timestamptz default now()
 updated_at         timestamptz default now()
 deleted_at         timestamptz   -- soft delete (Trash, 3.12); trashing cascades to its
@@ -385,6 +428,10 @@ priority        text not null default 'none'
                 -- check: none | low | medium | high
 due_date        date
 scheduled_date  date    -- the day Antoine plans to work on it
+clarified_at    timestamptz  -- when the task left the Inbox (domain assigned).
+                -- Stamped by a DB trigger (tasks_set_clarified_at) on the
+                -- null→domain transition so every write surface behaves the
+                -- same; powers Analytics' capture→clarify latency metric
 completed_at    timestamptz
 -- inbox = domain_id is null (unprocessed, GTD-style). project_id may be
 -- null independently — a processed task can be domain-only, no project.
@@ -482,6 +529,20 @@ size            int
 created_at      timestamptz default now()
 -- not independently trashable — goes with its log entry on purge, same
 -- Storage-cleanup caveat as task_attachments (3.4)
+```
+
+---
+
+### `weekly_review_logs`
+```sql
+id            uuid primary key default gen_random_uuid()
+user_id       uuid not null references auth.users(id) on delete cascade
+completed_at  timestamptz not null default now()
+stats         jsonb   -- snapshot of review-time numbers (inbox_count, stalled_count...)
+-- One row per completed Weekly Review (3.11) — written by the app flow's
+-- "Finish review" or MCP's log_weekly_review. Powers the streak, the
+-- Today-view nudge, and Analytics' System-trust row. No soft delete —
+-- it's a log, not content.
 ```
 
 ---
@@ -746,7 +807,8 @@ Supabase is called **server-side only** (via the service-role client or the user
 ### Phase 4 — Polish
 - [ ] Supabase Realtime (live updates across tabs) — infra shipped (publication membership, `REPLICA IDENTITY FULL`); a cross-tab bug (edits not propagating) was root-caused to the client never forwarding its JWT to Realtime on `INITIAL_SESSION` and a fix shipped, pending live confirmation
 - [x] Mobile UX pass (touch targets, hover-only controls, wrapping fixes audited and fixed); no dedicated live-device QA pass yet
-- [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window); weekly review is a guided no-AI flow at `/weekly-review` (see 3.11)
+- [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window, plus a **System-trust** row: median capture→clarify latency via `tasks.clarified_at`, inbox count + oldest age, stalled projects, review streak); weekly review is a guided no-AI flow at `/weekly-review` with history/streak/cadence (see 3.11)
+- [x] Daily Shutdown ritual (3.5b), Contexts view (3.4c), Do Now energy pre-filter (3.6), Natural Planning flow (3.11), voice capture (3.1), Waiting For → Agenda handoff (3.10a), in-app User Guide (`/guide`)
 - [x] Data export (`GET /api/export` — full JSON export of all content types)
 - [x] Trash / soft delete with 30-day recovery (3.12)
 - [x] Task image attachments (3.4), including from forwarded emails (3.1a)

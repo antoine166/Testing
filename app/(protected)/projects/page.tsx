@@ -29,6 +29,8 @@ type Project = {
   due_date: string | null;
   scheduled_date: string | null;
   link: string | null;
+  review_every_days: number | null;
+  last_reviewed_at: string | null;
   created_at: string;
 };
 
@@ -93,6 +95,7 @@ export default function ProjectsPage() {
   const [editDueDate, setEditDueDate] = useState("");
   const [editScheduledDate, setEditScheduledDate] = useState("");
   const [editLink, setEditLink] = useState("");
+  const [editReviewEveryDays, setEditReviewEveryDays] = useState("");
 
   const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
   const [addingTaskId, setAddingTaskId] = useState<string | null>(null);
@@ -262,6 +265,7 @@ export default function ProjectsPage() {
     setEditDueDate(project.due_date ?? "");
     setEditScheduledDate(project.scheduled_date ?? "");
     setEditLink(project.link ?? "");
+    setEditReviewEveryDays(project.review_every_days ? String(project.review_every_days) : "");
   }
 
   async function handleUpdate(id: string) {
@@ -283,6 +287,7 @@ export default function ProjectsPage() {
         due_date: editDueDate || null,
         scheduled_date: editScheduledDate || null,
         link: editLink || null,
+        review_every_days: editReviewEveryDays ? Number(editReviewEveryDays) : null,
       }),
     });
 
@@ -923,6 +928,21 @@ export default function ProjectsPage() {
                   title="Scheduled date"
                   className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
+                <label
+                  className="flex items-center gap-1 text-xs text-zinc-500"
+                  title="How often this project needs a look in the Weekly Review. Blank = every review."
+                >
+                  Review every
+                  <input
+                    type="number"
+                    min="1"
+                    value={editReviewEveryDays}
+                    onChange={(e) => setEditReviewEveryDays(e.target.value)}
+                    placeholder="—"
+                    className="w-14 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                  days
+                </label>
                 <button
                   onClick={() => handleUpdate(project.id)}
                   className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
@@ -1025,6 +1045,14 @@ export default function ProjectsPage() {
                     <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
                   </svg>
                 </button>
+                <Link
+                  href={`/plan?project=${project.id}`}
+                  aria-label="Plan project (Natural Planning Model)"
+                  title="Plan project (Natural Planning Model)"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+                >
+                  🧭
+                </Link>
                 <button
                   onClick={() => startEdit(project)}
                   aria-label="Edit project"

@@ -3,6 +3,28 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { enqueueCapture } from "@/lib/offline-queue";
 
+// Minimal Web Speech API surface — TS has no built-in types for the
+// prefixed webkit implementation (the only one that ships in Chrome).
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+};
+
+function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionLike;
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 type Domain = {
   id: string;
   name: string;
@@ -28,7 +50,55 @@ export default function QuickCapture() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [queuedNotice, setQueuedNotice] = useState(false);
+  const [listening, setListening] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  // SSR-safe without state: the mic button only renders inside the modal,
+  // and `open` can't be true during server render — so this window access
+  // only ever runs client-side.
+  const speechSupported = open && getSpeechRecognition() !== null;
+
+  // Voice capture: speak the thought instead of typing it. Appends the
+  // final transcript to the title so a half-typed title isn't clobbered.
+  function toggleListening() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Recognition = getSpeechRecognition();
+    if (!Recognition) return;
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || "en-US";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      const transcript = Array.from({ length: event.results.length }, (_, i) =>
+        event.results[i][0].transcript.trim(),
+      )
+        .join(" ")
+        .trim();
+      if (transcript) {
+        setTitle((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
+      }
+    };
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+      titleRef.current?.focus();
+    };
+    recognition.onerror = () => {
+      // onend fires after onerror and handles cleanup — mic denied or no
+      // speech just leaves the title as it was.
+    };
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }
+
+  // Don't leave the mic running if the modal closes mid-dictation.
+  useEffect(() => {
+    if (!open) recognitionRef.current?.stop();
+  }, [open]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -231,14 +301,37 @@ export default function QuickCapture() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-3">
-              <input
-                ref={titleRef}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={mode === "project" ? "Project name" : "What's on your mind?"}
-                required
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
+              <div className="flex gap-2">
+                <input
+                  ref={titleRef}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={
+                    listening
+                      ? "Listening…"
+                      : mode === "project"
+                        ? "Project name"
+                        : "What's on your mind?"
+                  }
+                  required
+                  className="w-full flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+                {speechSupported && (
+                  <button
+                    type="button"
+                    onClick={toggleListening}
+                    aria-label={listening ? "Stop dictating" : "Dictate title"}
+                    title={listening ? "Stop dictating" : "Dictate title"}
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-sm ${
+                      listening
+                        ? "border-red-400 bg-red-50 text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400"
+                        : "border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    {listening ? "■" : "🎤"}
+                  </button>
+                )}
+              </div>
               <input
                 type="url"
                 value={link}

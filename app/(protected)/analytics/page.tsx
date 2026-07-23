@@ -6,7 +6,9 @@ import {
   isHabitDueToday,
   type Habit as StreakHabit,
 } from "@/lib/habits/streaks";
-import { todayLocal, lastNDays } from "@/lib/date";
+import { findStalledProjectIds } from "@/lib/projects/stalled";
+import { reviewStreakWeeks } from "@/lib/reviews/streak";
+import { todayLocal, lastNDays, daysSince } from "@/lib/date";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type HabitFrequency = "daily" | "specific_days" | "times_per_week";
@@ -30,7 +32,17 @@ type Task = {
   id: string;
   status: "todo" | "in_progress" | "done";
   completed_at: string | null;
+  created_at: string;
+  clarified_at: string | null;
+  domain_id: string | null;
+  project_id: string | null;
+  someday: boolean;
+  waiting_for: boolean;
 };
+
+type Project = { id: string; status: string; parent_project_id: string | null };
+
+type ReviewLog = { completed_at: string };
 
 type Checkin = {
   date: string;
@@ -61,6 +73,8 @@ export default function AnalyticsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [reviewLogs, setReviewLogs] = useState<ReviewLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState<(typeof WINDOW_OPTIONS)[number]>(28);
@@ -76,7 +90,7 @@ export default function AnalyticsPage() {
   async function loadAll(signal?: AbortSignal) {
     try {
       const opts = { signal };
-      const [habitsRes, logsRes, tasksRes, checkinsRes, domainsRes, workoutsRes, workoutLogsRes] =
+      const [habitsRes, logsRes, tasksRes, checkinsRes, domainsRes, workoutsRes, workoutLogsRes, projectsRes, reviewLogsRes] =
         await Promise.all([
           fetch("/api/habits", opts),
           fetch("/api/habit-logs", opts),
@@ -85,6 +99,8 @@ export default function AnalyticsPage() {
           fetch("/api/domains", opts),
           fetch("/api/workouts", opts),
           fetch("/api/workout-logs", opts),
+          fetch("/api/projects", opts),
+          fetch("/api/weekly-review-logs", opts),
         ]);
       if (
         !habitsRes.ok ||
@@ -93,7 +109,8 @@ export default function AnalyticsPage() {
         !checkinsRes.ok ||
         !domainsRes.ok ||
         !workoutsRes.ok ||
-        !workoutLogsRes.ok
+        !workoutLogsRes.ok ||
+        !projectsRes.ok
       ) {
         throw new Error("Failed to load analytics");
       }
@@ -104,6 +121,8 @@ export default function AnalyticsPage() {
       setDomains(await domainsRes.json());
       setWorkouts(await workoutsRes.json());
       setWorkoutLogs(await workoutLogsRes.json());
+      setProjects(await projectsRes.json());
+      setReviewLogs(reviewLogsRes.ok ? await reviewLogsRes.json() : []);
       setError(null);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -125,8 +144,10 @@ export default function AnalyticsPage() {
       fetch("/api/domains", opts),
       fetch("/api/workouts", opts),
       fetch("/api/workout-logs", opts),
+      fetch("/api/projects", opts),
+      fetch("/api/weekly-review-logs", opts),
     ])
-      .then(async ([habitsRes, logsRes, tasksRes, checkinsRes, domainsRes, workoutsRes, workoutLogsRes]) => {
+      .then(async ([habitsRes, logsRes, tasksRes, checkinsRes, domainsRes, workoutsRes, workoutLogsRes, projectsRes, reviewLogsRes]) => {
         if (
           !habitsRes.ok ||
           !logsRes.ok ||
@@ -134,7 +155,8 @@ export default function AnalyticsPage() {
           !checkinsRes.ok ||
           !domainsRes.ok ||
           !workoutsRes.ok ||
-          !workoutLogsRes.ok
+          !workoutLogsRes.ok ||
+          !projectsRes.ok
         ) {
           throw new Error("Failed to load analytics");
         }
@@ -146,9 +168,11 @@ export default function AnalyticsPage() {
           domainsRes.json(),
           workoutsRes.json(),
           workoutLogsRes.json(),
+          projectsRes.json(),
+          reviewLogsRes.ok ? reviewLogsRes.json() : [],
         ]);
       })
-      .then(([habitsData, logsData, tasksData, checkinsData, domainsData, workoutsData, workoutLogsData]) => {
+      .then(([habitsData, logsData, tasksData, checkinsData, domainsData, workoutsData, workoutLogsData, projectsData, reviewLogsData]) => {
         setHabits(habitsData);
         setLogs(logsData);
         setTasks(tasksData);
@@ -156,6 +180,8 @@ export default function AnalyticsPage() {
         setDomains(domainsData);
         setWorkouts(workoutsData);
         setWorkoutLogs(workoutLogsData);
+        setProjects(projectsData);
+        setReviewLogs(reviewLogsData);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -167,7 +193,7 @@ export default function AnalyticsPage() {
   }, []);
 
   useRealtimeRefresh(
-    ["habits", "habit_logs", "tasks", "daily_checkins", "domains", "workouts", "workout_logs"],
+    ["habits", "habit_logs", "tasks", "daily_checkins", "domains", "workouts", "workout_logs", "projects", "weekly_review_logs"],
     () => loadAll(),
   );
 
@@ -178,6 +204,54 @@ export default function AnalyticsPage() {
       </div>
     );
   }
+
+  // --- System trust: is GTD actually being practiced, or just installed? ---
+  // Capture→clarify latency over the window; median, because one item that
+  // sat for a month shouldn't swamp the story.
+  const clarifyLatenciesHours = tasks
+    .filter(
+      (t) =>
+        t.clarified_at &&
+        days.includes(t.clarified_at.slice(0, 10)),
+    )
+    .map(
+      (t) =>
+        (new Date(t.clarified_at!).getTime() - new Date(t.created_at).getTime()) /
+        (1000 * 60 * 60),
+    )
+    .filter((h) => h >= 0)
+    .sort((a, b) => a - b);
+  const medianClarifyHours = clarifyLatenciesHours.length
+    ? clarifyLatenciesHours[Math.floor(clarifyLatenciesHours.length / 2)]
+    : null;
+  const clarifyLabel =
+    medianClarifyHours === null
+      ? "—"
+      : medianClarifyHours < 1
+        ? "<1h"
+        : medianClarifyHours < 48
+          ? `${Math.round(medianClarifyHours)}h`
+          : `${Math.round(medianClarifyHours / 24)}d`;
+
+  const inboxTasks = tasks.filter(
+    (t) => t.status !== "done" && !t.domain_id && !t.someday && !t.waiting_for,
+  );
+  const oldestInboxDays = inboxTasks.length
+    ? Math.max(...inboxTasks.map((t) => daysSince(t.created_at.slice(0, 10))))
+    : null;
+
+  const stalledCount = findStalledProjectIds(
+    projects,
+    tasks.map((t) => ({ project_id: t.project_id, status: t.status })),
+  ).size;
+
+  const reviewStreak = reviewStreakWeeks(
+    reviewLogs.map((l) => l.completed_at),
+    today,
+  );
+  const lastReviewDays = reviewLogs[0]
+    ? daysSince(reviewLogs[0].completed_at.slice(0, 10))
+    : null;
 
   const tasksCompletedThisWeek = tasks.filter(
     (t) => t.completed_at && last7.includes(t.completed_at.slice(0, 10)),
@@ -218,6 +292,47 @@ export default function AnalyticsPage() {
           {error}
         </p>
       )}
+
+      <div className="mb-8 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+        <h2 className="mb-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          System trust
+        </h2>
+        <p className="mb-3 text-xs text-zinc-500">
+          Is the system being practiced, or just installed? These four say.
+        </p>
+        <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+          <div>
+            <p className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{clarifyLabel}</p>
+            <p className="text-xs text-zinc-500">median capture→clarify</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+              {inboxTasks.length}
+              {oldestInboxDays !== null && oldestInboxDays > 0 && (
+                <span className="text-sm font-normal text-zinc-400"> · {oldestInboxDays}d old</span>
+              )}
+            </p>
+            <p className="text-xs text-zinc-500">in Inbox (oldest)</p>
+          </div>
+          <div>
+            <p
+              className={`text-2xl font-semibold ${stalledCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-zinc-950 dark:text-zinc-50"}`}
+            >
+              {stalledCount}
+            </p>
+            <p className="text-xs text-zinc-500">stalled projects</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
+              {reviewStreak}w
+              {lastReviewDays !== null && (
+                <span className="text-sm font-normal text-zinc-400"> · {lastReviewDays}d ago</span>
+              )}
+            </p>
+            <p className="text-xs text-zinc-500">review streak (last)</p>
+          </div>
+        </div>
+      </div>
 
       <div className="mb-8 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
         <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">

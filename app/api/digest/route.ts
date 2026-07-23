@@ -31,14 +31,21 @@ export async function GET(request: Request) {
 
   const today = todayLocal();
 
-  const [checkinRes, habitsRes, tasksRes] = await Promise.all([
+  const [checkinRes, habitsRes, tasksRes, ticklerRes] = await Promise.all([
     admin.from("daily_checkins").select("*").eq("user_id", owner.id).eq("date", today).maybeSingle(),
     admin.from("habits").select("*").eq("user_id", owner.id).is("deleted_at", null).eq("active", true),
     admin.from("tasks").select("*").eq("user_id", owner.id).is("deleted_at", null).neq("status", "done"),
+    admin
+      .from("tickler_items")
+      .select("note, revisit_date")
+      .eq("user_id", owner.id)
+      .is("deleted_at", null)
+      .lte("revisit_date", today),
   ]);
   if (checkinRes.error) return NextResponse.json({ error: checkinRes.error.message }, { status: 500 });
   if (habitsRes.error) return NextResponse.json({ error: habitsRes.error.message }, { status: 500 });
   if (tasksRes.error) return NextResponse.json({ error: tasksRes.error.message }, { status: 500 });
+  if (ticklerRes.error) return NextResponse.json({ error: ticklerRes.error.message }, { status: 500 });
 
   const habits = habitsRes.data;
   const { data: logs, error: logsError } = await admin
@@ -72,6 +79,9 @@ export async function GET(request: Request) {
   // same prompt — surfaced separately since it's a "the user asked for
   // this specific nudge today" signal, not just a passive age heuristic.
   const dueFollowUps = tasks.filter((t) => t.waiting_for && t.follow_up_date && t.follow_up_date <= today);
+  // The tickler file's contract: things resurface on their date without
+  // being looked for — same buckets the Today view and get_today_summary show.
+  const readyToRevisit = tasks.filter((t) => t.someday && t.revisit_date && t.revisit_date <= today);
 
   return NextResponse.json({
     date: today,
@@ -85,6 +95,8 @@ export async function GET(request: Request) {
       days_waiting: daysSince(t.waiting_since),
     })),
     due_follow_ups: dueFollowUps.map((t) => ({ title: t.title, follow_up_date: t.follow_up_date })),
+    tickler_due: ticklerRes.data,
+    ready_to_revisit: readyToRevisit.map((t) => ({ title: t.title, revisit_date: t.revisit_date })),
     // One Library note a day, resurfaced — see lib/knowledge/resurface.ts.
     resurfaced_note: await pickResurfacedNote(admin, owner.id, today),
   });
