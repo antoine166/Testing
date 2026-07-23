@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   computeStreak,
   countThisWeek,
@@ -203,22 +203,66 @@ export default function HabitRow({
   const { current, longest } = computeStreak(habit, logs, today);
   const weekCount = habit.frequency === "times_per_week" ? countThisWeek(logs, today) : 0;
   const [popping, setPopping] = useState(false);
+  // Optimistic "just logged" state so the ring fills and pops the instant
+  // it's tapped — the actual save (onToggle) is deferred, because on the
+  // Today view (and the Habits page's pending section) a logged habit is
+  // filtered out and its row unmounts the moment the log lands. Without
+  // this the animation never got a frame on screen. Mirrors TaskRow's
+  // deferred-commit completion trick.
+  const [pendingAdd, setPendingAdd] = useState(false);
+  const popTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingCommitRef = useRef<(() => void) | null>(null);
 
-  const ringFraction =
+  useEffect(() => {
+    return () => {
+      if (popTimeoutRef.current) clearTimeout(popTimeoutRef.current);
+      if (commitTimeoutRef.current) clearTimeout(commitTimeoutRef.current);
+      // A fast unmount (row dropped before the deferred save ran) must still
+      // commit the log, or the tap would be silently lost.
+      pendingCommitRef.current?.();
+    };
+  }, []);
+
+  // Once the committed data reflects the add, drop the optimistic flag — the
+  // real fraction now matches, so there's no visual change (relevant only on
+  // views that keep the row mounted, e.g. a habit's own day row).
+  useEffect(() => {
+    if (loggedToday) setPendingAdd(false);
+  }, [loggedToday]);
+
+  const committedFraction =
     habit.frequency === "times_per_week"
       ? weekCount / (habit.target_count ?? 1)
       : loggedToday
         ? 1
         : 0;
+  const optimisticFraction =
+    habit.frequency === "times_per_week"
+      ? (weekCount + 1) / (habit.target_count ?? 1)
+      : 1;
+  const ringFraction = pendingAdd ? optimisticFraction : committedFraction;
 
   function handleRingClick() {
-    // Pop + buzz only when adding a log (not when un-logging today).
-    if (!loggedToday) {
-      setPopping(true);
-      tapHaptic();
-      setTimeout(() => setPopping(false), 450);
+    if (pendingAdd) return; // an add is mid-animation — ignore extra taps
+    if (loggedToday) {
+      // Un-logging today stays instant (no reward animation for undoing).
+      onToggle(habit, today, true);
+      return;
     }
-    onToggle(habit, today, loggedToday);
+    // Adding a log: fill + pop now, save ~700ms later so the row survives
+    // long enough to show the animation before any filter unmounts it.
+    setPendingAdd(true);
+    setPopping(true);
+    tapHaptic();
+    popTimeoutRef.current = setTimeout(() => setPopping(false), 450);
+    const commit = () => {
+      if (pendingCommitRef.current !== commit) return; // already committed
+      pendingCommitRef.current = null;
+      onToggle(habit, today, false);
+    };
+    pendingCommitRef.current = commit;
+    commitTimeoutRef.current = setTimeout(commit, 700);
   }
 
   const domain = habit.domain_id ? domains.find((d) => d.id === habit.domain_id) : null;
