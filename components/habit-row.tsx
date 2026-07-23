@@ -15,16 +15,18 @@ const RING_R = 9;
 const RING_C = 2 * Math.PI * RING_R;
 
 /** The log control: a ring that sweeps to its fill (0→full for daily/
- *  specific-days; proportional to the weekly target for times_per_week),
- *  with a scale pop when a log lands. Replaces the plain checkbox. */
+ *  specific-days; proportional to the weekly target for times_per_week).
+ *  On a fresh log it gets *punched* in — a fist lands on the ring with an
+ *  impact burst — a habit-specific reward, distinct from a task's checkmark.
+ *  Replaces the plain checkbox. */
 function HabitRing({
   fraction,
-  popping,
+  celebrate,
   onClick,
   label,
 }: {
   fraction: number;
-  popping: boolean;
+  celebrate: boolean;
   onClick: () => void;
   label: string;
 }) {
@@ -37,7 +39,7 @@ function HabitRing({
       aria-label={label}
       title={label}
       aria-pressed={full}
-      className={`relative shrink-0 ${popping ? "habit-ring-pop" : ""}`}
+      className="relative shrink-0"
     >
       <svg width="26" height="26" viewBox="0 0 26 26" className="-rotate-90">
         <circle
@@ -60,7 +62,7 @@ function HabitRing({
           strokeDashoffset={RING_C * (1 - clamped)}
         />
       </svg>
-      {full && (
+      {full && !celebrate && (
         <svg
           viewBox="0 0 24 24"
           className="pointer-events-none absolute inset-0 m-auto h-3 w-3 text-emerald-500"
@@ -72,6 +74,16 @@ function HabitRing({
         >
           <path d="M4 12l5 5L20 6" />
         </svg>
+      )}
+      {celebrate && (
+        <>
+          {/* Impact burst: an emerald ring that expands and fades on landing. */}
+          <span className="habit-burst pointer-events-none absolute inset-0 m-auto rounded-full border-2 border-emerald-400" />
+          {/* The fist, punching in and landing on the ring. */}
+          <span className="habit-punch pointer-events-none absolute inset-0 z-10 m-auto flex items-center justify-center text-lg leading-none">
+            👊
+          </span>
+        </>
       )}
     </button>
   );
@@ -202,7 +214,9 @@ export default function HabitRow({
   const loggedToday = logs.some((l) => l.logged_date === today);
   const { current, longest } = computeStreak(habit, logs, today);
   const weekCount = habit.frequency === "times_per_week" ? countThisWeek(logs, today) : 0;
-  const [popping, setPopping] = useState(false);
+  // Drives the punch-in reward (fist + burst + row flash) while a fresh log
+  // lands. Distinct from pendingAdd (which just holds the optimistic fill).
+  const [celebrate, setCelebrate] = useState(false);
   // Optimistic "just logged" state so the ring fills and pops the instant
   // it's tapped — the actual save (onToggle) is deferred, because on the
   // Today view (and the Habits page's pending section) a logged habit is
@@ -254,19 +268,20 @@ export default function HabitRow({
       onToggle(habit, today, true);
       return;
     }
-    // Adding a log: fill + pop now, save ~700ms later so the row survives
-    // long enough to show the animation before any filter unmounts it.
+    // Adding a log: fill the ring + punch it now, save ~750ms later so the
+    // row survives long enough to show the reward before any filter unmounts
+    // it. The punch/burst/flash run ~600ms.
     setPendingAdd(true);
-    setPopping(true);
+    setCelebrate(true);
     tapHaptic();
-    popTimeoutRef.current = setTimeout(() => setPopping(false), 450);
+    popTimeoutRef.current = setTimeout(() => setCelebrate(false), 650);
     const commit = () => {
       if (pendingCommitRef.current !== commit) return; // already committed
       pendingCommitRef.current = null;
       onToggle(habit, today, false);
     };
     pendingCommitRef.current = commit;
-    commitTimeoutRef.current = setTimeout(commit, 700);
+    commitTimeoutRef.current = setTimeout(commit, 750);
   }
 
   const domain = habit.domain_id ? domains.find((d) => d.id === habit.domain_id) : null;
@@ -389,6 +404,8 @@ export default function HabitRow({
   return (
     <li
       className={`flex items-center gap-3 rounded-md border px-4 py-3 ${
+        celebrate ? "habit-row-flash " : ""
+      }${
         atRisk
           ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40"
           : "border-zinc-200 dark:border-zinc-800"
@@ -396,7 +413,7 @@ export default function HabitRow({
     >
       <HabitRing
         fraction={ringFraction}
-        popping={popping}
+        celebrate={celebrate}
         onClick={handleRingClick}
         label={loggedToday ? "Unlog today" : "Log today"}
       />
