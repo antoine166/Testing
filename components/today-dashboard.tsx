@@ -624,10 +624,11 @@ export default function TodayDashboard() {
     (t) => t.someday && t.status !== "done" && t.revisit_date && t.revisit_date <= today,
   ).length;
   // Evening: once there's still something undecided on today's plate after
-  // 5pm, offer the Shutdown ritual — the deliberate alternative to letting
-  // it rot into Overdue overnight.
+  // 7:30pm, offer the Shutdown ritual — the deliberate alternative to
+  // letting it rot into Overdue overnight.
+  const now = new Date();
   const eveningShutdownNudge =
-    new Date().getHours() >= 17 &&
+    now.getHours() * 60 + now.getMinutes() >= 19 * 60 + 30 &&
     tasks.some(
       (t) =>
         t.status !== "done" &&
