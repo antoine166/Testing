@@ -470,6 +470,10 @@ export default function TodayDashboard() {
     }
 
     if (captureMode === "project") {
+      if (!newTaskDomainId) {
+        setError("Pick a domain for the project — it needs one to show in your sidebar.");
+        return;
+      }
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -932,7 +936,7 @@ export default function TodayDashboard() {
                 onChange={(e) => setNewTaskDomainId(e.target.value)}
                 className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               >
-                <option value="">Inbox</option>
+                <option value="">{captureMode === "project" ? "Choose a domain…" : "Inbox"}</option>
                 {domains.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}

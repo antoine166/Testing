@@ -16,6 +16,7 @@ type Panel =
   | "defer" // next action: rewrite title, file, date it
   | "delegate" // waiting for someone
   | "tickler" // incubate until a date
+  | "projdomain" // it's a project: pick its domain first (required)
   | "project"; // converted; capture the very next action
 
 const TWO_MINUTES = 120;
@@ -68,6 +69,7 @@ export default function ClarifyFlow({
   const [waitingOn, setWaitingOn] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [ticklerDate, setTicklerDate] = useState("");
+  const [projectDomain, setProjectDomain] = useState("");
   const [nextAction, setNextAction] = useState("");
   const [newProject, setNewProject] = useState<{ id: string; domain_id: string | null } | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(TWO_MINUTES);
@@ -105,6 +107,7 @@ export default function ClarifyFlow({
     setWaitingOn("");
     setFollowUp("");
     setTicklerDate("");
+    setProjectDomain(nextTask?.domain_id ?? "");
     setNextAction("");
     setNewProject(null);
     setSecondsLeft(TWO_MINUTES);
@@ -259,21 +262,7 @@ export default function ClarifyFlow({
             </button>
             <button
               disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  // Persist any header edits (title/notes/location) before the
-                  // conversion snapshots the task into a project.
-                  await onUpdate(task.id, edited());
-                  const project = await onConvertToProject(task.id);
-                  if (project) {
-                    setNewProject(project);
-                    setPanel("project");
-                  }
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              onClick={() => setPanel("projdomain")}
               className={`${neutralButton} block w-full`}
             >
               🗂️ It&apos;s a project <span className="text-zinc-500">— more than one step</span>
@@ -545,6 +534,56 @@ export default function ClarifyFlow({
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
             >
               Save & next
+            </button>
+            <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
+
+      {panel === "projdomain" && (
+        <div className="mt-4 space-y-2">
+          <label className="block text-xs text-zinc-500">
+            Which domain does this project live under? <span className="text-red-500">*</span>
+            <select
+              value={projectDomain}
+              onChange={(e) => setProjectDomain(e.target.value)}
+              className="mt-1 block rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">Choose a domain…</option>
+              {domains.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs text-zinc-500">
+            Required — a project needs a domain to show up in your sidebar.
+          </p>
+          <div className="flex gap-2">
+            <button
+              disabled={busy || !projectDomain}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  // File the task under the chosen domain (plus any header
+                  // edits), then convert — so the new project is never
+                  // domain-less and invisible.
+                  await onUpdate(task.id, { ...edited(), domain_id: projectDomain });
+                  const project = await onConvertToProject(task.id);
+                  if (project) {
+                    setNewProject(project);
+                    setPanel("project");
+                  }
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              Create project
             </button>
             <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
               Back

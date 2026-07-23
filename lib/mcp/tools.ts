@@ -512,7 +512,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .string()
           .optional()
           .describe("GTD Natural Planning Model — ideas, approaches, things to consider."),
-        domain_id: z.string().uuid().optional(),
+        domain_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("The domain this project lives under — required unless parent_project_id is set (subprojects inherit the parent's domain). A project needs a domain to be visible in the sidebar."),
         parent_project_id: z
           .string()
           .uuid()
@@ -542,6 +546,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     }) => {
       const trimmed = name.trim();
       if (!trimmed) return fail("Name is required");
+      // A top-level project must have a domain or it's invisible in the
+      // sidebar; subprojects inherit their parent's.
+      if (!domain_id && !parent_project_id) {
+        return fail("Pick a domain for the project (domain_id) — it needs one to show in the sidebar.");
+      }
 
       const { data, error } = await admin
         .from("projects")
@@ -1275,11 +1284,19 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       description:
         "Turn a task into a project when it turns out to need multiple steps, not one action. " +
         "Creates a new project carrying over the task's title, notes, domain, priority, dates, and " +
-        "link, then moves the original task to Trash (recoverable for 30 days).",
-      inputSchema: { id: z.string().uuid() },
+        "link, then moves the original task to Trash (recoverable for 30 days). If the task has no " +
+        "domain (an Inbox item), pass domain_id — a project needs a domain to show in the sidebar.",
+      inputSchema: {
+        id: z.string().uuid(),
+        domain_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("Domain for the new project. Required when the task itself has no domain."),
+      },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
-    async ({ id }) => {
+    async ({ id, domain_id }) => {
       const { data: task, error: taskError } = await admin
         .from("tasks")
         .select("*")
@@ -1289,13 +1306,18 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .single();
       if (taskError || !task) return fail("Task not found");
 
+      const projectDomain = domain_id ?? task.domain_id;
+      if (!projectDomain) {
+        return fail("This task has no domain — pass domain_id so the project is visible in the sidebar.");
+      }
+
       const { data: project, error: projectError } = await admin
         .from("projects")
         .insert({
           user_id: userId,
           name: task.title,
           description: task.notes,
-          domain_id: task.domain_id,
+          domain_id: projectDomain,
           priority: task.priority,
           due_date: task.due_date,
           scheduled_date: task.scheduled_date,

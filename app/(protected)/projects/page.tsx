@@ -179,6 +179,11 @@ export default function ProjectsPage() {
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!name.trim()) return;
+    // A top-level project needs a domain (subprojects inherit their parent's).
+    if (!domainId && !parentProjectId) {
+      setError("Pick a domain for the project — it needs one to show in your sidebar.");
+      return;
+    }
 
     const res = await fetch("/api/projects", {
       method: "POST",
@@ -611,7 +616,7 @@ export default function ProjectsPage() {
               onChange={(e) => setDomainId(e.target.value)}
               className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
             >
-              <option value="">No domain</option>
+              <option value="">{parentProjectId ? "No domain" : "Choose a domain…"}</option>
               {domains.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
