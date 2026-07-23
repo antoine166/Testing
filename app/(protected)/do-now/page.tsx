@@ -6,9 +6,10 @@ import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { todayLocal } from "@/lib/date";
 
+// Thresholds aligned to the task form's Time buckets (0–15 / 15–30 / 30–60 /
+// 60+): "I have N minutes available" shows every task whose estimate fits.
 const TIME_OPTIONS = [
   { label: "Any amount of time", value: "" },
-  { label: "5 minutes or less", value: "5" },
   { label: "15 minutes or less", value: "15" },
   { label: "30 minutes or less", value: "30" },
   { label: "1 hour or less", value: "60" },
@@ -111,10 +112,10 @@ export default function DoNowPage() {
           onChange={(e) => setContextFilter(e.target.value)}
           className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         >
-          <option value="">Any context</option>
+          <option value="">Any location</option>
           {contexts.map((c) => (
             <option key={c} value={c}>
-              @{c}
+              {c}
             </option>
           ))}
         </select>

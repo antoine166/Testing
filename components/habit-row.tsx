@@ -226,10 +226,14 @@ export default function HabitRow({
 
   // Once the committed data reflects the add, drop the optimistic flag — the
   // real fraction now matches, so there's no visual change (relevant only on
-  // views that keep the row mounted, e.g. a habit's own day row).
-  useEffect(() => {
-    if (loggedToday) setPendingAdd(false);
-  }, [loggedToday]);
+  // views that keep the row mounted, e.g. a habit's own day row). Done as a
+  // render-time adjustment (React's "reset state on prop change" pattern)
+  // rather than an effect, so there's no extra render or flicker.
+  const [wasLoggedToday, setWasLoggedToday] = useState(loggedToday);
+  if (loggedToday !== wasLoggedToday) {
+    setWasLoggedToday(loggedToday);
+    if (loggedToday && pendingAdd) setPendingAdd(false);
+  }
 
   const committedFraction =
     habit.frequency === "times_per_week"

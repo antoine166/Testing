@@ -919,7 +919,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         context: z
           .string()
           .optional()
-          .describe("GTD context tag like \"calls\", \"errands\", \"computer\" — free text, no @ prefix."),
+          .describe("GTD context — the Location where/with-what it's done. Prefer a name from list_contexts (seeded: Computer, Home, Gym, Phone, Errands); free text is accepted. Time and energy are separate fields (estimated_minutes, energy_level)."),
         domain_id: z.string().uuid().optional(),
         person_id: z.string().uuid().optional().describe("Link to a person (list_people)"),
         project_id: z.string().uuid().optional(),
@@ -1048,7 +1048,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .string()
           .nullable()
           .optional()
-          .describe("GTD context tag (free text, no @ prefix), or null to clear."),
+          .describe("GTD context — the Location (from list_contexts: Computer, Home, Gym, Phone, Errands; free text accepted), or null to clear."),
         domain_id: z.string().uuid().nullable().optional(),
         person_id: z.string().uuid().nullable().optional().describe("Link to a person, or null to unlink"),
         project_id: z.string().uuid().nullable().optional(),
