@@ -13,6 +13,10 @@ export async function GET() {
     .from("tasks")
     .select("*, recurring_task_templates(recurrence_type, days_of_week, day_of_month, interval_days)")
     .is("deleted_at", null)
+    // Manual order first (hand-arranged positions); nulls first so untouched
+    // tasks and fresh captures surface at the top, newest first, exactly as
+    // before manual ordering existed.
+    .order("sort_order", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: false });
 
   if (error) {

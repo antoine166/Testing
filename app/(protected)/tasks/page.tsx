@@ -19,6 +19,7 @@ import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
+import ReorderableTaskList from "@/components/reorderable-task-list";
 import {
   describeRecurrence,
   type CompletionOffsetUnit,
@@ -1027,16 +1028,34 @@ export default function TasksPage() {
             <p className="text-sm text-zinc-500">No tasks here yet.</p>
           ) : (
             <ul className="space-y-2">
-              {renderGroupedTaskRows(filteredTasks, {
-                domains,
-                projects,
-                onToggleDone: toggleDone,
-                onUpdate: handleUpdate,
-                onDelete: handleDelete,
-                onConvertToProject: handleConvertToProject,
-                onConvertToRecurring: handleConvertToRecurring,
-                onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
-              })}
+              {projectFilter ? (
+                // A single project's list is one the user hand-orders —
+                // drag to arrange; other filters (search, domain) keep the
+                // standard ordering.
+                <ReorderableTaskList
+                  tasks={filteredTasks}
+                  onReordered={loadAll}
+                  domains={domains}
+                  projects={projects}
+                  onToggleDone={toggleDone}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                  onConvertToProject={handleConvertToProject}
+                  onConvertToRecurring={handleConvertToRecurring}
+                  onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
+                />
+              ) : (
+                renderGroupedTaskRows(filteredTasks, {
+                  domains,
+                  projects,
+                  onToggleDone: toggleDone,
+                  onUpdate: handleUpdate,
+                  onDelete: handleDelete,
+                  onConvertToProject: handleConvertToProject,
+                  onConvertToRecurring: handleConvertToRecurring,
+                  onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
+                })
+              )}
             </ul>
           )}
         </div>

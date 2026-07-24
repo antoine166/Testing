@@ -82,6 +82,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
   if (typeof body.someday === "boolean") {
     updates.someday = body.someday;
   }
+  if ("sort_order" in body) {
+    updates.sort_order = typeof body.sort_order === "number" ? body.sort_order : null;
+  }
   if ("estimated_minutes" in body) {
     updates.estimated_minutes = typeof body.estimated_minutes === "number" ? body.estimated_minutes : null;
   }

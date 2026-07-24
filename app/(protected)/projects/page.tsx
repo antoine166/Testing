@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
-import { renderGroupedTaskRows } from "@/components/recurring-task-group";
+import ReorderableTaskList from "@/components/reorderable-task-list";
 import { type Task } from "@/components/task-row";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 
@@ -1209,15 +1209,17 @@ export default function ProjectsPage() {
                 <div className="mt-2">
                   {openTasks.length > 0 ? (
                     <ul className="space-y-2">
-                      {renderGroupedTaskRows(openTasks, {
-                        domains,
-                        projects,
-                        onToggleDone: toggleTaskDone,
-                        onUpdate: handleTaskUpdate,
-                        onDelete: handleTaskDelete,
-                        onConvertToRecurring: handleTaskConvertToRecurring,
-                        onConvertToKnowledgeItem: handleTaskConvertToKnowledgeItem,
-                      })}
+                      <ReorderableTaskList
+                        tasks={openTasks}
+                        onReordered={loadAll}
+                        domains={domains}
+                        projects={projects}
+                        onToggleDone={toggleTaskDone}
+                        onUpdate={handleTaskUpdate}
+                        onDelete={handleTaskDelete}
+                        onConvertToRecurring={handleTaskConvertToRecurring}
+                        onConvertToKnowledgeItem={handleTaskConvertToKnowledgeItem}
+                      />
                     </ul>
                   ) : (
                     <p className="text-xs text-zinc-500">

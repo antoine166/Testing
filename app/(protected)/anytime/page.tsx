@@ -1,7 +1,7 @@
 "use client";
 
 import SmartListHeader from "@/components/smart-list-header";
-import TaskRow from "@/components/task-row";
+import ReorderableTaskList from "@/components/reorderable-task-list";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 
 export default function AnytimePage() {
@@ -17,6 +17,7 @@ export default function AnytimePage() {
     handleConvertToProject,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
+    loadAll,
   } = useTaskList();
 
   // Filed under a domain, no specific date, not deferred to Someday — actionable whenever.
@@ -40,20 +41,18 @@ export default function AnytimePage() {
         <p className="text-sm text-zinc-500">Nothing here — filed tasks with no date show up when you have them.</p>
       ) : (
         <ul className="space-y-2">
-          {anytimeTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              domains={domains}
-              projects={projects}
-              onToggleDone={toggleDone}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              onConvertToProject={handleConvertToProject}
-              onConvertToRecurring={handleConvertToRecurring}
-              onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
-            />
-          ))}
+          <ReorderableTaskList
+            tasks={anytimeTasks}
+            onReordered={loadAll}
+            domains={domains}
+            projects={projects}
+            onToggleDone={toggleDone}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+            onConvertToProject={handleConvertToProject}
+            onConvertToRecurring={handleConvertToRecurring}
+            onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
+          />
         </ul>
       )}
     </div>
