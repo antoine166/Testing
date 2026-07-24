@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Task, TaskDomain, TaskProject, TaskPriority } from "@/components/task-row";
+import type { Task, TaskDomain, TaskProject, TaskPriority, TaskEnergy } from "@/components/task-row";
 import { looksLikeTopic, TOPIC_NUDGE } from "@/lib/tasks/next-action-shape";
 import { useContexts } from "@/lib/hooks/use-contexts";
+import { TIME_BUCKETS, minutesToBucketValue } from "@/lib/tasks/context-options";
 
 // GTD's clarify step as a guided flow: the workflow-map diagram made
 // interactive. One inbox item at a time, Allen's decision tree as buttons —
@@ -62,6 +63,12 @@ export default function ClarifyFlow({
   const [deferDomain, setDeferDomain] = useState("");
   const [deferProject, setDeferProject] = useState("");
   const [deferContext, setDeferContext] = useState("");
+  // Raw minutes string (same trick as TaskExtraFields): the Time select
+  // displays the bucket, but an untouched legacy estimate (e.g. 45) is
+  // written back unchanged instead of being snapped to its bucket.
+  const [deferMinutes, setDeferMinutes] = useState("");
+  const [deferEnergy, setDeferEnergy] = useState<TaskEnergy | "">("");
+  const [link, setLink] = useState("");
   const [deferPriority, setDeferPriority] = useState<TaskPriority>("none");
   const [deferDue, setDeferDue] = useState("");
   const [deferScheduled, setDeferScheduled] = useState("");
@@ -100,6 +107,9 @@ export default function ClarifyFlow({
     setDeferDomain("");
     setDeferProject("");
     setDeferContext(nextTask?.context ?? "");
+    setDeferMinutes(nextTask?.estimated_minutes?.toString() ?? "");
+    setDeferEnergy(nextTask?.energy_level ?? "");
+    setLink(nextTask?.link ?? "");
     setDeferPriority("none");
     setDeferDue("");
     setDeferScheduled("");
@@ -171,12 +181,16 @@ export default function ClarifyFlow({
       ? [deferContext, ...locations]
       : locations;
 
-  // The header edits, folded into every action's commit so title/notes/
-  // location are saved whatever you do with the item.
+  // The header edits, folded into every action's commit so title/notes and
+  // the full Context trio (time/energy/location) are saved whatever you do
+  // with the item.
   const edited = () => ({
     title: deferTitle.trim() || task.title,
+    link: link.trim() || null,
     notes: notes.trim() === "" ? null : notes,
     context: deferContext.trim() || null,
+    estimated_minutes: deferMinutes ? Number(deferMinutes) : null,
+    energy_level: deferEnergy || null,
   });
 
   const buttonBase =
@@ -210,6 +224,26 @@ export default function ClarifyFlow({
         {looksLikeTopic(deferTitle) && (
           <p className="text-xs text-amber-600 dark:text-amber-400">{TOPIC_NUDGE}</p>
         )}
+        <div className="flex items-center gap-2">
+          <input
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="Link (optional)"
+            type="url"
+            className="min-w-0 flex-1 rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          {link.trim() && (
+            <a
+              href={link.trim()}
+              target="_blank"
+              rel="noreferrer"
+              title="Open link"
+              className="shrink-0 text-sm text-blue-600 underline dark:text-blue-400"
+            >
+              Open ↗
+            </a>
+          )}
+        </div>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -217,8 +251,33 @@ export default function ClarifyFlow({
           rows={2}
           className="w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
-        <label className="flex items-center gap-1 text-xs text-zinc-500">
-          Location
+        {/* The full Context trio — same three dropdowns as the task edit form. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-zinc-400">Context:</span>
+          <select
+            value={minutesToBucketValue(deferMinutes ? Number(deferMinutes) : null)}
+            onChange={(e) => setDeferMinutes(e.target.value)}
+            title="Time available / how long it takes"
+            className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">Time…</option>
+            {TIME_BUCKETS.map((b) => (
+              <option key={b.value} value={b.value}>
+                {b.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={deferEnergy}
+            onChange={(e) => setDeferEnergy(e.target.value as TaskEnergy | "")}
+            title="Energy required"
+            className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">Energy…</option>
+            <option value="low">Low energy</option>
+            <option value="medium">Medium energy</option>
+            <option value="high">High energy</option>
+          </select>
           <select
             value={deferContext}
             onChange={(e) => setDeferContext(e.target.value)}
@@ -232,17 +291,7 @@ export default function ClarifyFlow({
               </option>
             ))}
           </select>
-        </label>
-        {task.link && (
-          <a
-            href={task.link}
-            target="_blank"
-            rel="noreferrer"
-            className="block truncate text-sm text-blue-600 underline dark:text-blue-400"
-          >
-            {task.link}
-          </a>
-        )}
+        </div>
       </div>
 
       {panel === "decide" && (
