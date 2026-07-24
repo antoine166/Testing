@@ -40,6 +40,19 @@ export default function DomainsPage() {
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("#6366f1");
 
+  // Per-project quick-add task input (same function the All Projects page has).
+  const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
+  const [addingTaskId, setAddingTaskId] = useState<string | null>(null);
+
+  // Inline project creation, scoped to one domain — the same create a project
+  // can be done from Today, without leaving the Domains page.
+  const [creatingFor, setCreatingFor] = useState<string | null>(null);
+  const [pName, setPName] = useState("");
+  const [pDescription, setPDescription] = useState("");
+  const [pPriority, setPPriority] = useState("none");
+  const [pDue, setPDue] = useState("");
+  const [pScheduled, setPScheduled] = useState("");
+
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
   async function loadDomains() {
@@ -114,6 +127,42 @@ export default function DomainsPage() {
     setEditingId(domain.id);
     setEditName(domain.name);
     setEditColor(domain.color);
+  }
+
+  function startProject(domainId: string) {
+    setCreatingFor(domainId);
+    setPName("");
+    setPDescription("");
+    setPPriority("none");
+    setPDue("");
+    setPScheduled("");
+  }
+
+  async function handleCreateProject(e: FormEvent<HTMLFormElement>, domainId: string) {
+    e.preventDefault();
+    if (!pName.trim()) return;
+
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: pName.trim(),
+        description: pDescription.trim() || undefined,
+        domain_id: domainId,
+        priority: pPriority,
+        due_date: pDue || undefined,
+        scheduled_date: pScheduled || undefined,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create project");
+      return;
+    }
+
+    setCreatingFor(null);
+    await loadDomains();
   }
 
   async function handleUpdate(id: string) {
@@ -191,6 +240,29 @@ export default function DomainsPage() {
     if (results.some((r) => !r.ok)) {
       setError("Couldn't save the new order — try again.");
     }
+    await loadDomains();
+  }
+
+  async function handleAddTask(projectId: string, domainId: string | null, e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const title = (newTaskTitles[projectId] ?? "").trim();
+    if (!title) return;
+
+    setAddingTaskId(projectId);
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, project_id: projectId, domain_id: domainId }),
+    });
+    setAddingTaskId(null);
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create task");
+      return;
+    }
+
+    setNewTaskTitles((prev) => ({ ...prev, [projectId]: "" }));
     await loadDomains();
   }
 
@@ -397,11 +469,15 @@ export default function DomainsPage() {
                         <path d="M4 6h.01M4 12h.01M4 18h.01" />
                       </svg>
                     </Link>
-                    <Link
-                      href={`/projects?domain=${domain.id}`}
+                    <button
+                      onClick={() => (creatingFor === domain.id ? setCreatingFor(null) : startProject(domain.id))}
                       aria-label="Add project"
                       title="Add project"
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+                      className={`flex h-7 w-7 items-center justify-center rounded-md hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300 ${
+                        creatingFor === domain.id
+                          ? "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                          : "text-zinc-400"
+                      }`}
                     >
                       <svg
                         viewBox="0 0 24 24"
@@ -415,7 +491,7 @@ export default function DomainsPage() {
                         <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
                         <path d="M12 11v4M10 13h4" />
                       </svg>
-                    </Link>
+                    </button>
                     <button
                       onClick={() => startEdit(domain)}
                       aria-label="Edit domain"
@@ -459,6 +535,81 @@ export default function DomainsPage() {
                 )}
               </div>
 
+              {creatingFor === domain.id && editingId !== domain.id && (
+                <form
+                  onSubmit={(e) => handleCreateProject(e, domain.id)}
+                  className="mt-3 ml-7 space-y-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
+                >
+                  <input
+                    value={pName}
+                    onChange={(e) => setPName(e.target.value)}
+                    placeholder="New project name"
+                    autoFocus
+                    required
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                  <textarea
+                    value={pDescription}
+                    onChange={(e) => setPDescription(e.target.value)}
+                    placeholder="Description (optional)"
+                    rows={2}
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-xs text-zinc-500">
+                      Priority
+                      <select
+                        value={pPriority}
+                        onChange={(e) => setPPriority(e.target.value)}
+                        className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      >
+                        {["none", "low", "medium", "high"].map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs text-zinc-500">
+                      Due
+                      <input
+                        type="date"
+                        value={pDue}
+                        onChange={(e) => setPDue(e.target.value)}
+                        title="Deadline"
+                        className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-500">
+                      Scheduled
+                      <input
+                        type="date"
+                        value={pScheduled}
+                        onChange={(e) => setPScheduled(e.target.value)}
+                        title="Day you plan to work on it"
+                        className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={!pName.trim()}
+                      className="rounded-md bg-zinc-950 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950"
+                    >
+                      Create project
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCreatingFor(null)}
+                      className="text-sm text-zinc-500 underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {editingId !== domain.id &&
                 (() => {
                   const domainProjects = projects.filter((p) => p.domain_id === domain.id);
@@ -496,7 +647,7 @@ export default function DomainsPage() {
                           (t) => t.project_id === project.id && t.status !== "done",
                         );
                         return (
-                          <details key={project.id} className="group">
+                          <details key={project.id} open className="group">
                             <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50">
                               <span className="text-zinc-400 transition-transform group-open:rotate-90">
                                 ›
@@ -533,6 +684,27 @@ export default function DomainsPage() {
                                 })}
                               </ul>
                             )}
+                            <form
+                              onSubmit={(e) => handleAddTask(project.id, domain.id, e)}
+                              className="mt-1.5 flex gap-2 pl-4"
+                            >
+                              <input
+                                value={newTaskTitles[project.id] ?? ""}
+                                onChange={(e) =>
+                                  setNewTaskTitles((prev) => ({ ...prev, [project.id]: e.target.value }))
+                                }
+                                placeholder="Add a task to this project"
+                                disabled={addingTaskId === project.id}
+                                className="min-w-0 flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+                              />
+                              <button
+                                type="submit"
+                                disabled={addingTaskId === project.id || !(newTaskTitles[project.id] ?? "").trim()}
+                                className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                              >
+                                {addingTaskId === project.id ? "Adding…" : "Add"}
+                              </button>
+                            </form>
                           </details>
                         );
                       })}

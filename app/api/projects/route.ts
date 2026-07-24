@@ -35,6 +35,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  // A project must live under a domain, or it's invisible in the sidebar
+  // (which groups projects by domain). Subprojects are the one exception —
+  // they inherit their parent's domain.
+  const hasDomain = typeof body.domain_id === "string" && body.domain_id;
+  const hasParent = typeof body.parent_project_id === "string" && body.parent_project_id;
+  if (!hasDomain && !hasParent) {
+    return NextResponse.json({ error: "Pick a domain for the project." }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("projects")
     .insert({

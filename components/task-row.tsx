@@ -86,7 +86,7 @@ function NotesText({ notes }: { notes: string }) {
   const isLong = notes.length > NOTES_PREVIEW_LENGTH;
 
   return (
-    <p className="mt-0.5 text-sm text-zinc-500">
+    <p className="mt-0.5 text-sm whitespace-pre-wrap text-zinc-500">
       {expanded || !isLong ? notes : `${notes.slice(0, NOTES_PREVIEW_LENGTH)}…`}
       {isLong && (
         <button

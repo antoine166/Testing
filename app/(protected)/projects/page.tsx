@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
+import { renderGroupedTaskRows } from "@/components/recurring-task-group";
+import { type Task } from "@/components/task-row";
+import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 
 type Domain = {
   id: string;
@@ -34,7 +37,9 @@ type Project = {
   created_at: string;
 };
 
-type ProjectTask = { project_id: string | null; status: "todo" | "in_progress" | "done" };
+// Full task rows — this page shows each project's tasks underneath it, not
+// just counts for the stalled check.
+type ProjectTask = Task;
 
 type SupportItem = { id: string; title: string; type: string; url: string | null; project_id: string | null };
 
@@ -179,6 +184,11 @@ export default function ProjectsPage() {
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!name.trim()) return;
+    // A top-level project needs a domain (subprojects inherit their parent's).
+    if (!domainId && !parentProjectId) {
+      setError("Pick a domain for the project — it needs one to show in your sidebar.");
+      return;
+    }
 
     const res = await fetch("/api/projects", {
       method: "POST",
@@ -325,6 +335,68 @@ export default function ProjectsPage() {
     }
 
     setNewTaskTitles((prev) => ({ ...prev, [project.id]: "" }));
+    await loadAll();
+  }
+
+  // Task row handlers — same wiring as the Domains page, so the task rows
+  // shown under each project here are fully live (complete/edit/delete/convert).
+  async function handleTaskUpdate(id: string, updates: Record<string, unknown>) {
+    const res = await fetch(`/api/tasks/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to update task");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function toggleTaskDone(task: Task) {
+    await handleTaskUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
+  }
+
+  async function handleTaskDelete(id: string, scope?: "skip" | "following") {
+    if (!scope && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
+    const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
+    const res = await fetch(url, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to delete task");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleTaskConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
+    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pattern),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to convert task to recurring");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleTaskConvertToKnowledgeItem(id: string) {
+    if (
+      !confirm(
+        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
+      )
+    )
+      return;
+    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to file task as reference");
+      return;
+    }
     await loadAll();
   }
 
@@ -611,7 +683,7 @@ export default function ProjectsPage() {
               onChange={(e) => setDomainId(e.target.value)}
               className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
             >
-              <option value="">No domain</option>
+              <option value="">{parentProjectId ? "No domain" : "Choose a domain…"}</option>
               {domains.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -1125,6 +1197,39 @@ export default function ProjectsPage() {
                 </ul>
               </div>
             )}
+            {(() => {
+              const openTasks = tasks.filter(
+                (t) => t.project_id === project.id && t.status !== "done",
+              );
+              const doneCount = tasks.filter(
+                (t) => t.project_id === project.id && t.status === "done",
+              ).length;
+              if (openTasks.length === 0 && doneCount === 0) return null;
+              return (
+                <div className="mt-2">
+                  {openTasks.length > 0 ? (
+                    <ul className="space-y-2">
+                      {renderGroupedTaskRows(openTasks, {
+                        domains,
+                        projects,
+                        onToggleDone: toggleTaskDone,
+                        onUpdate: handleTaskUpdate,
+                        onDelete: handleTaskDelete,
+                        onConvertToRecurring: handleTaskConvertToRecurring,
+                        onConvertToKnowledgeItem: handleTaskConvertToKnowledgeItem,
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-zinc-500">
+                      No open tasks{doneCount > 0 ? ` — ${doneCount} done` : ""}.
+                    </p>
+                  )}
+                  {openTasks.length > 0 && doneCount > 0 && (
+                    <p className="mt-1 text-xs text-zinc-400">{doneCount} done</p>
+                  )}
+                </div>
+              );
+            })()}
             <form
               onSubmit={(e) => handleAddTask(project, e)}
               className="mt-2 flex flex-wrap gap-2"

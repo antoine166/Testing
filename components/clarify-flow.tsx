@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Task, TaskDomain, TaskProject, TaskPriority } from "@/components/task-row";
+import type { Task, TaskDomain, TaskProject, TaskPriority, TaskEnergy } from "@/components/task-row";
 import { looksLikeTopic, TOPIC_NUDGE } from "@/lib/tasks/next-action-shape";
 import { useContexts } from "@/lib/hooks/use-contexts";
+import { TIME_BUCKETS, minutesToBucketValue } from "@/lib/tasks/context-options";
 
 // GTD's clarify step as a guided flow: the workflow-map diagram made
 // interactive. One inbox item at a time, Allen's decision tree as buttons —
@@ -16,6 +17,7 @@ type Panel =
   | "defer" // next action: rewrite title, file, date it
   | "delegate" // waiting for someone
   | "tickler" // incubate until a date
+  | "projdomain" // it's a project: pick its domain first (required)
   | "project"; // converted; capture the very next action
 
 const TWO_MINUTES = 120;
@@ -53,11 +55,20 @@ export default function ClarifyFlow({
   const [processed, setProcessed] = useState(0);
   const locations = useContexts();
 
-  // Per-item panel state
+  // Per-item state. Title, notes, and context (location) are edited from a
+  // persistent header shown above *every* action panel, so an item can be
+  // fixed up no matter how it's being clarified (deferred, tickled, filed…).
   const [deferTitle, setDeferTitle] = useState("");
+  const [notes, setNotes] = useState("");
   const [deferDomain, setDeferDomain] = useState("");
   const [deferProject, setDeferProject] = useState("");
   const [deferContext, setDeferContext] = useState("");
+  // Raw minutes string (same trick as TaskExtraFields): the Time select
+  // displays the bucket, but an untouched legacy estimate (e.g. 45) is
+  // written back unchanged instead of being snapped to its bucket.
+  const [deferMinutes, setDeferMinutes] = useState("");
+  const [deferEnergy, setDeferEnergy] = useState<TaskEnergy | "">("");
+  const [link, setLink] = useState("");
   const [deferPriority, setDeferPriority] = useState<TaskPriority>("none");
   const [deferDue, setDeferDue] = useState("");
   const [deferScheduled, setDeferScheduled] = useState("");
@@ -65,6 +76,7 @@ export default function ClarifyFlow({
   const [waitingOn, setWaitingOn] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [ticklerDate, setTicklerDate] = useState("");
+  const [projectDomain, setProjectDomain] = useState("");
   const [nextAction, setNextAction] = useState("");
   const [newProject, setNewProject] = useState<{ id: string; domain_id: string | null } | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(TWO_MINUTES);
@@ -91,9 +103,13 @@ export default function ClarifyFlow({
   function resetPanelState(nextTask: Task | undefined) {
     setPanel("decide");
     setDeferTitle(nextTask?.title ?? "");
+    setNotes(nextTask?.notes ?? "");
     setDeferDomain("");
     setDeferProject("");
-    setDeferContext("");
+    setDeferContext(nextTask?.context ?? "");
+    setDeferMinutes(nextTask?.estimated_minutes?.toString() ?? "");
+    setDeferEnergy(nextTask?.energy_level ?? "");
+    setLink(nextTask?.link ?? "");
     setDeferPriority("none");
     setDeferDue("");
     setDeferScheduled("");
@@ -101,6 +117,7 @@ export default function ClarifyFlow({
     setWaitingOn("");
     setFollowUp("");
     setTicklerDate("");
+    setProjectDomain(nextTask?.domain_id ?? "");
     setNextAction("");
     setNewProject(null);
     setSecondsLeft(TWO_MINUTES);
@@ -164,6 +181,18 @@ export default function ClarifyFlow({
       ? [deferContext, ...locations]
       : locations;
 
+  // The header edits, folded into every action's commit so title/notes and
+  // the full Context trio (time/energy/location) are saved whatever you do
+  // with the item.
+  const edited = () => ({
+    title: deferTitle.trim() || task.title,
+    link: link.trim() || null,
+    notes: notes.trim() === "" ? null : notes,
+    context: deferContext.trim() || null,
+    estimated_minutes: deferMinutes ? Number(deferMinutes) : null,
+    energy_level: deferEnergy || null,
+  });
+
   const buttonBase =
     "rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50";
   const neutralButton = `${buttonBase} border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800`;
@@ -184,18 +213,86 @@ export default function ClarifyFlow({
         </div>
       </div>
 
-      <p className="text-lg font-medium">{task.title}</p>
-      {task.notes && <p className="mt-1 text-sm whitespace-pre-wrap text-zinc-500">{task.notes}</p>}
-      {task.link && (
-        <a
-          href={task.link}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 block truncate text-sm text-blue-600 underline dark:text-blue-400"
-        >
-          {task.link}
-        </a>
-      )}
+      {/* Persistent editable header — available under every action panel. */}
+      <div className="space-y-2">
+        <input
+          value={deferTitle}
+          onChange={(e) => setDeferTitle(e.target.value)}
+          placeholder="Title"
+          className="w-full rounded-md border border-zinc-300 px-2 py-1.5 text-base font-medium dark:border-zinc-700 dark:bg-zinc-900"
+        />
+        {looksLikeTopic(deferTitle) && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">{TOPIC_NUDGE}</p>
+        )}
+        <div className="flex items-center gap-2">
+          <input
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="Link (optional)"
+            type="url"
+            className="min-w-0 flex-1 rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          {link.trim() && (
+            <a
+              href={link.trim()}
+              target="_blank"
+              rel="noreferrer"
+              title="Open link"
+              className="shrink-0 text-sm text-blue-600 underline dark:text-blue-400"
+            >
+              Open ↗
+            </a>
+          )}
+        </div>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Notes (optional)"
+          rows={2}
+          className="w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+        />
+        {/* The full Context trio — same three dropdowns as the task edit form. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-zinc-400">Context:</span>
+          <select
+            value={minutesToBucketValue(deferMinutes ? Number(deferMinutes) : null)}
+            onChange={(e) => setDeferMinutes(e.target.value)}
+            title="Time available / how long it takes"
+            className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">Time…</option>
+            {TIME_BUCKETS.map((b) => (
+              <option key={b.value} value={b.value}>
+                {b.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={deferEnergy}
+            onChange={(e) => setDeferEnergy(e.target.value as TaskEnergy | "")}
+            title="Energy required"
+            className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">Energy…</option>
+            <option value="low">Low energy</option>
+            <option value="medium">Medium energy</option>
+            <option value="high">High energy</option>
+          </select>
+          <select
+            value={deferContext}
+            onChange={(e) => setDeferContext(e.target.value)}
+            title="Location — where / with what you can do it"
+            className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">Location…</option>
+            {locationOptions.map((loc) => (
+              <option key={loc} value={loc}>
+                {loc}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {panel === "decide" && (
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -214,18 +311,7 @@ export default function ClarifyFlow({
             </button>
             <button
               disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  const project = await onConvertToProject(task.id);
-                  if (project) {
-                    setNewProject(project);
-                    setPanel("project");
-                  }
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              onClick={() => setPanel("projdomain")}
               className={`${neutralButton} block w-full`}
             >
               🗂️ It&apos;s a project <span className="text-zinc-500">— more than one step</span>
@@ -244,7 +330,7 @@ export default function ClarifyFlow({
             </button>
             <button
               disabled={busy}
-              onClick={() => act(() => onUpdate(task.id, { someday: true }))}
+              onClick={() => act(() => onUpdate(task.id, { ...edited(), someday: true }))}
               className={`${neutralButton} block w-full`}
             >
               📦 Someday / Maybe <span className="text-zinc-500">— might do it, not now</span>
@@ -254,7 +340,12 @@ export default function ClarifyFlow({
             </button>
             <button
               disabled={busy}
-              onClick={() => act(() => onConvertToReference(task.id))}
+              onClick={() =>
+                act(async () => {
+                  await onUpdate(task.id, edited());
+                  await onConvertToReference(task.id);
+                })
+              }
               className={`${neutralButton} block w-full`}
             >
               📖 Reference <span className="text-zinc-500">— file in the Library</span>
@@ -278,7 +369,12 @@ export default function ClarifyFlow({
           <div className="mt-3 flex justify-center gap-2">
             <button
               disabled={busy}
-              onClick={() => act(() => onToggleDone(task))}
+              onClick={() =>
+                act(async () => {
+                  await onUpdate(task.id, edited());
+                  await onToggleDone(task);
+                })
+              }
               className="rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
             >
               ✓ Did it
@@ -299,18 +395,9 @@ export default function ClarifyFlow({
 
       {panel === "defer" && (
         <div className="mt-4 space-y-2">
-          <label className="block text-xs text-zinc-500">
-            Rewrite as the very next physical action
-            <input
-              value={deferTitle}
-              onChange={(e) => setDeferTitle(e.target.value)}
-              placeholder='e.g. "Call Dr. Lee to book the follow-up" — a visible action, not a topic'
-              className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </label>
-          {looksLikeTopic(deferTitle) && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">{TOPIC_NUDGE}</p>
-          )}
+          <p className="text-xs text-zinc-500">
+            Make sure the title reads as the very next physical action (edit it above), then file it:
+          </p>
           <div className="flex flex-wrap gap-2">
             <label className="text-xs text-zinc-500">
               Domain
@@ -341,22 +428,6 @@ export default function ClarifyFlow({
                 {projectOptions.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-zinc-500">
-              Location
-              <select
-                value={deferContext}
-                onChange={(e) => setDeferContext(e.target.value)}
-                title="Location — where / with what you can do it"
-                className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="">Location…</option>
-                {locationOptions.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
                   </option>
                 ))}
               </select>
@@ -421,10 +492,9 @@ export default function ClarifyFlow({
               onClick={() =>
                 act(() =>
                   onUpdate(task.id, {
-                    title: deferTitle.trim(),
+                    ...edited(),
                     domain_id: deferDomain || null,
                     project_id: deferProject || null,
-                    context: deferContext.trim() || null,
                     priority: deferPriority,
                     due_date: deferDue || null,
                     scheduled_date: deferScheduled || null,
@@ -474,6 +544,7 @@ export default function ClarifyFlow({
               onClick={() =>
                 act(() =>
                   onUpdate(task.id, {
+                    ...edited(),
                     waiting_for: true,
                     waiting_on: waitingOn.trim() || null,
                     follow_up_date: followUp || null,
@@ -508,10 +579,60 @@ export default function ClarifyFlow({
           <div className="flex gap-2">
             <button
               disabled={busy || !ticklerDate}
-              onClick={() => act(() => onUpdate(task.id, { someday: true, revisit_date: ticklerDate }))}
+              onClick={() => act(() => onUpdate(task.id, { ...edited(), someday: true, revisit_date: ticklerDate }))}
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
             >
               Save & next
+            </button>
+            <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
+
+      {panel === "projdomain" && (
+        <div className="mt-4 space-y-2">
+          <label className="block text-xs text-zinc-500">
+            Which domain does this project live under? <span className="text-red-500">*</span>
+            <select
+              value={projectDomain}
+              onChange={(e) => setProjectDomain(e.target.value)}
+              className="mt-1 block rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">Choose a domain…</option>
+              {domains.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs text-zinc-500">
+            Required — a project needs a domain to show up in your sidebar.
+          </p>
+          <div className="flex gap-2">
+            <button
+              disabled={busy || !projectDomain}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  // File the task under the chosen domain (plus any header
+                  // edits), then convert — so the new project is never
+                  // domain-less and invisible.
+                  await onUpdate(task.id, { ...edited(), domain_id: projectDomain });
+                  const project = await onConvertToProject(task.id);
+                  if (project) {
+                    setNewProject(project);
+                    setPanel("project");
+                  }
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              Create project
             </button>
             <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
               Back
