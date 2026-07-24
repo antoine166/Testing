@@ -24,6 +24,17 @@ export function useDomainProjectCascade<P extends ProjectWithDomain>(
   const [domainId, setDomainIdState] = useState(initialDomainId);
   const [projectId, setProjectIdState] = useState(initialProjectId);
 
+  // Enforce the invariant at render time too: a selected project's domain
+  // wins. The setters below maintain this on user interaction, but initial
+  // state (e.g. /tasks?project=X prefilled from the URL) and projects that
+  // finish loading after mount would otherwise leave a project selected
+  // with no domain — and a task created that way falls back to the Inbox.
+  // Render-adjust is React's documented pattern for derived state sync.
+  const selectedProject = projectId ? allProjects.find((p) => p.id === projectId) : undefined;
+  if (selectedProject?.domain_id && domainId !== selectedProject.domain_id) {
+    setDomainIdState(selectedProject.domain_id);
+  }
+
   const setDomainId = useCallback(
     (newDomainId: string) => {
       setDomainIdState(newDomainId);
