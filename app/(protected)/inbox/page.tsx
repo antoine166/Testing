@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import SmartListHeader from "@/components/smart-list-header";
-import TaskRow, { type TaskPriority, type TaskEnergy } from "@/components/task-row";
+import { type TaskPriority, type TaskEnergy } from "@/components/task-row";
+import ReorderableTaskList from "@/components/reorderable-task-list";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -530,20 +531,18 @@ export default function InboxPage() {
             </div>
           </div>
           <ul className="space-y-2">
-            {inboxTasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                domains={domains}
-                projects={projects}
-                onToggleDone={toggleDone}
-                onUpdate={handleUpdate}
-                onDelete={handleDelete}
-                onConvertToProject={handleConvertToProject}
-                onConvertToRecurring={handleConvertToRecurring}
-                onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
-              />
-            ))}
+            <ReorderableTaskList
+              tasks={inboxTasks}
+              onReordered={loadAll}
+              domains={domains}
+              projects={projects}
+              onToggleDone={toggleDone}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              onConvertToProject={handleConvertToProject}
+              onConvertToRecurring={handleConvertToRecurring}
+              onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
+            />
           </ul>
         </>
       )}

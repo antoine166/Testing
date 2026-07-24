@@ -5,6 +5,7 @@ import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
 import { type Task } from "@/components/task-row";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
+import ReorderableTaskList from "@/components/reorderable-task-list";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
@@ -672,16 +673,18 @@ export default function DomainsPage() {
                               <p className="mt-1 pl-4 text-xs text-zinc-500">No open tasks.</p>
                             ) : (
                               <ul className="mt-1.5 space-y-2 pl-4">
-                                {renderGroupedTaskRows(projectTasks, {
-                                  domains,
-                                  projects,
-                                  onToggleDone: toggleTaskDone,
-                                  onUpdate: handleTaskUpdate,
-                                  onDelete: handleTaskDelete,
-                                  onConvertToProject: handleTaskConvertToProject,
-                                  onConvertToRecurring: handleTaskConvertToRecurring,
-                                  onConvertToKnowledgeItem: handleTaskConvertToKnowledgeItem,
-                                })}
+                                <ReorderableTaskList
+                                  tasks={projectTasks}
+                                  onReordered={loadDomains}
+                                  domains={domains}
+                                  projects={projects}
+                                  onToggleDone={toggleTaskDone}
+                                  onUpdate={handleTaskUpdate}
+                                  onDelete={handleTaskDelete}
+                                  onConvertToProject={handleTaskConvertToProject}
+                                  onConvertToRecurring={handleTaskConvertToRecurring}
+                                  onConvertToKnowledgeItem={handleTaskConvertToKnowledgeItem}
+                                />
                               </ul>
                             )}
                             <form

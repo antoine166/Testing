@@ -42,6 +42,16 @@ export type Task = {
   estimated_minutes?: number | null;
   energy_level?: TaskEnergy | null;
   revisit_date?: string | null;
+  sort_order?: number | null;
+};
+
+/** Drag-to-reorder wiring, passed by ReorderableTaskList. When present the
+ *  row becomes draggable and shows a grab handle. */
+export type TaskDragProps = {
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  dragging: boolean;
 };
 
 export type TaskDomain = { id: string; name: string; color: string };
@@ -251,6 +261,7 @@ export default function TaskRow({
   selectable = false,
   selected = false,
   onSelectChange,
+  dragProps,
 }: {
   task: Task;
   domains: TaskDomain[];
@@ -267,6 +278,8 @@ export default function TaskRow({
   selectable?: boolean;
   selected?: boolean;
   onSelectChange?: (checked: boolean) => void;
+  /** Present when the list supports drag-to-reorder (ReorderableTaskList). */
+  dragProps?: TaskDragProps;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -634,11 +647,23 @@ export default function TaskRow({
 
   return (
     <li
+      draggable={!!dragProps}
+      onDragStart={dragProps ? () => dragProps.onDragStart() : undefined}
+      onDragOver={dragProps ? (e) => dragProps.onDragOver(e) : undefined}
+      onDrop={dragProps ? (e) => e.preventDefault() : undefined}
+      onDragEnd={dragProps ? () => dragProps.onDragEnd() : undefined}
       className={`flex items-start justify-between gap-3 rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
         fadingOut ? "task-swipe-out" : ""
+      } ${dragProps ? "cursor-grab active:cursor-grabbing" : ""} ${
+        dragProps?.dragging ? "opacity-40" : ""
       }`}
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
+        {dragProps && (
+          <span className="mt-0.5 select-none text-zinc-300 dark:text-zinc-600" aria-hidden>
+            ⠿
+          </span>
+        )}
         {selectable && (
           <input
             type="checkbox"

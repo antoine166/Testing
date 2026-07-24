@@ -1058,6 +1058,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .nullable()
           .optional()
           .describe("GTD context — the Location (from list_contexts: Computer, Home, Gym, Phone, Errands; free text accepted), or null to clear."),
+        sort_order: z
+          .number()
+          .int()
+          .nullable()
+          .optional()
+          .describe("Manual position within hand-ordered lists (lower = higher). null clears it back to default (newest-first) ordering."),
         domain_id: z.string().uuid().nullable().optional(),
         person_id: z.string().uuid().nullable().optional().describe("Link to a person, or null to unlink"),
         project_id: z.string().uuid().nullable().optional(),
