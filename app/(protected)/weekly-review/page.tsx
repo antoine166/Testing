@@ -26,6 +26,7 @@ type Task = {
   revisit_date: string | null;
   scheduled_date: string | null;
   completed_at: string | null;
+  recurring_template_id: string | null;
 };
 
 type Project = {
@@ -44,6 +45,28 @@ type Horizons = { goals: string; vision: string; purpose: string };
 
 type ReviewLog = { id: string; completed_at: string };
 
+// Continuity: the review's steps constantly send you OUT to other pages
+// (Inbox, Calendar, Anytime...) to actually do the work — so progress has
+// to survive navigation. Saved per-day in localStorage: come back any time
+// today and the review resumes exactly where it was, no save button, no
+// prompt. Finishing (or a new day) clears it.
+const PROGRESS_KEY = "life-os:weekly-review-progress";
+
+type SavedProgress = { date: string; step: number; reviewed: string[] };
+
+function readProgress(today: string): SavedProgress | null {
+  if (typeof window === "undefined") return null; // SSR pass renders the loading screen anyway
+  try {
+    const raw = window.localStorage.getItem(PROGRESS_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as SavedProgress;
+    if (saved.date !== today || typeof saved.step !== "number" || saved.step < 1) return null;
+    return { ...saved, step: Math.min(saved.step, 30), reviewed: saved.reviewed ?? [] };
+  } catch {
+    return null;
+  }
+}
+
 export default function WeeklyReviewPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -52,10 +75,39 @@ export default function WeeklyReviewPage() {
   const [reviewLogs, setReviewLogs] = useState<ReviewLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState(0);
-  const [logged, setLogged] = useState(false);
-  const [reviewedNow, setReviewedNow] = useState<Set<string>>(new Set());
   const today = todayLocal();
+
+  // Lazy initializers restore today's in-progress review. The server render
+  // (and first client paint) both show the loading screen, so the state
+  // difference between them is never visible.
+  const [restoredFrom] = useState<SavedProgress | null>(() => readProgress(todayLocal()));
+  const [step, setStep] = useState(restoredFrom?.step ?? 0);
+  const [logged, setLogged] = useState(false);
+  const [reviewedNow, setReviewedNow] = useState<Set<string>>(
+    () => new Set(restoredFrom?.reviewed ?? []),
+  );
+  const [showResumeNote, setShowResumeNote] = useState(!!restoredFrom);
+
+  // Write-through: any progress change is saved immediately (removed once
+  // the review is finished, so tomorrow starts fresh).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (logged) {
+      window.localStorage.removeItem(PROGRESS_KEY);
+      return;
+    }
+    if (step < 1) return;
+    window.localStorage.setItem(
+      PROGRESS_KEY,
+      JSON.stringify({ date: today, step, reviewed: [...reviewedNow] } satisfies SavedProgress),
+    );
+  }, [step, reviewedNow, logged, today]);
+
+  function startOver() {
+    if (typeof window !== "undefined") window.localStorage.removeItem(PROGRESS_KEY);
+    setStep(0);
+    setShowResumeNote(false);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -124,6 +176,40 @@ export default function WeeklyReviewPage() {
   const topicShaped = open.filter(
     (t) => t.domain_id && !t.someday && !t.waiting_for && looksLikeTopic(t.title),
   );
+  // A recurring series pre-generates many identically-titled occurrences —
+  // collapse each series to ONE entry linking to its template, since that's
+  // where a rename actually fixes the pattern (editing one occurrence
+  // leaves its siblings unchanged).
+  const fuzzyEntries: { key: string; title: string; count: number; href: string; series: boolean }[] = [];
+  {
+    const seriesEntries = new Map<string, (typeof fuzzyEntries)[number]>();
+    for (const t of topicShaped) {
+      if (t.recurring_template_id) {
+        const existing = seriesEntries.get(t.recurring_template_id);
+        if (existing) {
+          existing.count += 1;
+          continue;
+        }
+        const entry = {
+          key: `series-${t.recurring_template_id}`,
+          title: t.title,
+          count: 1,
+          href: `/tasks?editTemplate=${t.recurring_template_id}`,
+          series: true,
+        };
+        seriesEntries.set(t.recurring_template_id, entry);
+        fuzzyEntries.push(entry);
+      } else {
+        fuzzyEntries.push({
+          key: t.id,
+          title: t.title,
+          count: 1,
+          href: `/tasks?q=${encodeURIComponent(t.title)}`,
+          series: false,
+        });
+      }
+    }
+  }
 
   // Per-project review cadence: no cadence set = due at every review (the
   // safe default) — but "reviewed today" always counts as done, or the
@@ -211,7 +297,7 @@ export default function WeeklyReviewPage() {
         stats: {
           inbox_count: inboxCount,
           stalled_count: stalledProjects.length,
-          topic_shaped_count: topicShaped.length,
+          topic_shaped_count: fuzzyEntries.length,
           waiting_count: waiting.length,
           due_follow_ups: dueFollowUps.length,
           someday_count: somedayTasks.length,
@@ -304,34 +390,39 @@ export default function WeeklyReviewPage() {
       body: (
         <>
           <p className="text-sm">
-            {topicShaped.length === 0 ? (
+            {fuzzyEntries.length === 0 ? (
               <span className="text-emerald-600 dark:text-emerald-400">
                 ✓ Every next action reads like an action.
               </span>
             ) : (
               <>
-                <span className="font-semibold">{topicShaped.length}</span> task
-                {topicShaped.length === 1 ? "" : "s"} still read{topicShaped.length === 1 ? "s" : ""} like a{" "}
-                <em>topic</em>, not a physical next action. &ldquo;Mom&rdquo; isn&apos;t doable —
-                &ldquo;Call Mom about Thanksgiving&rdquo; is. Rewrite each so it starts with a
-                visible verb.
+                <span className="font-semibold">{fuzzyEntries.length}</span>{" "}
+                {fuzzyEntries.length === 1 ? "title" : "titles"} still read
+                {fuzzyEntries.length === 1 ? "s" : ""} like a <em>topic</em>, not a physical
+                next action. &ldquo;Mom&rdquo; isn&apos;t doable — &ldquo;Call Mom about
+                Thanksgiving&rdquo; is. Rewrite each so it starts with a visible verb.
               </>
             )}
           </p>
-          {topicShaped.length > 0 && (
+          {fuzzyEntries.length > 0 && (
             <ul className="mt-1 space-y-0.5">
-              {topicShaped.slice(0, 8).map((t) => (
-                <li key={t.id} className="text-sm text-zinc-500">
+              {fuzzyEntries.slice(0, 8).map((entry) => (
+                <li key={entry.key} className="text-sm text-zinc-500">
                   <Link
-                    href={`/tasks?q=${encodeURIComponent(t.title)}`}
+                    href={entry.href}
                     className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
                   >
-                    {t.title}
+                    {entry.title}
                   </Link>
+                  {entry.series && (
+                    <span className="ml-1.5 text-xs text-zinc-400">
+                      ↻ recurring ×{entry.count} — rename the series once
+                    </span>
+                  )}
                 </li>
               ))}
-              {topicShaped.length > 8 && (
-                <li className="text-sm text-zinc-500">…and {topicShaped.length - 8} more.</li>
+              {fuzzyEntries.length > 8 && (
+                <li className="text-sm text-zinc-500">…and {fuzzyEntries.length - 8} more.</li>
               )}
             </ul>
           )}
@@ -619,6 +710,15 @@ export default function WeeklyReviewPage() {
         )}
       </p>
 
+      {showResumeNote && step > 0 && step < steps.length && !loading && (
+        <p className="-mt-4 mb-6 text-xs text-zinc-500">
+          ⏯ Picked up where you left off.{" "}
+          <button onClick={startOver} className="underline hover:text-zinc-700 dark:hover:text-zinc-300">
+            Start over
+          </button>
+        </p>
+      )}
+
       {error && (
         <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
           {error}
@@ -652,7 +752,7 @@ export default function WeeklyReviewPage() {
                   Back
                 </button>
               )}
-              <Link href="/" className="underline">
+              <Link href="/" className="underline" title="Progress is saved — the review resumes where you left off">
                 Exit
               </Link>
             </div>
