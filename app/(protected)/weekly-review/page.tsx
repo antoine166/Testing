@@ -54,6 +54,7 @@ export default function WeeklyReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [logged, setLogged] = useState(false);
+  const [reviewedNow, setReviewedNow] = useState<Set<string>>(new Set());
   const today = todayLocal();
 
   useEffect(() => {
@@ -125,12 +126,18 @@ export default function WeeklyReviewPage() {
   );
 
   // Per-project review cadence: no cadence set = due at every review (the
-  // safe default); with one, due once last_reviewed_at is older than it.
-  const dueForReview = activeProjects.filter(
-    (p) =>
-      !p.last_reviewed_at ||
-      !p.review_every_days ||
-      daysSince(p.last_reviewed_at.slice(0, 10)) >= p.review_every_days,
+  // safe default) — but "reviewed today" always counts as done, or the
+  // Mark-reviewed button would appear to do nothing (a no-cadence project
+  // would stay "due" forever). Cadence of N days = due once last review is
+  // N+ days old.
+  const isDueForReview = (p: Project) =>
+    !p.last_reviewed_at ||
+    daysSince(p.last_reviewed_at.slice(0, 10)) >= (p.review_every_days ?? 1);
+  const dueForReview = activeProjects.filter(isDueForReview);
+  // Marked during this session — kept visible with a ✓ instead of silently
+  // dropping out of the list, so the click has obvious feedback.
+  const reviewStepProjects = activeProjects.filter(
+    (p) => isDueForReview(p) || reviewedNow.has(p.id),
   );
 
   // Areas of Focus health (Horizon 2): a domain with no next actions or no
@@ -187,6 +194,7 @@ export default function WeeklyReviewPage() {
     }
     const updated = await res.json();
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated } : p)));
+    setReviewedNow((prev) => new Set(prev).add(id));
   }
 
   // The review only counts if it's recorded — the keystone habit gets the
@@ -417,7 +425,7 @@ export default function WeeklyReviewPage() {
           <p className="text-sm">
             {dueForReview.length === 0 ? (
               <span className="text-emerald-600 dark:text-emerald-400">
-                ✓ No projects due for review — cadences all current.
+                ✓ All {activeProjects.length} active projects reviewed — nothing left due.
               </span>
             ) : (
               <>
@@ -428,25 +436,38 @@ export default function WeeklyReviewPage() {
               </>
             )}
           </p>
-          {dueForReview.length > 0 && (
+          {reviewStepProjects.length > 0 && (
             <ul className="mt-1 space-y-1">
-              {dueForReview.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-3 text-sm">
-                  <Link
-                    href={`/tasks?project=${p.id}`}
-                    className="truncate text-blue-600 underline dark:text-blue-400"
-                  >
-                    {p.name}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => markProjectReviewed(p.id)}
-                    className="shrink-0 text-xs text-zinc-500 underline hover:text-zinc-700 dark:hover:text-zinc-300"
-                  >
-                    Mark reviewed ✓
-                  </button>
-                </li>
-              ))}
+              {reviewStepProjects.map((p) => {
+                const done = !isDueForReview(p);
+                return (
+                  <li key={p.id} className="flex items-center justify-between gap-3 text-sm">
+                    <Link
+                      href={`/tasks?project=${p.id}`}
+                      className={`truncate underline ${
+                        done
+                          ? "text-zinc-400 dark:text-zinc-600"
+                          : "text-blue-600 dark:text-blue-400"
+                      }`}
+                    >
+                      {p.name}
+                    </Link>
+                    {done ? (
+                      <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                        ✓ Reviewed
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => markProjectReviewed(p.id)}
+                        className="shrink-0 text-xs text-zinc-500 underline hover:text-zinc-700 dark:hover:text-zinc-300"
+                      >
+                        Mark reviewed ✓
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
           <p className="mt-2 text-xs text-zinc-500">
