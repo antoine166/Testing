@@ -40,6 +40,10 @@ export default function DomainsPage() {
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("#6366f1");
 
+  // Per-project quick-add task input (same function the All Projects page has).
+  const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
+  const [addingTaskId, setAddingTaskId] = useState<string | null>(null);
+
   // Inline project creation, scoped to one domain — the same create a project
   // can be done from Today, without leaving the Domains page.
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
@@ -236,6 +240,29 @@ export default function DomainsPage() {
     if (results.some((r) => !r.ok)) {
       setError("Couldn't save the new order — try again.");
     }
+    await loadDomains();
+  }
+
+  async function handleAddTask(projectId: string, domainId: string | null, e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const title = (newTaskTitles[projectId] ?? "").trim();
+    if (!title) return;
+
+    setAddingTaskId(projectId);
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, project_id: projectId, domain_id: domainId }),
+    });
+    setAddingTaskId(null);
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to create task");
+      return;
+    }
+
+    setNewTaskTitles((prev) => ({ ...prev, [projectId]: "" }));
     await loadDomains();
   }
 
@@ -620,7 +647,7 @@ export default function DomainsPage() {
                           (t) => t.project_id === project.id && t.status !== "done",
                         );
                         return (
-                          <details key={project.id} className="group">
+                          <details key={project.id} open className="group">
                             <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50">
                               <span className="text-zinc-400 transition-transform group-open:rotate-90">
                                 ›
@@ -657,6 +684,27 @@ export default function DomainsPage() {
                                 })}
                               </ul>
                             )}
+                            <form
+                              onSubmit={(e) => handleAddTask(project.id, domain.id, e)}
+                              className="mt-1.5 flex gap-2 pl-4"
+                            >
+                              <input
+                                value={newTaskTitles[project.id] ?? ""}
+                                onChange={(e) =>
+                                  setNewTaskTitles((prev) => ({ ...prev, [project.id]: e.target.value }))
+                                }
+                                placeholder="Add a task to this project"
+                                disabled={addingTaskId === project.id}
+                                className="min-w-0 flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+                              />
+                              <button
+                                type="submit"
+                                disabled={addingTaskId === project.id || !(newTaskTitles[project.id] ?? "").trim()}
+                                className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                              >
+                                {addingTaskId === project.id ? "Adding…" : "Add"}
+                              </button>
+                            </form>
                           </details>
                         );
                       })}
