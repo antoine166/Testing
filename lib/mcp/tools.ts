@@ -3519,13 +3519,14 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         stalled_projects: activeProjects
           .filter((p) => stalledIds.has(p.id))
           .map((p) => ({ id: p.id, name: p.name })),
-        // Per-project review cadence: null cadence = due at every review.
+        // Per-project review cadence: null cadence = due at every review,
+        // but reviewed-today always counts as done (same predicate as the
+        // app's /weekly-review step).
         projects_due_for_review: activeProjects
           .filter(
             (p) =>
               !p.last_reviewed_at ||
-              !p.review_every_days ||
-              daysSince(p.last_reviewed_at.slice(0, 10)) >= p.review_every_days,
+              daysSince(p.last_reviewed_at.slice(0, 10)) >= (p.review_every_days ?? 1),
           )
           .map((p) => ({
             id: p.id,
