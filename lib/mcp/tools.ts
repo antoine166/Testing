@@ -3506,10 +3506,31 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           (t) => t.domain_id && !t.someday && !t.waiting_for && !t.scheduled_date,
         ).length,
         // Titles that read as topics, not physical next actions — candidates
-        // for a rewrite during the review.
-        topic_shaped_tasks: open
-          .filter((t) => t.domain_id && !t.someday && !t.waiting_for && looksLikeTopic(t.title))
-          .map((t) => ({ id: t.id, title: t.title })),
+        // for a rewrite during the review. Recurring-series occurrences are
+        // collapsed to one entry per series (rename the template, not each
+        // occurrence) — same as the app's review step.
+        topic_shaped_tasks: (() => {
+          const flagged = open.filter(
+            (t) => t.domain_id && !t.someday && !t.waiting_for && looksLikeTopic(t.title),
+          );
+          const seenSeries = new Set<string>();
+          const entries: { id: string; title: string; recurring_template_id?: string; occurrences?: number }[] = [];
+          for (const t of flagged) {
+            if (t.recurring_template_id) {
+              if (seenSeries.has(t.recurring_template_id)) continue;
+              seenSeries.add(t.recurring_template_id);
+              entries.push({
+                id: t.id,
+                title: t.title,
+                recurring_template_id: t.recurring_template_id,
+                occurrences: flagged.filter((o) => o.recurring_template_id === t.recurring_template_id).length,
+              });
+            } else {
+              entries.push({ id: t.id, title: t.title });
+            }
+          }
+          return entries;
+        })(),
         waiting_for: {
           count: waiting.length,
           due_follow_ups: waiting
