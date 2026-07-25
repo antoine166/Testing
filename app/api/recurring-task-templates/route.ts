@@ -4,6 +4,7 @@ import { seedCompletionTemplate, topUpTemplate, type StoredTemplate } from "@/li
 import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
 
 const PRIORITIES = ["none", "low", "medium", "high"] as const;
+const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 
 export async function GET() {
   const { supabase, user } = await requireUser();
@@ -63,6 +64,12 @@ export async function POST(request: Request) {
       domain_id: typeof body.domain_id === "string" ? body.domain_id : null,
       project_id: typeof body.project_id === "string" ? body.project_id : null,
       priority,
+      context: typeof body.context === "string" && body.context.trim() ? body.context.trim() : null,
+      estimated_minutes:
+        typeof body.estimated_minutes === "number" && body.estimated_minutes > 0
+          ? Math.round(body.estimated_minutes)
+          : null,
+      energy_level: ENERGY_LEVELS.includes(body.energy_level) ? body.energy_level : null,
       ...patternResult.pattern,
       ...endsResult.ends,
       horizon_count: horizonCount,
