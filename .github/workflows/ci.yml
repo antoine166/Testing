@@ -3,10 +3,12 @@
 # type-checking). A red check on a PR means don't merge yet.
 name: CI
 
+# The default branch is listed under both its current name and `main` so
+# this keeps working when the branch gets renamed.
 on:
   pull_request:
   push:
-    branches: [claude/learn-coding-basics-qKVV3]
+    branches: [main, claude/learn-coding-basics-qKVV3]
 
 jobs:
   checks:
