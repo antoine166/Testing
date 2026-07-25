@@ -1,0 +1,25 @@
+# Runs on every pull request and every push to the default branch:
+# lint, unit tests, and a full production build (which includes Next's
+# type-checking). A red check on a PR means don't merge yet.
+name: CI
+
+# The default branch is listed under both its current name and `main` so
+# this keeps working when the branch gets renamed.
+on:
+  pull_request:
+  push:
+    branches: [main, claude/learn-coding-basics-qKVV3]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
