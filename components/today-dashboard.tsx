@@ -22,6 +22,7 @@ import RecurrenceFields, {
 } from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
+import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 
 type Checkin = {
@@ -453,6 +454,9 @@ export default function TodayDashboard() {
           domain_id: newTaskDomainId || null,
           project_id: newTaskProjectId || null,
           priority: newTaskPriority,
+          context: newTaskContext.trim() || undefined,
+          estimated_minutes: newTaskEstimatedMinutes ? Number(newTaskEstimatedMinutes) : undefined,
+          energy_level: newTaskEnergyLevel || undefined,
           ...recurrencePattern,
         }),
       });
@@ -1108,10 +1112,22 @@ export default function TodayDashboard() {
                 Make this recurring
               </label>
               {isRecurring && (
-                <RecurrenceFields
-                  pattern={recurrencePattern}
-                  onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
-                />
+                <>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <ContextFields
+                      context={newTaskContext}
+                      onContextChange={setNewTaskContext}
+                      estimatedMinutes={newTaskEstimatedMinutes}
+                      onEstimatedMinutesChange={setNewTaskEstimatedMinutes}
+                      energyLevel={newTaskEnergyLevel}
+                      onEnergyLevelChange={setNewTaskEnergyLevel}
+                    />
+                  </div>
+                  <RecurrenceFields
+                    pattern={recurrencePattern}
+                    onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
+                  />
+                </>
               )}
             </div>
           )}

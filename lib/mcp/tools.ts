@@ -1531,6 +1531,26 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         domain_id: z.string().uuid().optional(),
         project_id: z.string().uuid().optional(),
         priority: z.enum(TASK_PRIORITIES).optional(),
+        context: z
+          .string()
+          .optional()
+          .describe(
+            "GTD context — the Location where/with-what it's done (prefer a name from " +
+              "list_contexts; free text accepted). Copied onto every generated occurrence.",
+          ),
+        estimated_minutes: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("GTD's 'time available' criterion. Copied onto every generated occurrence."),
+        energy_required: z
+          .enum(TASK_ENERGY_LEVELS)
+          .optional()
+          .describe(
+            "GTD's 'resources available' criterion (stored as the template's energy_level). " +
+              "Copied onto every generated occurrence.",
+          ),
         ...recurrencePatternSchema,
         ...endsSchema,
         horizon_count: z
@@ -1543,7 +1563,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
-    async ({ title, notes, link, domain_id, project_id, priority, horizon_count, ...patternBody }) => {
+    async ({ title, notes, link, domain_id, project_id, priority, context, estimated_minutes, energy_required, horizon_count, ...patternBody }) => {
       const trimmed = title.trim();
       if (!trimmed) return fail("Title is required");
 
@@ -1562,6 +1582,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           domain_id: domain_id ?? null,
           project_id: project_id ?? null,
           priority,
+          context: context && context.trim() ? context.trim() : undefined,
+          estimated_minutes,
+          energy_level: energy_required,
           ...patternResult.pattern,
           ...endsResult.ends,
           horizon_count: horizon_count ?? 12,
@@ -1600,6 +1623,32 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         domain_id: z.string().uuid().nullable().optional(),
         project_id: z.string().uuid().nullable().optional(),
         priority: z.enum(TASK_PRIORITIES).optional(),
+        context: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "GTD context — the Location (from list_contexts; free text accepted), or null to " +
+              "clear. Applies to occurrences generated from now on, not already-generated ones.",
+          ),
+        estimated_minutes: z
+          .number()
+          .int()
+          .min(1)
+          .nullable()
+          .optional()
+          .describe(
+            "GTD's 'time available' criterion, or null to clear. Applies to occurrences " +
+              "generated from now on, not already-generated ones.",
+          ),
+        energy_required: z
+          .enum(TASK_ENERGY_LEVELS)
+          .nullable()
+          .optional()
+          .describe(
+            "GTD's 'resources available' criterion (the template's energy_level), or null to " +
+              "clear. Applies to occurrences generated from now on, not already-generated ones.",
+          ),
         active: z.boolean().optional(),
         horizon_count: z.number().int().min(1).max(52).optional(),
         ...recurrencePatternSchema,
@@ -1608,7 +1657,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ id, title, link, ...rest }) => {
+    async ({ id, title, link, context, energy_required, ...rest }) => {
       const {
         recurrence_type,
         days_of_week,
@@ -1633,6 +1682,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       }
       if (link !== undefined) {
         updates.link = link && link.trim() ? link.trim() : null;
+      }
+      if (context !== undefined) {
+        updates.context = context && context.trim() ? context.trim() : null;
+      }
+      if (energy_required !== undefined) {
+        updates.energy_level = energy_required;
       }
 
       let patternChanged = false;
@@ -1747,7 +1802,8 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       title: "Convert task to recurring",
       description:
         "Turn an existing plain task into the seed of a new recurring task template, carrying over " +
-        "its title, notes, domain, project, priority, and link. Generates the new series' first " +
+        "its title, notes, domain, project, priority, link, and Context trio (context, " +
+        "estimated_minutes, energy_level). Generates the new series' first " +
         "occurrence(s), then moves the original task to Trash (recoverable for 30 days) — the new " +
         "series' first occurrence stands in for it. Fails if the task is already part of a series.",
       inputSchema: { id: z.string().uuid(), ...recurrencePatternSchema, ...endsSchema },
@@ -1779,6 +1835,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           domain_id: task.domain_id,
           project_id: task.project_id,
           priority: task.priority,
+          context: task.context,
+          estimated_minutes: task.estimated_minutes,
+          energy_level: task.energy_level,
           ...patternResult.pattern,
           ...endsResult.ends,
         })

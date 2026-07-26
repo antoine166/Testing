@@ -12,6 +12,9 @@ export type StoredTemplate = RecurringTemplate & {
   domain_id: string | null;
   project_id: string | null;
   priority: string;
+  context: string | null;
+  estimated_minutes: number | null;
+  energy_level: string | null;
   horizon_count: number;
   active: boolean;
   completion_offset_count: number | null;
@@ -31,6 +34,9 @@ function taskFromTemplate(template: StoredTemplate, date: string) {
     domain_id: template.domain_id,
     project_id: template.project_id,
     priority: template.priority,
+    context: template.context,
+    estimated_minutes: template.estimated_minutes,
+    energy_level: template.energy_level,
     due_date: date,
     scheduled_date: date,
     recurring_template_id: template.id,

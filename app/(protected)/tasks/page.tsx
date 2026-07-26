@@ -17,6 +17,7 @@ import RecurrenceFields, {
 } from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
+import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
@@ -38,6 +39,9 @@ type RecurringTemplate = {
   domain_id: string | null;
   project_id: string | null;
   priority: TaskPriority;
+  context: string | null;
+  estimated_minutes: number | null;
+  energy_level: TaskEnergy | null;
   recurrence_type: RecurrenceType;
   days_of_week: number[] | null;
   day_of_month: number | null;
@@ -111,6 +115,9 @@ export default function TasksPage() {
     reset: resetEditDomainProject,
   } = useDomainProjectCascade(projects);
   const [editPriority, setEditPriority] = useState<TaskPriority>("none");
+  const [editContext, setEditContext] = useState("");
+  const [editEstimatedMinutes, setEditEstimatedMinutes] = useState("");
+  const [editEnergyLevel, setEditEnergyLevel] = useState<TaskEnergy | "">("");
   const [editHorizonCount, setEditHorizonCount] = useState(12);
   const [editPattern, setEditPattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
@@ -262,6 +269,9 @@ export default function TasksPage() {
           domain_id: domainId || null,
           project_id: projectId || null,
           priority,
+          context: context.trim() || undefined,
+          estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : undefined,
+          energy_level: energyLevel || undefined,
           ...recurrencePattern,
         }),
       });
@@ -340,6 +350,9 @@ export default function TasksPage() {
     setEditLink(t.link ?? "");
     resetEditDomainProject(t.domain_id ?? "", t.project_id ?? "");
     setEditPriority(t.priority);
+    setEditContext(t.context ?? "");
+    setEditEstimatedMinutes(t.estimated_minutes != null ? String(t.estimated_minutes) : "");
+    setEditEnergyLevel(t.energy_level ?? "");
     setEditHorizonCount(t.horizon_count);
     setEditPattern({
       recurrence_type: t.recurrence_type,
@@ -381,6 +394,9 @@ export default function TasksPage() {
         domain_id: editDomainId || null,
         project_id: editProjectId || null,
         priority: editPriority,
+        context: editContext.trim() || null,
+        estimated_minutes: editEstimatedMinutes ? Number(editEstimatedMinutes) : null,
+        energy_level: editEnergyLevel || null,
         horizon_count: editHorizonCount,
         ...editPattern,
       }),
@@ -855,10 +871,22 @@ export default function TasksPage() {
           </label>
 
           {isRecurring && (
-            <RecurrenceFields
-              pattern={recurrencePattern}
-              onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
-            />
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <ContextFields
+                  context={context}
+                  onContextChange={setContext}
+                  estimatedMinutes={estimatedMinutes}
+                  onEstimatedMinutesChange={setEstimatedMinutes}
+                  energyLevel={energyLevel}
+                  onEnergyLevelChange={setEnergyLevel}
+                />
+              </div>
+              <RecurrenceFields
+                pattern={recurrencePattern}
+                onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
+              />
+            </>
           )}
         </div>
       </form>
@@ -947,6 +975,16 @@ export default function TasksPage() {
                           upcoming
                         </label>
                       )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ContextFields
+                        context={editContext}
+                        onContextChange={setEditContext}
+                        estimatedMinutes={editEstimatedMinutes}
+                        onEstimatedMinutesChange={setEditEstimatedMinutes}
+                        energyLevel={editEnergyLevel}
+                        onEnergyLevelChange={setEditEnergyLevel}
+                      />
                     </div>
                     <RecurrenceFields
                       pattern={editPattern}

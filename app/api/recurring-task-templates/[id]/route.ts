@@ -7,6 +7,7 @@ import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validat
 type RouteParams = { params: Promise<{ id: string }> };
 
 const PRIORITIES = ["none", "low", "medium", "high"] as const;
+const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 
 export async function PUT(request: Request, { params }: RouteParams) {
   const { id } = await params;
@@ -53,6 +54,18 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
   if (typeof body.priority === "string" && PRIORITIES.includes(body.priority)) {
     updates.priority = body.priority;
+  }
+  if ("context" in body) {
+    updates.context = typeof body.context === "string" && body.context.trim() ? body.context.trim() : null;
+  }
+  if ("estimated_minutes" in body) {
+    updates.estimated_minutes =
+      typeof body.estimated_minutes === "number" && body.estimated_minutes > 0
+        ? Math.round(body.estimated_minutes)
+        : null;
+  }
+  if ("energy_level" in body) {
+    updates.energy_level = ENERGY_LEVELS.includes(body.energy_level) ? body.energy_level : null;
   }
   if (typeof body.active === "boolean") {
     updates.active = body.active;

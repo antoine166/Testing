@@ -7,7 +7,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 /**
  * The recurring-task mirror of convert-to-project: creates a recurring task
- * template from a plain task's title/notes/domain/project/priority/link,
+ * template from a plain task's title/notes/domain/project/priority/link and
+ * its Context trio (context/estimated_minutes/energy_level),
  * generates its first occurrence(s), then trashes the original task
  * (recoverable for 30 days) — the new series' first occurrence stands in
  * for it. Things 3's "Repeat..." on any to-do is the reference point; this
@@ -56,6 +57,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       domain_id: task.domain_id,
       project_id: task.project_id,
       priority: task.priority,
+      context: task.context,
+      estimated_minutes: task.estimated_minutes,
+      energy_level: task.energy_level,
       ...patternResult.pattern,
       ...endsResult.ends,
     })

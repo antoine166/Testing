@@ -10,6 +10,7 @@ import RecurrenceFields, {
 } from "@/components/recurrence-fields";
 import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
+import ContextFields from "@/components/context-fields";
 import ClarifyFlow from "@/components/clarify-flow";
 import MindSweepFlow from "@/components/mind-sweep-flow";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
@@ -118,6 +119,9 @@ export default function InboxPage() {
           domain_id: domainId || null,
           project_id: projectId || null,
           priority,
+          context: context.trim() || undefined,
+          estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : undefined,
+          energy_level: energyLevel || undefined,
           ...recurrencePattern,
         }),
       });
@@ -462,10 +466,22 @@ export default function InboxPage() {
               Make this recurring
             </label>
             {isRecurring && (
-              <RecurrenceFields
-                pattern={recurrencePattern}
-                onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
-              />
+              <>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <ContextFields
+                    context={context}
+                    onContextChange={setContext}
+                    estimatedMinutes={estimatedMinutes}
+                    onEstimatedMinutesChange={setEstimatedMinutes}
+                    energyLevel={energyLevel}
+                    onEnergyLevelChange={setEnergyLevel}
+                  />
+                </div>
+                <RecurrenceFields
+                  pattern={recurrencePattern}
+                  onChange={(updates) => setRecurrencePattern((prev) => ({ ...prev, ...updates }))}
+                />
+              </>
             )}
           </div>
         )}
