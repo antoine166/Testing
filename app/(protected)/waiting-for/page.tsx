@@ -19,7 +19,7 @@ export default function WaitingForPage() {
     handleConvertToProject,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
-  } = useTaskList();
+  } = useTaskList({ done: false });
 
   const [personFilter, setPersonFilter] = useState("");
   const [agendaAdded, setAgendaAdded] = useState<Set<string>>(new Set());

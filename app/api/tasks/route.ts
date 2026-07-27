@@ -2,19 +2,41 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
 import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
 
-export async function GET() {
+export async function GET(request: Request) {
   const { supabase, user } = await requireUser();
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
+  // Opt-in filters — with none set, the response is identical to before.
+  // `done` is boolean-shaped ("true"/"false") rather than a raw status
+  // value because statuses are todo/in_progress/done and every consumer
+  // splits on done-vs-not-done; a status=todo filter would silently drop
+  // in_progress tasks.
+  const params = new URL(request.url).searchParams;
+
+  let query = supabase
     .from("tasks")
     .select(
       "*, recurring_task_templates(recurrence_type, days_of_week, day_of_month, interval_days), task_attachments(count)",
     )
-    .is("deleted_at", null)
+    .is("deleted_at", null);
+
+  const done = params.get("done");
+  if (done === "true") query = query.eq("status", "done");
+  else if (done === "false") query = query.neq("status", "done");
+
+  const domainId = params.get("domain_id");
+  if (domainId) query = query.eq("domain_id", domainId);
+
+  const projectId = params.get("project_id");
+  if (projectId) query = query.eq("project_id", projectId);
+
+  const limit = Number(params.get("limit"));
+  if (Number.isInteger(limit) && limit > 0) query = query.limit(limit);
+
+  const { data, error } = await query
     // Manual order first (hand-arranged positions); nulls first so untouched
     // tasks and fresh captures surface at the top, newest first, exactly as
     // before manual ordering existed.

@@ -18,7 +18,7 @@ export default function AnytimePage() {
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
     loadAll,
-  } = useTaskList();
+  } = useTaskList({ done: false });
 
   // Filed under a domain, no specific date, not deferred to Someday — actionable whenever.
   const anytimeTasks = tasks.filter(

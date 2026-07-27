@@ -23,7 +23,7 @@ export default function SomedayPage() {
     handleConvertToProject,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
-  } = useTaskList();
+  } = useTaskList({ done: false });
 
   const [ticklerItems, setTicklerItems] = useState<TicklerItem[]>([]);
   const [ticklerLoading, setTicklerLoading] = useState(true);

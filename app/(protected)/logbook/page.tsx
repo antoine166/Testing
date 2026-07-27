@@ -16,7 +16,7 @@ function monthLabel(dateStr: string): string {
 
 export default function LogbookPage() {
   const { domains, projects, tasks, loading, error, handleUpdate, toggleDone, handleDelete } =
-    useTaskList();
+    useTaskList({ done: true });
 
   const doneTasks = [...tasks]
     .filter((t) => t.status === "done")

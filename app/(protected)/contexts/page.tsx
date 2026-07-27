@@ -28,7 +28,7 @@ export default function ContextsPage() {
     handleConvertToProject,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
-  } = useTaskList();
+  } = useTaskList({ done: false });
 
   const [contextRows, setContextRows] = useState<ContextRow[]>([]);
   const [contextsError, setContextsError] = useState<string | null>(null);
