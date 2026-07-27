@@ -6,6 +6,7 @@ import { todayLocal, daysSince } from "@/lib/date";
 import { computeStreak, isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
 import { looksLikeTopic } from "@/lib/tasks/next-action-shape";
+import { isInInbox } from "@/lib/tasks/inbox";
 import { reviewStreakWeeks } from "@/lib/reviews/streak";
 import {
   computeWeeklyGoalStreak,
@@ -3544,7 +3545,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       const domainRows = domainsRes.data ?? [];
       const reviewLogRows = logsRes.data ?? [];
       const open = tasks.filter((t) => t.status !== "done");
-      const inbox = open.filter((t) => !t.domain_id && !t.someday && !t.waiting_for);
+      const inbox = open.filter((t) => isInInbox(t, today));
       const waiting = open.filter((t) => t.waiting_for);
       const somedayTasks = open.filter((t) => t.someday);
       const activeProjects = projects.filter((p) => p.status === "active");

@@ -24,6 +24,7 @@ import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
+import { isRevisitDue } from "@/lib/tasks/inbox";
 
 type Checkin = {
   date: string;
@@ -627,9 +628,11 @@ export default function TodayDashboard() {
     .filter((t) => t.scheduled_date && t.scheduled_date < today && t.status !== "done")
     .sort((a, b) => (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? ""));
   // GTD's tickler file: a Someday/Maybe item whose date-specific trigger
-  // has arrived should actually surface, not just wait to be noticed.
+  // has arrived should actually surface, not just wait to be noticed. Shares
+  // isRevisitDue with the Inbox so this nudge and the Inbox never disagree
+  // about which items have come due.
   const readyToRevisitCount = tasks.filter(
-    (t) => t.someday && t.status !== "done" && t.revisit_date && t.revisit_date <= today,
+    (t) => t.status !== "done" && isRevisitDue(t, today),
   ).length;
   // Evening: once there's still something undecided on today's plate after
   // 7:30pm, offer the Shutdown ritual — the deliberate alternative to

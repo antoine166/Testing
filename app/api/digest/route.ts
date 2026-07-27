@@ -4,6 +4,7 @@ import { constantTimeEqual } from "@/lib/mcp/oauth";
 import { pickResurfacedNote } from "@/lib/knowledge/resurface";
 import { todayLocal, daysSince } from "@/lib/date";
 import { isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
+import { isRevisitDue } from "@/lib/tasks/inbox";
 
 // Plain token-secured endpoint for the scheduled daily-digest routine to
 // call directly (via curl/Bash), independent of any specific Claude
@@ -81,7 +82,7 @@ export async function GET(request: Request) {
   const dueFollowUps = tasks.filter((t) => t.waiting_for && t.follow_up_date && t.follow_up_date <= today);
   // The tickler file's contract: things resurface on their date without
   // being looked for — same buckets the Today view and get_today_summary show.
-  const readyToRevisit = tasks.filter((t) => t.someday && t.revisit_date && t.revisit_date <= today);
+  const readyToRevisit = tasks.filter((t) => isRevisitDue(t, today));
 
   return NextResponse.json({
     date: today,

@@ -15,6 +15,8 @@ import ClarifyFlow from "@/components/clarify-flow";
 import MindSweepFlow from "@/components/mind-sweep-flow";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { useTaskList } from "@/lib/hooks/use-task-list";
+import { isInInbox } from "@/lib/tasks/inbox";
+import { todayLocal } from "@/lib/date";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
@@ -64,11 +66,7 @@ export default function InboxPage() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
-  // waiting_for is excluded: once delegated, an item lives on the Waiting
-  // For list — it's been processed, so it no longer belongs in the inbox.
-  const inboxTasks = tasks.filter(
-    (t) => !t.domain_id && !t.someday && !t.waiting_for && t.status !== "done",
-  );
+  const inboxTasks = tasks.filter((t) => isInInbox(t, todayLocal()));
 
   // Snapshot of ids when Clarify starts, so the flow's order and progress
   // count stay stable while individual actions reshuffle the live list.

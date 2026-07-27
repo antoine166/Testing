@@ -6,6 +6,7 @@ import { findStalledProjectIds } from "@/lib/projects/stalled";
 import { looksLikeTopic } from "@/lib/tasks/next-action-shape";
 import { reviewStreakWeeks } from "@/lib/reviews/streak";
 import { todayLocal, daysSince } from "@/lib/date";
+import { isInInbox } from "@/lib/tasks/inbox";
 
 // GTD's Weekly Review as a guided, no-AI flow: Get Clear → Get Current →
 // Get Creative, one step at a time, with the app's real numbers surfaced at
@@ -153,7 +154,7 @@ export default function WeeklyReviewPage() {
   }, []);
 
   const open = useMemo(() => tasks.filter((t) => t.status !== "done"), [tasks]);
-  const inboxCount = open.filter((t) => !t.domain_id && !t.someday && !t.waiting_for).length;
+  const inboxCount = open.filter((t) => isInInbox(t, today)).length;
   const waiting = open.filter((t) => t.waiting_for);
   const dueFollowUps = waiting.filter((t) => t.follow_up_date && t.follow_up_date <= today);
   const somedayTasks = open.filter((t) => t.someday);

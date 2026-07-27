@@ -32,13 +32,18 @@ export default async function ProtectedLayout({
         .select("id, name, domain_id, parent_project_id")
         .is("deleted_at", null)
         .order("name"),
+      // The SQL mirror of isInInbox (lib/tasks/inbox.ts) — this one has to
+      // count without fetching the rows, so it can't reuse the predicate
+      // directly. Keep the two in step: unfiled, not delegated, not done,
+      // and Someday only once its revisit date has arrived.
       supabase
         .from("tasks")
         .select("id", { count: "exact", head: true })
         .is("deleted_at", null)
         .is("domain_id", null)
-        .eq("someday", false)
-        .neq("status", "done"),
+        .eq("waiting_for", false)
+        .neq("status", "done")
+        .or(`someday.eq.false,revisit_date.lte.${today}`),
       supabase
         .from("tasks")
         .select("id", { count: "exact", head: true })
