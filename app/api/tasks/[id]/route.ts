@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
 import { generateNextCompletionOccurrence } from "@/lib/recurring-tasks/topup";
 import { todayLocal } from "@/lib/date";
-import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
+import { syncTaskCalendarEvent, syncTaskCalendarEvents } from "@/lib/google-calendar/sync";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -183,6 +183,18 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       );
     }
 
+    // Occurrences the user time-blocked by hand may have pushed Google
+    // Calendar events — collect them before the bulk trash so they can be
+    // reconciled after (the trash would otherwise orphan the events).
+    const { data: calendarLinked } = await supabase
+      .from("tasks")
+      .select("id")
+      .eq("recurring_template_id", task.recurring_template_id)
+      .is("deleted_at", null)
+      .neq("status", "done")
+      .gte("scheduled_date", task.scheduled_date ?? "0000-01-01")
+      .not("gcal_event_id", "is", null);
+
     const { error: deleteError } = await supabase
       .from("tasks")
       .update({ deleted_at: new Date().toISOString() })
@@ -206,6 +218,11 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       .from("recurring_task_templates")
       .update({ active: false, last_generated_date: null })
       .eq("id", task.recurring_template_id);
+
+    await syncTaskCalendarEvents(
+      user.id,
+      (calendarLinked ?? []).map((t) => t.id),
+    );
 
     return new NextResponse(null, { status: 204 });
   }

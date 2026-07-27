@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -58,6 +59,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
       { status: 500 },
     );
   }
+
+  // The task was just trashed — remove its pushed Google Calendar event, if
+  // any (same post-trash reconcile convert-to-project does).
+  await syncTaskCalendarEvent(user.id, id);
 
   return NextResponse.json(item, { status: 201 });
 }
