@@ -28,6 +28,7 @@ export default function SomedayPage() {
   const [ticklerItems, setTicklerItems] = useState<TicklerItem[]>([]);
   const [ticklerLoading, setTicklerLoading] = useState(true);
   const [ticklerError, setTicklerError] = useState<string | null>(null);
+  const [capturing, setCapturing] = useState(false);
   const { showToast } = useToast();
   const [note, setNote] = useState("");
   const [revisitDate, setRevisitDate] = useState("");
@@ -65,7 +66,8 @@ export default function SomedayPage() {
 
   async function handleCapture(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!note.trim() || !revisitDate) return;
+    if (!note.trim() || !revisitDate || capturing) return;
+    setCapturing(true);
 
     const res = await fetch("/api/tickler-items", {
       method: "POST",
@@ -73,6 +75,7 @@ export default function SomedayPage() {
       body: JSON.stringify({ note, revisit_date: revisitDate }),
     });
 
+    setCapturing(false);
     if (!res.ok) {
       const body = await res.json();
       setTicklerError(body.error ?? "Failed to add tickler item");
@@ -203,7 +206,8 @@ export default function SomedayPage() {
           />
           <button
             type="submit"
-            className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+            disabled={capturing}
+            className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 disabled:opacity-50"
           >
             Add
           </button>
