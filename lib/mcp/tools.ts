@@ -14,7 +14,12 @@ import {
   isAtRisk as isWorkoutAtRisk,
 } from "@/lib/workouts/weekly";
 import { TRASH_CONFIG, TRASH_TYPES, type TrashType } from "@/lib/trash";
-import { syncTaskCalendarEvent, listGoogleCalendarEvents } from "@/lib/google-calendar/sync";
+import {
+  syncTaskCalendarEvent,
+  syncTaskCalendarEvents,
+  findCalendarAffectedTaskIds,
+  listGoogleCalendarEvents,
+} from "@/lib/google-calendar/sync";
 import { pickResurfacedNote } from "@/lib/knowledge/resurface";
 import {
   generateNextCompletionOccurrence,
@@ -678,6 +683,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       const { error } = await admin.rpc("trash_project", { p_project_id: id, p_user_id: userId });
       if (error) return fail(error.message);
 
+      // The cascade just trashed the project's (and subprojects') tasks —
+      // remove any Google Calendar events pushed for time-blocked ones.
+      await syncTaskCalendarEvents(userId, await findCalendarAffectedTaskIds(userId, { projectId: id }));
+
       return ok({ deleted: id, subprojects_deleted: children.map((c) => c.id) });
     },
   );
@@ -1250,6 +1259,18 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           return fail("Not part of a recurring series");
         }
 
+        // Hand-time-blocked occurrences may have pushed Google Calendar
+        // events — collect them before the bulk trash, reconcile after.
+        const { data: calendarLinked } = await admin
+          .from("tasks")
+          .select("id")
+          .eq("recurring_template_id", task.recurring_template_id)
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .neq("status", "done")
+          .gte("scheduled_date", task.scheduled_date ?? "0000-01-01")
+          .not("gcal_event_id", "is", null);
+
         const { error: deleteError } = await admin
           .from("tasks")
           .update({ deleted_at: new Date().toISOString() })
@@ -1269,6 +1290,8 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .update({ active: false, last_generated_date: null })
           .eq("id", task.recurring_template_id)
           .eq("user_id", userId);
+
+        await syncTaskCalendarEvents(userId, (calendarLinked ?? []).map((t) => t.id));
 
         return ok({ deleted_series_from: id });
       }
@@ -1393,6 +1416,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           `Knowledge item created but couldn't trash the original task: ${trashError.message}`,
         );
       }
+
+      // Same post-trash reconcile convert_task_to_project does — the task
+      // may have had a pushed Google Calendar event.
+      await syncTaskCalendarEvent(userId, id);
 
       return ok(item);
     },
@@ -1862,6 +1889,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       if (trashError) {
         return fail(`Recurring task created but couldn't trash the original task: ${trashError.message}`);
       }
+
+      // The original (possibly time-blocked) task was just trashed — remove
+      // its pushed Google Calendar event, if any. Generated occurrences
+      // carry only a date, never a time, so they don't push events.
+      await syncTaskCalendarEvent(userId, id);
 
       return ok(template);
     },
@@ -3387,6 +3419,11 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           p_user_id: userId,
         });
         if (error) return fail(error.message);
+        // Restored tasks (a project restore cascades them back) may be
+        // time-blocked — push their Google Calendar events back too.
+        if (type === "project") {
+          await syncTaskCalendarEvents(userId, await findCalendarAffectedTaskIds(userId, { projectId: id }));
+        }
         return ok({ restored: id, type });
       }
 
@@ -3398,6 +3435,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .select()
         .single();
       if (error) return fail(error.message);
+      if (type === "task") {
+        // A restored time-blocked task should get its calendar event back.
+        await syncTaskCalendarEvent(userId, id);
+      }
       return ok(data);
     },
   );

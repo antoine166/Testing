@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
 import { seedCompletionTemplate, topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
 import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
+import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -93,6 +94,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       { status: 500 },
     );
   }
+
+  // The original (possibly time-blocked) task was just trashed — remove its
+  // pushed Google Calendar event, if any. Generated occurrences carry only a
+  // date, never a time, so they don't push events of their own.
+  await syncTaskCalendarEvent(user.id, id);
 
   return NextResponse.json(template, { status: 201 });
 }

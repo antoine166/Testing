@@ -141,6 +141,77 @@ export async function syncTaskCalendarEvent(userId: string, taskId: string): Pro
   }
 }
 
+/**
+ * Batch form of syncTaskCalendarEvent for the paths that trash or restore
+ * many tasks at once (recurring-series delete; project/domain trash,
+ * restore, purge). Sequential on purpose: single-user volumes, and each
+ * call is independently best-effort — one Google hiccup never blocks the
+ * rest of the batch.
+ */
+export async function syncTaskCalendarEvents(userId: string, taskIds: string[]): Promise<void> {
+  for (const taskId of taskIds) {
+    await syncTaskCalendarEvent(userId, taskId);
+  }
+}
+
+/**
+ * Task ids whose Google event might need reconciling when a whole project
+ * or domain is trashed, restored, or purged. Mirrors the scope of the
+ * trash_project / trash_domain SQL cascades (a project includes its direct
+ * subprojects; a domain includes its own tasks plus all of its projects').
+ * Candidates are tasks that already have a linked event (trash/purge
+ * direction) or are time-blocked and may need one back (restore direction);
+ * syncTaskCalendarEvent makes the real per-task decision either way.
+ * Deliberately ignores deleted_at so it gives the same answer before or
+ * after the cascade runs.
+ */
+export async function findCalendarAffectedTaskIds(
+  userId: string,
+  scope: { projectId: string } | { domainId: string },
+): Promise<string[]> {
+  try {
+    const admin = createAdminClient();
+
+    const projectIds: string[] = [];
+    if ("projectId" in scope) {
+      projectIds.push(scope.projectId);
+      const { data: children } = await admin
+        .from("projects")
+        .select("id")
+        .eq("parent_project_id", scope.projectId)
+        .eq("user_id", userId);
+      for (const child of children ?? []) projectIds.push(child.id);
+    } else {
+      const { data: domainProjects } = await admin
+        .from("projects")
+        .select("id")
+        .eq("domain_id", scope.domainId)
+        .eq("user_id", userId);
+      for (const project of domainProjects ?? []) projectIds.push(project.id);
+    }
+
+    let query = admin
+      .from("tasks")
+      .select("id")
+      .eq("user_id", userId)
+      .or("gcal_event_id.not.is.null,scheduled_time.not.is.null");
+
+    if ("projectId" in scope) {
+      query = query.in("project_id", projectIds);
+    } else if (projectIds.length > 0) {
+      query = query.or(`domain_id.eq.${scope.domainId},project_id.in.(${projectIds.join(",")})`);
+    } else {
+      query = query.eq("domain_id", scope.domainId);
+    }
+
+    const { data } = await query;
+    return (data ?? []).map((t) => t.id);
+  } catch (err) {
+    console.error("Finding calendar-affected tasks failed", scope, err);
+    return [];
+  }
+}
+
 export type GoogleCalendarEvent = {
   id: string;
   title: string;

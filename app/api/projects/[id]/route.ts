@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import {
+  findCalendarAffectedTaskIds,
+  syncTaskCalendarEvents,
+} from "@/lib/google-calendar/sync";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -119,6 +123,10 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // The cascade just trashed this project's (and subprojects') tasks —
+  // remove any Google Calendar events pushed for time-blocked ones.
+  await syncTaskCalendarEvents(user.id, await findCalendarAffectedTaskIds(user.id, { projectId: id }));
 
   return new NextResponse(null, { status: 204 });
 }
