@@ -1,12 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/toast";
 
 type TrashItem = {
   id: string;
   type: string;
   name: string;
   deleted_at: string;
+};
+
+// Where a restored item can be found again — restoring only removes it from
+// this list, so the toast has to say where it went.
+const RESTORE_DESTINATIONS: Record<string, { label: string; href: string }> = {
+  domain: { label: "View Domains", href: "/domains" },
+  project: { label: "View Projects", href: "/projects" },
+  task: { label: "View Tasks", href: "/tasks" },
+  habit: { label: "View Habits", href: "/habits" },
+  workout: { label: "View Training Log", href: "/training-log" },
+  routine: { label: "View Routines", href: "/routines" },
+  checklist: { label: "View Checklists", href: "/checklists" },
+  "knowledge-item": { label: "View Library", href: "/library" },
+  "tickler-item": { label: "View Someday", href: "/someday" },
+  person: { label: "View People", href: "/people" },
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -32,6 +48,7 @@ export default function TrashPage() {
   const [items, setItems] = useState<TrashItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -59,6 +76,7 @@ export default function TrashPage() {
       return;
     }
 
+    showToast(`Restored “${item.name}”`, RESTORE_DESTINATIONS[item.type]);
     setItems((prev) => prev.filter((i) => !(i.type === item.type && i.id === item.id)));
   }
 

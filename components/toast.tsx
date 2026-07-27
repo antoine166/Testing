@@ -3,7 +3,8 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import Link from "next/link";
 
-type ToastAction = { label: string; href: string };
+/** Either a navigation ("View project") or a callback ("Undo") — not both. */
+type ToastAction = { label: string; href: string; onClick?: never } | { label: string; onClick: () => void; href?: never };
 
 type Toast = {
   id: number;
@@ -44,6 +45,32 @@ export function projectConversionToast(
   ];
 }
 
+/** Task → recurring series: the task leaves this list; occurrences appear on Upcoming. */
+export function recurringConversionToast(template: { title: string }): [string, ToastAction] {
+  return [
+    `“${template.title}” now repeats — occurrences added to Upcoming`,
+    { label: "View", href: "/upcoming" },
+  ];
+}
+
+/** Task → reference: the task leaves the action lists entirely; it lives in the Library now. */
+export function knowledgeConversionToast(item: { title: string }): [string, ToastAction] {
+  return [`“${item.title}” filed in the Library`, { label: "View", href: "/library" }];
+}
+
+/** Tickler note → task: lands in the Inbox, which is rarely the page the user is on. */
+export function ticklerConversionToast(task: { title?: string } | null): [string, ToastAction] {
+  return [
+    task?.title ? `Task created in Inbox: “${task.title}”` : "Task created in your Inbox",
+    { label: "View Inbox", href: "/inbox" },
+  ];
+}
+
+/** After a trash-backed delete: say it's recoverable and offer the way back. */
+export function taskTrashedToast(undo: () => void): [string, ToastAction] {
+  return ["Moved to Trash", { label: "Undo", onClick: undo }];
+}
+
 const DISMISS_AFTER_MS = 6000;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -75,15 +102,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               className="pointer-events-auto flex max-w-md items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm text-zinc-800 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             >
               <span className="min-w-0">{toast.message}</span>
-              {toast.action && (
-                <Link
-                  href={toast.action.href}
-                  onClick={() => dismiss(toast.id)}
-                  className="shrink-0 font-medium text-blue-600 hover:underline dark:text-blue-400"
-                >
-                  {toast.action.label}
-                </Link>
-              )}
+              {toast.action &&
+                (toast.action.href ? (
+                  <Link
+                    href={toast.action.href}
+                    onClick={() => dismiss(toast.id)}
+                    className="shrink-0 font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    {toast.action.label}
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => {
+                      dismiss(toast.id);
+                      toast.action?.onClick?.();
+                    }}
+                    className="shrink-0 font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    {toast.action.label}
+                  </button>
+                ))}
               <button
                 onClick={() => dismiss(toast.id)}
                 aria-label="Dismiss"

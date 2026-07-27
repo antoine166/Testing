@@ -25,7 +25,14 @@ import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { isRevisitDue } from "@/lib/tasks/inbox";
-import { projectConversionToast, useToast } from "@/components/toast";
+import {
+  knowledgeConversionToast,
+  projectConversionToast,
+  recurringConversionToast,
+  taskTrashedToast,
+  ticklerConversionToast,
+  useToast,
+} from "@/components/toast";
 
 type Checkin = {
   date: string;
@@ -365,6 +372,17 @@ export default function TodayDashboard() {
       return;
     }
 
+    if (scope === "following") {
+      showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
+    } else {
+      showToast(
+        ...taskTrashedToast(async () => {
+          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
+          if (undoRes.ok) await loadAll();
+        }),
+      );
+    }
+
     await loadAll();
   }
 
@@ -396,6 +414,7 @@ export default function TodayDashboard() {
       setError(body.error ?? "Failed to convert task to recurring");
       return;
     }
+    showToast(...recurringConversionToast(await res.json()));
     await loadAll();
   }
 
@@ -412,6 +431,7 @@ export default function TodayDashboard() {
       setError(body.error ?? "Failed to file task as reference");
       return;
     }
+    showToast(...knowledgeConversionToast(await res.json()));
     await loadAll();
   }
 
@@ -501,6 +521,9 @@ export default function TodayDashboard() {
         setError(body.error ?? "Failed to create project");
         return;
       }
+      // Projects don't show on Today — without this the capture looks like
+      // it did nothing.
+      showToast(...projectConversionToast(await res.json(), domains));
       resetCreateForm();
       await loadAll();
       return;
@@ -574,6 +597,8 @@ export default function TodayDashboard() {
       setError(body.error ?? "Failed to convert to task");
       return;
     }
+    // The new task lands in the Inbox, not on Today — say so.
+    showToast(...ticklerConversionToast(await res.json().catch(() => null)));
     await loadAll();
   }
 
