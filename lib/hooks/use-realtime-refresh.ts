@@ -22,7 +22,18 @@ export function markLocalRefresh() {
   lastLocalRefresh = Date.now();
 }
 
-export function useRealtimeRefresh(tables: string[], onChange: () => void) {
+/**
+ * `suppressLocalEcho` (default true) skips events landing within the
+ * markLocalRefresh window. Pass false when this subscriber's `onChange`
+ * refreshes DIFFERENT data than the page reload that set the window —
+ * e.g. the layout's sidebar (server-fetched counts and project lists),
+ * which still needs to update after this client's own writes.
+ */
+export function useRealtimeRefresh(
+  tables: string[],
+  onChange: () => void,
+  { suppressLocalEcho = true }: { suppressLocalEcho?: boolean } = {},
+) {
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -40,16 +51,19 @@ export function useRealtimeRefresh(tables: string[], onChange: () => void) {
     const scheduleRefresh = () => {
       if (timeout) clearTimeout(timeout);
       timeout = setTimeout(() => {
-        // Skip the self-echo: this page (or another mounted hook) just did a
-        // full reload, so refetching again would return identical data. A
-        // genuinely remote write in this window was either captured by that
-        // reload or will arrive as its own later event.
-        if (Date.now() - lastLocalRefresh < LOCAL_REFRESH_WINDOW_MS) return;
+        // Skip the self-echo: this page just did a full reload, so
+        // refetching again would return identical data. A genuinely remote
+        // write in this window was either captured by that reload or will
+        // arrive as its own later event. Subscribers refreshing other data
+        // (the sidebar) opt out via suppressLocalEcho: false.
+        if (suppressLocalEcho && Date.now() - lastLocalRefresh < LOCAL_REFRESH_WINDOW_MS) return;
         onChangeRef.current();
         // Fires only in response to an actual postgres_changes event (never
         // on initial mount), so this is a reliable "a change from elsewhere
-        // just landed" signal for the RealtimeIndicator badge.
-        window.dispatchEvent(new Event("life-os:realtime-sync"));
+        // just landed" signal for the RealtimeIndicator badge. Opted-out
+        // subscribers don't dispatch — they run on this client's own writes
+        // too, which would flash the badge for changes that aren't remote.
+        if (suppressLocalEcho) window.dispatchEvent(new Event("life-os:realtime-sync"));
       }, 400);
     };
 
@@ -79,5 +93,5 @@ export function useRealtimeRefresh(tables: string[], onChange: () => void) {
       if (timeout) clearTimeout(timeout);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [tablesKey]);
+  }, [tablesKey, suppressLocalEcho]);
 }

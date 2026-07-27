@@ -11,6 +11,12 @@ import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
  */
 export default function RealtimeLayoutRefresher() {
   const router = useRouter();
-  useRealtimeRefresh(["domains", "projects", "tasks"], () => router.refresh());
+  // suppressLocalEcho: false — the sidebar's server-fetched data (project
+  // lists, inbox/today counts) must refresh after THIS client's own writes
+  // too; the echo-suppression window is only valid for a page skipping a
+  // reload of the same data it just fetched.
+  useRealtimeRefresh(["domains", "projects", "tasks"], () => router.refresh(), {
+    suppressLocalEcho: false,
+  });
   return null;
 }
