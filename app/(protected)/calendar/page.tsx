@@ -88,7 +88,7 @@ function domainColor(task: Task, domains: TaskDomain[]): string | null {
 }
 
 export default function CalendarPage() {
-  const { domains, tasks, loading, error, handleUpdate, toggleDone } = useTaskList();
+  const { domains, tasks, loading, error, handleUpdate, toggleDone } = useTaskList({ done: false });
   const today = todayLocal();
 
   const [view, setView] = useState<"day" | "week" | "2weeks" | "3weeks" | "4weeks">("week");

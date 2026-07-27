@@ -43,7 +43,7 @@ export default function DoNowPage() {
     handleConvertToProject,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
-  } = useTaskList();
+  } = useTaskList({ done: false });
 
   const [contextFilter, setContextFilter] = useState("");
   const [timeFilter, setTimeFilter] = useState("");

@@ -36,7 +36,7 @@ export default function InboxPage() {
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
     loadAll,
-  } = useTaskList();
+  } = useTaskList({ done: false });
   const { showToast } = useToast();
 
   const [captureMode, setCaptureMode] = useState<"task" | "project">("task");

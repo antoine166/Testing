@@ -44,7 +44,7 @@ export default function UpcomingPage() {
     handleConvertToProject,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
-  } = useTaskList();
+  } = useTaskList({ done: false });
   const today = todayLocal();
 
   const upcomingTasks = tasks.filter(

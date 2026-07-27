@@ -13,7 +13,7 @@ import {
 } from "@/components/toast";
 
 /** Shared fetch + CRUD wiring for the Things-style smart-list pages (Inbox, Upcoming, Anytime, Someday, Logbook). */
-export function useTaskList() {
+export function useTaskList(options?: { done?: boolean }) {
   const [domains, setDomains] = useState<TaskDomain[]>([]);
   const [projects, setProjects] = useState<TaskProject[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -21,13 +21,19 @@ export function useTaskList() {
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
 
+  // Filter server-side: every smart list except the Logbook only ever shows
+  // not-done tasks, and the Logbook only done ones — no reason to download
+  // the other (ever-growing) half of the table on each load.
+  const tasksUrl =
+    options?.done === undefined ? "/api/tasks" : `/api/tasks?done=${options.done}`;
+
   async function loadAll(signal?: AbortSignal) {
     markLocalRefresh();
     try {
       const [domainsRes, projectsRes, tasksRes] = await Promise.all([
         fetch("/api/domains", { signal }),
         fetch("/api/projects", { signal }),
-        fetch("/api/tasks", { signal }),
+        fetch(tasksUrl, { signal }),
       ]);
       if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) {
         throw new Error("Failed to load tasks");
@@ -50,7 +56,7 @@ export function useTaskList() {
     Promise.all([
       fetch("/api/domains", { signal: controller.signal }),
       fetch("/api/projects", { signal: controller.signal }),
-      fetch("/api/tasks", { signal: controller.signal }),
+      fetch(tasksUrl, { signal: controller.signal }),
     ])
       .then(async ([domainsRes, projectsRes, tasksRes]) => {
         if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) {
@@ -70,7 +76,7 @@ export function useTaskList() {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, []);
+  }, [tasksUrl]);
 
   useRealtimeRefresh(["tasks", "domains", "projects"], () => loadAll());
 
