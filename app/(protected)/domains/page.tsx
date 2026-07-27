@@ -7,7 +7,7 @@ import { type Task } from "@/components/task-row";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
 import {
   knowledgeConversionToast,
@@ -65,6 +65,7 @@ export default function DomainsPage() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
   async function loadDomains() {
+    markLocalRefresh();
     try {
       const [domainsRes, projectsRes, tasksRes] = await Promise.all([
         fetch("/api/domains"),

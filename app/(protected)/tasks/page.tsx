@@ -10,7 +10,7 @@ import TaskRow, {
   type TaskPriority,
   type TaskEnergy,
 } from "@/components/task-row";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -155,6 +155,7 @@ export default function TasksPage() {
   }
 
   async function loadAll() {
+    markLocalRefresh();
     try {
       const [domainsRes, projectsRes, tasksRes] = await Promise.all([
         fetch("/api/domains"),

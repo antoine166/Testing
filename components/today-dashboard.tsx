@@ -15,7 +15,7 @@ import TaskRow, {
   type TaskEnergy,
 } from "@/components/task-row";
 import { type Routine } from "@/components/routine-card";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -161,6 +161,7 @@ export default function TodayDashboard() {
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
   async function loadAll() {
+    markLocalRefresh();
     try {
       const data = await fetchDashboardData(today);
       setCheckin(data.checkin);
