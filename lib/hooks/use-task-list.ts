@@ -12,8 +12,18 @@ import {
   useToast,
 } from "@/components/toast";
 
-/** Shared fetch + CRUD wiring for the Things-style smart-list pages (Inbox, Upcoming, Anytime, Someday, Logbook). */
-export function useTaskList(options?: { done?: boolean }) {
+/**
+ * Shared fetch + CRUD wiring for every page that lists tasks — the
+ * Things-style smart lists (Inbox, Upcoming, Anytime, Someday, Logbook,
+ * Do Now, Contexts, Waiting For, Calendar) and, since the July 2026
+ * de-dup, the Today dashboard and the Tasks/Domains/Projects pages,
+ * which previously carried hand-rolled copies of these handlers.
+ *
+ * `onAfterRefresh` runs after each full reload — for page data that
+ * should stay in step with task changes (e.g. the Tasks page's
+ * recurring-template list after a series delete or conversion).
+ */
+export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => void | Promise<void> }) {
   const [domains, setDomains] = useState<TaskDomain[]>([]);
   const [projects, setProjects] = useState<TaskProject[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -42,6 +52,7 @@ export function useTaskList(options?: { done?: boolean }) {
       setProjects(await projectsRes.json());
       setTasks(await tasksRes.json());
       setError(null);
+      await options?.onAfterRefresh?.();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -204,6 +215,14 @@ export function useTaskList(options?: { done?: boolean }) {
     tasks,
     loading,
     error,
+    // For adopting pages' own non-task operations (template edits, bulk
+    // actions, domain CRUD) so the page keeps a single error surface, and
+    // the raw setters for local-first updates (drag reorder today,
+    // optimistic mutations in #122).
+    setError,
+    setDomains,
+    setProjects,
+    setTasks,
     handleUpdate,
     toggleDone,
     handleDelete,

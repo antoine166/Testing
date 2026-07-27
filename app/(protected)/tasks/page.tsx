@@ -3,14 +3,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import TaskRow, {
-  type Task,
-  type TaskDomain,
-  type TaskProject,
-  type TaskPriority,
-  type TaskEnergy,
-} from "@/components/task-row";
-import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import TaskRow, { type TaskPriority, type TaskEnergy } from "@/components/task-row";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -19,18 +13,12 @@ import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
+import { useTaskList } from "@/lib/hooks/use-task-list";
 import { isInInbox } from "@/lib/tasks/inbox";
 import { PRIORITIES } from "@/lib/tasks/constants";
 import { todayLocal } from "@/lib/date";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
-import {
-  knowledgeConversionToast,
-  projectConversionToast,
-  recurringConversionToast,
-  taskTrashedToast,
-  useToast,
-} from "@/components/toast";
 import {
   describeRecurrence,
   type CompletionOffsetUnit,
@@ -76,12 +64,21 @@ export default function TasksPage() {
   const recurringDetailsRef = useRef<HTMLDetailsElement>(null);
   const openedEditTemplateRef = useRef(false);
 
-  const [domains, setDomains] = useState<TaskDomain[]>([]);
-  const [projects, setProjects] = useState<TaskProject[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { showToast } = useToast();
+  const {
+    domains,
+    projects,
+    tasks,
+    loading,
+    error,
+    setError,
+    handleUpdate,
+    toggleDone,
+    handleDelete,
+    handleConvertToProject,
+    handleConvertToRecurring,
+    handleConvertToKnowledgeItem,
+    loadAll,
+  } = useTaskList({ onAfterRefresh: () => loadRecurringTemplates() });
 
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
@@ -154,28 +151,6 @@ export default function TasksPage() {
     setProjectId(projectFilter ?? "");
   }
 
-  async function loadAll() {
-    markLocalRefresh();
-    try {
-      const [domainsRes, projectsRes, tasksRes] = await Promise.all([
-        fetch("/api/domains"),
-        fetch("/api/projects"),
-        fetch("/api/tasks"),
-      ]);
-      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) {
-        throw new Error("Failed to load tasks");
-      }
-      setDomains(await domainsRes.json());
-      setProjects(await projectsRes.json());
-      setTasks(await tasksRes.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function loadRecurringTemplates() {
     const res = await fetch("/api/recurring-task-templates");
     if (res.ok) setRecurringTemplates(await res.json());
@@ -183,31 +158,8 @@ export default function TasksPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const opts = { signal: controller.signal };
 
-    Promise.all([
-      fetch("/api/domains", opts),
-      fetch("/api/projects", opts),
-      fetch("/api/tasks", opts),
-    ])
-      .then(async ([domainsRes, projectsRes, tasksRes]) => {
-        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) {
-          throw new Error("Failed to load tasks");
-        }
-        return Promise.all([domainsRes.json(), projectsRes.json(), tasksRes.json()]);
-      })
-      .then(([domainsData, projectsData, tasksData]) => {
-        setDomains(domainsData);
-        setProjects(projectsData);
-        setTasks(tasksData);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    fetch("/api/recurring-task-templates", opts)
+    fetch("/api/recurring-task-templates", { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
       .then((data: RecurringTemplate[]) => setRecurringTemplates(data))
       .catch((err) => {
@@ -217,7 +169,6 @@ export default function TasksPage() {
     return () => controller.abort();
   }, []);
 
-  useRealtimeRefresh(["tasks", "domains", "projects"], () => loadAll());
   useRealtimeRefresh(["recurring_task_templates"], () => loadRecurringTemplates());
 
   // Deep-link from a recurring task's own edit form ("Edit the recurring
@@ -443,106 +394,6 @@ export default function TasksPage() {
       return;
     }
     await loadRecurringTemplates();
-  }
-
-  async function handleUpdate(id: string, updates: Record<string, unknown>) {
-    const res = await fetch(`/api/tasks/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update task");
-      return;
-    }
-
-    await loadAll();
-  }
-
-  async function toggleDone(task: Task) {
-    await handleUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
-  }
-
-  async function handleDelete(id: string, scope?: "skip" | "following") {
-    // Recurring tasks route through TaskRow's own "Skip this one" / "This +
-    // future" picker, which is itself the confirmation step — a plain
-    // (non-recurring) delete never shows that picker and still needs one.
-    if (!scope && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
-
-    const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
-    const res = await fetch(url, { method: "DELETE" });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to delete task");
-      return;
-    }
-
-    if (scope === "following") {
-      showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
-    } else {
-      showToast(
-        ...taskTrashedToast(async () => {
-          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
-          if (undoRes.ok) await loadAll();
-        }),
-      );
-    }
-
-    await loadAll();
-    if (scope === "following") await loadRecurringTemplates();
-  }
-
-  async function handleConvertToProject(id: string) {
-    if (
-      !confirm(
-        "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
-      )
-    )
-      return;
-    const res = await fetch(`/api/tasks/${id}/convert-to-project`, { method: "POST" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to convert task to project");
-      return;
-    }
-    showToast(...projectConversionToast(await res.json(), domains));
-    await loadAll();
-  }
-
-  async function handleConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
-    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pattern),
-    });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to convert task to recurring");
-      return;
-    }
-    showToast(...recurringConversionToast(await res.json()));
-    await loadAll();
-    await loadRecurringTemplates();
-  }
-
-  async function handleConvertToKnowledgeItem(id: string) {
-    if (
-      !confirm(
-        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
-      )
-    )
-      return;
-    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to file task as reference");
-      return;
-    }
-    showToast(...knowledgeConversionToast(await res.json()));
-    await loadAll();
   }
 
   function toggleSelectMode() {

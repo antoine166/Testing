@@ -1,46 +1,31 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
-import { type Task } from "@/components/task-row";
+import { type TaskDomain } from "@/components/task-row";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
-import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
-import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { useTaskList } from "@/lib/hooks/use-task-list";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
-import {
-  knowledgeConversionToast,
-  projectConversionToast,
-  recurringConversionToast,
-  taskTrashedToast,
-  useToast,
-} from "@/components/toast";
-
-type Domain = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string | null;
-  created_at: string;
-  sort_order: number;
-};
-
-type Project = {
-  id: string;
-  name: string;
-  domain_id: string | null;
-  status: string;
-  parent_project_id: string | null;
-};
 
 export default function DomainsPage() {
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { showToast } = useToast();
+  const {
+    domains,
+    tasks,
+    projects,
+    loading,
+    error,
+    setError,
+    setDomains,
+    handleUpdate: handleTaskUpdate,
+    toggleDone: toggleTaskDone,
+    handleDelete: handleTaskDelete,
+    handleConvertToProject: handleTaskConvertToProject,
+    handleConvertToRecurring: handleTaskConvertToRecurring,
+    handleConvertToKnowledgeItem: handleTaskConvertToKnowledgeItem,
+    loadAll,
+  } = useTaskList();
 
   const [name, setName] = useState("");
   const [color, setColor] = useState("#6366f1");
@@ -64,53 +49,6 @@ export default function DomainsPage() {
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
-  async function loadDomains() {
-    markLocalRefresh();
-    try {
-      const [domainsRes, projectsRes, tasksRes] = await Promise.all([
-        fetch("/api/domains"),
-        fetch("/api/projects"),
-        fetch("/api/tasks"),
-      ]);
-      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) throw new Error("Failed to load domains");
-      setDomains(await domainsRes.json());
-      setProjects(await projectsRes.json());
-      setTasks(await tasksRes.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    Promise.all([
-      fetch("/api/domains", { signal: controller.signal }),
-      fetch("/api/projects", { signal: controller.signal }),
-      fetch("/api/tasks", { signal: controller.signal }),
-    ])
-      .then(async ([domainsRes, projectsRes, tasksRes]) => {
-        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok) throw new Error("Failed to load domains");
-        return Promise.all([domainsRes.json(), projectsRes.json(), tasksRes.json()]);
-      })
-      .then(([domainsData, projectsData, tasksData]: [Domain[], Project[], Task[]]) => {
-        setDomains(domainsData);
-        setProjects(projectsData);
-        setTasks(tasksData);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["domains", "projects", "tasks"], () => loadDomains());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -130,10 +68,10 @@ export default function DomainsPage() {
 
     setName("");
     setColor("#6366f1");
-    await loadDomains();
+    await loadAll();
   }
 
-  function startEdit(domain: Domain) {
+  function startEdit(domain: TaskDomain) {
     setEditingId(domain.id);
     setEditName(domain.name);
     setEditColor(domain.color);
@@ -172,7 +110,7 @@ export default function DomainsPage() {
     }
 
     setCreatingFor(null);
-    await loadDomains();
+    await loadAll();
   }
 
   async function handleUpdate(id: string) {
@@ -191,7 +129,7 @@ export default function DomainsPage() {
     }
 
     setEditingId(null);
-    await loadDomains();
+    await loadAll();
   }
 
   async function handleDelete(id: string) {
@@ -211,7 +149,7 @@ export default function DomainsPage() {
       return;
     }
 
-    await loadDomains();
+    await loadAll();
   }
 
   function handleDragStart(id: string) {
@@ -250,7 +188,7 @@ export default function DomainsPage() {
     if (results.some((r) => !r.ok)) {
       setError("Couldn't save the new order — try again.");
     }
-    await loadDomains();
+    await loadAll();
   }
 
   async function handleAddTask(projectId: string, domainId: string | null, e: FormEvent<HTMLFormElement>) {
@@ -273,102 +211,17 @@ export default function DomainsPage() {
     }
 
     setNewTaskTitles((prev) => ({ ...prev, [projectId]: "" }));
-    await loadDomains();
+    await loadAll();
   }
 
-  async function handleTaskUpdate(id: string, updates: Record<string, unknown>) {
-    const res = await fetch(`/api/tasks/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update task");
-      return;
-    }
-    await loadDomains();
-  }
-
-  async function toggleTaskDone(task: Task) {
-    await handleTaskUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
-  }
-
-  async function handleTaskDelete(id: string, scope?: "skip" | "following") {
-    // Recurring tasks route through TaskRow's own "Skip this one" / "This +
-    // future" picker, which is itself the confirmation step — a plain
-    // (non-recurring) delete never shows that picker and still needs one.
-    if (!scope && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
-    const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
-    const res = await fetch(url, { method: "DELETE" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to delete task");
-      return;
-    }
-    if (scope === "following") {
-      showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
-    } else {
-      showToast(
-        ...taskTrashedToast(async () => {
-          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
-          if (undoRes.ok) await loadDomains();
-        }),
-      );
-    }
-    await loadDomains();
-  }
-
-  async function handleTaskConvertToProject(id: string) {
-    if (
-      !confirm(
-        "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
-      )
-    )
-      return;
-    const res = await fetch(`/api/tasks/${id}/convert-to-project`, { method: "POST" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to convert task to project");
-      return;
-    }
-    showToast(...projectConversionToast(await res.json(), domains));
-    await loadDomains();
-  }
-
-  async function handleTaskConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
-    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pattern),
-    });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to convert task to recurring");
-      return;
-    }
-    showToast(...recurringConversionToast(await res.json()));
-    await loadDomains();
-  }
-
-  async function handleTaskConvertToKnowledgeItem(id: string) {
-    if (
-      !confirm(
-        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
-      )
-    )
-      return;
-    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to file task as reference");
-      return;
-    }
-    showToast(...knowledgeConversionToast(await res.json()));
-    await loadDomains();
-  }
-
-  const stalledProjectIds = findStalledProjectIds(projects, tasks);
+  const stalledProjectIds = findStalledProjectIds(
+    projects.map((p) => ({
+      id: p.id,
+      status: p.status ?? "active",
+      parent_project_id: p.parent_project_id ?? null,
+    })),
+    tasks,
+  );
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
@@ -697,7 +550,7 @@ export default function DomainsPage() {
                               <ul className="mt-1.5 space-y-2 pl-4">
                                 <ReorderableTaskList
                                   tasks={projectTasks}
-                                  onReordered={loadDomains}
+                                  onReordered={loadAll}
                                   domains={domains}
                                   projects={projects}
                                   onToggleDone={toggleTaskDone}

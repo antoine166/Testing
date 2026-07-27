@@ -7,15 +7,10 @@ import { isAtRisk, isPendingToday } from "@/lib/habits/streaks";
 import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
 import LevelPicker from "@/components/level-picker";
 import HabitRow, { type Habit, type HabitLogRow } from "@/components/habit-row";
-import TaskRow, {
-  type Task,
-  type TaskDomain,
-  type TaskProject,
-  type TaskPriority,
-  type TaskEnergy,
-} from "@/components/task-row";
+import TaskRow, { type TaskPriority, type TaskEnergy } from "@/components/task-row";
 import { type Routine } from "@/components/routine-card";
 import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { useTaskList } from "@/lib/hooks/use-task-list";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -26,14 +21,7 @@ import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { isRevisitDue } from "@/lib/tasks/inbox";
 import { PRIORITIES } from "@/lib/tasks/constants";
-import {
-  knowledgeConversionToast,
-  projectConversionToast,
-  recurringConversionToast,
-  taskTrashedToast,
-  ticklerConversionToast,
-  useToast,
-} from "@/components/toast";
+import { projectConversionToast, ticklerConversionToast, useToast } from "@/components/toast";
 
 type Checkin = {
   date: string;
@@ -67,58 +55,58 @@ function currentTimeOfDay(): "morning" | "afternoon" | "evening" {
 }
 
 async function fetchDashboardData(today: string, opts?: RequestInit) {
-  const [checkinRes, habitsRes, logsRes, tasksRes, domainsRes, projectsRes, routinesRes, ticklerRes, reviewLogsRes] =
+  const [checkinRes, habitsRes, logsRes, routinesRes, ticklerRes, reviewLogsRes] =
     await Promise.all([
       fetch(`/api/checkins?date=${today}`, opts),
       fetch("/api/habits", opts),
       fetch("/api/habit-logs", opts),
-      fetch("/api/tasks", opts),
-      fetch("/api/domains", opts),
-      fetch("/api/projects", opts),
       fetch("/api/routines", opts),
       fetch("/api/tickler-items", opts),
       fetch("/api/weekly-review-logs", opts),
     ]);
 
-  if (
-    !checkinRes.ok ||
-    !habitsRes.ok ||
-    !logsRes.ok ||
-    !tasksRes.ok ||
-    !domainsRes.ok ||
-    !projectsRes.ok ||
-    !routinesRes.ok ||
-    !ticklerRes.ok
-  ) {
+  if (!checkinRes.ok || !habitsRes.ok || !logsRes.ok || !routinesRes.ok || !ticklerRes.ok) {
     throw new Error("Failed to load today's data");
   }
 
-  const [checkin, habits, logs, tasks, domains, projects, routines, ticklerItems, reviewLogs] =
-    await Promise.all([
-      checkinRes.json(),
-      habitsRes.json(),
-      logsRes.json(),
-      tasksRes.json(),
-      domainsRes.json(),
-      projectsRes.json(),
-      routinesRes.json(),
-      ticklerRes.json(),
-      // Non-fatal — the review nudge just stays hidden if this fails.
-      reviewLogsRes.ok ? reviewLogsRes.json() : [],
-    ]);
+  const [checkin, habits, logs, routines, ticklerItems, reviewLogs] = await Promise.all([
+    checkinRes.json(),
+    habitsRes.json(),
+    logsRes.json(),
+    routinesRes.json(),
+    ticklerRes.json(),
+    // Non-fatal — the review nudge just stays hidden if this fails.
+    reviewLogsRes.ok ? reviewLogsRes.json() : [],
+  ]);
 
-  return { checkin, habits, logs, tasks, domains, projects, routines, ticklerItems, reviewLogs };
+  return { checkin, habits, logs, routines, ticklerItems, reviewLogs };
 }
 
 export default function TodayDashboard() {
   const today = todayLocal();
 
+  // Tasks/domains/projects + their CRUD come from the shared hook (this
+  // component used to carry a hand-rolled copy of those handlers); the
+  // dashboard-only data (check-in, habits, routines, tickler, review nudge)
+  // stays here.
+  const {
+    tasks,
+    domains,
+    projects,
+    loading: tasksLoading,
+    error: taskError,
+    handleUpdate: handleUpdateTask,
+    toggleDone: toggleTask,
+    handleDelete: handleDeleteTask,
+    handleConvertToProject: handleConvertTaskToProject,
+    handleConvertToRecurring: handleConvertTaskToRecurring,
+    handleConvertToKnowledgeItem: handleConvertTaskToKnowledgeItem,
+    loadAll: refreshTasks,
+  } = useTaskList();
+
   const [checkin, setCheckin] = useState<Checkin>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLogRow[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [domains, setDomains] = useState<TaskDomain[]>([]);
-  const [projects, setProjects] = useState<TaskProject[]>([]);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [routineItems, setRoutineItems] = useState<Record<string, RoutineItem[]>>({});
   const [ticklerItems, setTicklerItems] = useState<TicklerItem[]>([]);
@@ -159,16 +147,13 @@ export default function TodayDashboard() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
-  async function loadAll() {
+  async function loadExtras() {
     markLocalRefresh();
     try {
       const data = await fetchDashboardData(today);
       setCheckin(data.checkin);
       setHabits(data.habits);
       setLogs(data.logs);
-      setTasks(data.tasks);
-      setDomains(data.domains);
-      setProjects(data.projects);
       setRoutines(data.routines);
       setTicklerItems(data.ticklerItems);
       setReviewLogs(data.reviewLogs);
@@ -188,9 +173,6 @@ export default function TodayDashboard() {
         setCheckin(data.checkin);
         setHabits(data.habits);
         setLogs(data.logs);
-        setTasks(data.tasks);
-        setDomains(data.domains);
-        setProjects(data.projects);
         setRoutines(data.routines);
         setTicklerItems(data.ticklerItems);
         setReviewLogs(data.reviewLogs);
@@ -209,15 +191,12 @@ export default function TodayDashboard() {
       "daily_checkins",
       "habits",
       "habit_logs",
-      "tasks",
-      "domains",
-      "projects",
       "routines",
       "routine_items",
       "tickler_items",
       "weekly_review_logs",
     ],
-    () => loadAll(),
+    () => loadExtras(),
   );
 
   useEffect(() => {
@@ -276,7 +255,7 @@ export default function TodayDashboard() {
       return;
     }
 
-    await loadAll();
+    await loadExtras();
   }
 
   async function addHabitLog(habit: Habit, date: string) {
@@ -285,7 +264,7 @@ export default function TodayDashboard() {
       setError(result.error);
       return;
     }
-    await loadAll();
+    await loadExtras();
   }
 
   async function removeHabitLog(habit: Habit, date: string) {
@@ -294,7 +273,7 @@ export default function TodayDashboard() {
       setError(result.error);
       return;
     }
-    await loadAll();
+    await loadExtras();
   }
 
   async function toggleHabit(habit: Habit, date: string, loggedOnDate: boolean) {
@@ -318,7 +297,7 @@ export default function TodayDashboard() {
       return;
     }
 
-    await loadAll();
+    await loadExtras();
   }
 
   async function handleDeleteHabit(id: string) {
@@ -332,107 +311,7 @@ export default function TodayDashboard() {
       return;
     }
 
-    await loadAll();
-  }
-
-  async function handleUpdateTask(id: string, updates: Record<string, unknown>) {
-    const res = await fetch(`/api/tasks/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update task");
-      return;
-    }
-
-    await loadAll();
-  }
-
-  async function toggleTask(task: Task) {
-    await handleUpdateTask(task.id, {
-      status: task.status === "done" ? "todo" : "done",
-    });
-  }
-
-  async function handleDeleteTask(id: string, scope?: "skip" | "following") {
-    // Recurring tasks route through TaskRow's own "Skip this one" / "This +
-    // future" picker, which is itself the confirmation step — a plain
-    // (non-recurring) delete never shows that picker and still needs one.
-    if (!scope && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
-
-    const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
-    const res = await fetch(url, { method: "DELETE" });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to delete task");
-      return;
-    }
-
-    if (scope === "following") {
-      showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
-    } else {
-      showToast(
-        ...taskTrashedToast(async () => {
-          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
-          if (undoRes.ok) await loadAll();
-        }),
-      );
-    }
-
-    await loadAll();
-  }
-
-  async function handleConvertTaskToProject(id: string) {
-    if (
-      !confirm(
-        "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
-      )
-    )
-      return;
-    const res = await fetch(`/api/tasks/${id}/convert-to-project`, { method: "POST" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to convert task to project");
-      return;
-    }
-    showToast(...projectConversionToast(await res.json(), domains));
-    await loadAll();
-  }
-
-  async function handleConvertTaskToRecurring(id: string, pattern: RecurrencePatternDraft) {
-    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pattern),
-    });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to convert task to recurring");
-      return;
-    }
-    showToast(...recurringConversionToast(await res.json()));
-    await loadAll();
-  }
-
-  async function handleConvertTaskToKnowledgeItem(id: string) {
-    if (
-      !confirm(
-        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
-      )
-    )
-      return;
-    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to file task as reference");
-      return;
-    }
-    showToast(...knowledgeConversionToast(await res.json()));
-    await loadAll();
+    await loadExtras();
   }
 
   function resetCreateForm() {
@@ -493,7 +372,7 @@ export default function TodayDashboard() {
       }
 
       resetCreateForm();
-      await loadAll();
+      await refreshTasks();
       return;
     }
 
@@ -525,7 +404,7 @@ export default function TodayDashboard() {
       // it did nothing.
       showToast(...projectConversionToast(await res.json(), domains));
       resetCreateForm();
-      await loadAll();
+      await refreshTasks();
       return;
     }
 
@@ -569,7 +448,7 @@ export default function TodayDashboard() {
 
     setAddingTask(false);
     resetCreateForm();
-    await loadAll();
+    await refreshTasks();
   }
 
   async function rescheduleAllOverdue(target: string | null) {
@@ -587,7 +466,7 @@ export default function TodayDashboard() {
         }),
       ),
     );
-    await loadAll();
+    await refreshTasks();
   }
 
   async function handleTicklerConvert(id: string) {
@@ -599,7 +478,7 @@ export default function TodayDashboard() {
     }
     // The new task lands in the Inbox, not on Today — say so.
     showToast(...ticklerConversionToast(await res.json().catch(() => null)));
-    await loadAll();
+    await Promise.all([loadExtras(), refreshTasks()]);
   }
 
   async function handleTicklerSnooze(id: string) {
@@ -618,10 +497,10 @@ export default function TodayDashboard() {
       setError(body.error ?? "Failed to snooze tickler item");
       return;
     }
-    await loadAll();
+    await loadExtras();
   }
 
-  if (loading) {
+  if (loading || tasksLoading) {
     return <p className="text-sm text-zinc-500">Loading...</p>;
   }
 
@@ -699,9 +578,9 @@ export default function TodayDashboard() {
 
   return (
     <div className="space-y-8">
-      {error && (
+      {(error || taskError) && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
-          {error}
+          {error || taskError}
         </p>
       )}
 

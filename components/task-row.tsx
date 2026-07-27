@@ -63,8 +63,24 @@ export type TaskDragProps = {
   dragging: boolean;
 };
 
-export type TaskDomain = { id: string; name: string; color: string };
-export type TaskProject = { id: string; name: string; domain_id: string | null };
+// These mirror rows from GET /api/domains and /api/projects; fields beyond
+// what task rows themselves render are optional so list pages with richer
+// needs (Domains page status badges, stalled-project checks) can share the
+// same fetched data instead of re-fetching under a private type.
+export type TaskDomain = {
+  id: string;
+  name: string;
+  color: string;
+  icon?: string | null;
+  sort_order?: number;
+};
+export type TaskProject = {
+  id: string;
+  name: string;
+  domain_id: string | null;
+  status?: string;
+  parent_project_id?: string | null;
+};
 
 type Attachment = {
   id: string;
