@@ -63,8 +63,24 @@ export type TaskDragProps = {
   dragging: boolean;
 };
 
-export type TaskDomain = { id: string; name: string; color: string };
-export type TaskProject = { id: string; name: string; domain_id: string | null };
+// These mirror rows from GET /api/domains and /api/projects; fields beyond
+// what task rows themselves render are optional so list pages with richer
+// needs (Domains page status badges, stalled-project checks) can share the
+// same fetched data instead of re-fetching under a private type.
+export type TaskDomain = {
+  id: string;
+  name: string;
+  color: string;
+  icon?: string | null;
+  sort_order?: number;
+};
+export type TaskProject = {
+  id: string;
+  name: string;
+  domain_id: string | null;
+  status?: string;
+  parent_project_id?: string | null;
+};
 
 type Attachment = {
   id: string;
@@ -281,7 +297,7 @@ export default function TaskRow({
   onToggleDone: (task: Task) => void;
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string, scope?: "skip" | "following") => void;
-  onConvertToProject?: (id: string) => void;
+  onConvertToProject?: (id: string, skipConfirm?: boolean, domainId?: string) => void;
   /** Seeds a new recurring template from this plain task, then trashes it — the "Repeat..." action Things 3 exposes on any to-do. Omitted (or the task is already part of a series) hides the action. */
   onConvertToRecurring?: (id: string, pattern: RecurrencePatternDraft) => void;
   /** Not actionable — files this task as a Knowledge Library reference item in one motion, then trashes it. GTD's first Clarify fork ("is it actionable?"), the "no" branch. */
@@ -590,16 +606,26 @@ export default function TaskRow({
           />
           <AttachmentStrip taskId={task.id} />
           {onConvertToProject && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(false);
-                onConvertToProject(task.id);
-              }}
-              className="text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-            >
-              Convert to project →
-            </button>
+            <div>
+              <button
+                type="button"
+                disabled={!domainId}
+                onClick={() => {
+                  setEditing(false);
+                  // Pass the form's current (possibly unsaved) domain so
+                  // converting works in one step, without save-then-reopen.
+                  onConvertToProject(task.id, false, domainId);
+                }}
+                className="text-xs font-medium text-zinc-500 hover:text-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-zinc-300"
+              >
+                Convert to project →
+              </button>
+              {!domainId && (
+                <p className="mt-0.5 text-xs text-zinc-400">
+                  Pick a domain above first — the project needs one to show in your sidebar.
+                </p>
+              )}
+            </div>
           )}
           {onConvertToRecurring && !task.recurring_template_id && (
             <div>

@@ -1283,13 +1283,12 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .gte("scheduled_date", task.scheduled_date ?? "0000-01-01");
         if (deleteError) return fail(deleteError.message);
 
-        // Reset last_generated_date too — it points at the (now-deleted)
-        // last occurrence, so without this, resuming the series later
-        // would resume generation after that stale future date instead of
-        // from today.
+        // Delete the template itself, not just deactivate — mirrors the app
+        // route: "following" ends the series, done occurrences keep their
+        // history (FK is on delete set null), and nothing can regenerate.
         await admin
           .from("recurring_task_templates")
-          .update({ active: false, last_generated_date: null })
+          .delete()
           .eq("id", task.recurring_template_id)
           .eq("user_id", userId);
 
