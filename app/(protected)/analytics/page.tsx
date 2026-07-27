@@ -9,6 +9,7 @@ import {
 import { findStalledProjectIds } from "@/lib/projects/stalled";
 import { reviewStreakWeeks } from "@/lib/reviews/streak";
 import { todayLocal, lastNDays, daysSince } from "@/lib/date";
+import { isInInbox } from "@/lib/tasks/inbox";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 
 type HabitFrequency = "daily" | "specific_days" | "times_per_week";
@@ -233,9 +234,7 @@ export default function AnalyticsPage() {
           ? `${Math.round(medianClarifyHours)}h`
           : `${Math.round(medianClarifyHours / 24)}d`;
 
-  const inboxTasks = tasks.filter(
-    (t) => t.status !== "done" && !t.domain_id && !t.someday && !t.waiting_for,
-  );
+  const inboxTasks = tasks.filter((t) => isInInbox(t, today));
   const oldestInboxDays = inboxTasks.length
     ? Math.max(...inboxTasks.map((t) => daysSince(t.created_at.slice(0, 10))))
     : null;

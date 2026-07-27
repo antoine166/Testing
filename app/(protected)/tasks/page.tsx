@@ -19,6 +19,8 @@ import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
+import { isInInbox } from "@/lib/tasks/inbox";
+import { todayLocal } from "@/lib/date";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import {
@@ -602,7 +604,7 @@ export default function TasksPage() {
     );
   }
 
-  const inboxTasks = tasks.filter((t) => !t.domain_id && t.status !== "done");
+  const inboxTasks = tasks.filter((t) => isInInbox(t, todayLocal()));
   const processedTasks = tasks.filter((t) => t.domain_id && t.status !== "done");
 
   const filteredTasks = searchQuery
