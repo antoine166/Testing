@@ -20,6 +20,7 @@ import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { isInInbox } from "@/lib/tasks/inbox";
+import { PRIORITIES } from "@/lib/tasks/constants";
 import { todayLocal } from "@/lib/date";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
@@ -37,8 +38,6 @@ import {
   type MonthClamp,
   type RecurrenceType,
 } from "@/lib/recurring-tasks/types";
-
-const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 type RecurringTemplate = {
   id: string;

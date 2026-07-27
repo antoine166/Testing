@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import { ENERGY_LEVELS, PRIORITIES } from "@/lib/tasks/constants";
 import { seedCompletionTemplate, topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
 import { todayLocal } from "@/lib/date";
 import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-const PRIORITIES = ["none", "low", "medium", "high"] as const;
-const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 
 export async function PUT(request: Request, { params }: RouteParams) {
   const { id } = await params;

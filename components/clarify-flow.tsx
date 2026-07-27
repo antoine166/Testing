@@ -5,6 +5,7 @@ import type { Task, TaskDomain, TaskProject, TaskPriority, TaskEnergy } from "@/
 import { looksLikeTopic, TOPIC_NUDGE } from "@/lib/tasks/next-action-shape";
 import { useContexts } from "@/lib/hooks/use-contexts";
 import { TIME_BUCKETS, minutesToBucketValue } from "@/lib/tasks/context-options";
+import { PRIORITIES } from "@/lib/tasks/constants";
 
 // GTD's clarify step as a guided flow: the workflow-map diagram made
 // interactive. One inbox item at a time, Allen's decision tree as buttons —
@@ -439,7 +440,7 @@ export default function ClarifyFlow({
                 onChange={(e) => setDeferPriority(e.target.value as TaskPriority)}
                 className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               >
-                {(["none", "low", "medium", "high"] as const).map((p) => (
+                {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>

@@ -51,9 +51,11 @@ const RESTORABLE_TRASH_TYPES = [
   "tickler-item",
 ] as const satisfies readonly TrashType[];
 
-const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
-const TASK_PRIORITIES = ["none", "low", "medium", "high"] as const;
-const TASK_ENERGY_LEVELS = ["low", "medium", "high"] as const;
+import {
+  ENERGY_LEVELS as TASK_ENERGY_LEVELS,
+  PRIORITIES as TASK_PRIORITIES,
+  STATUSES as TASK_STATUSES,
+} from "@/lib/tasks/constants";
 const HABIT_FREQUENCIES = ["daily", "specific_days", "times_per_week"] as const;
 const PROJECT_STATUSES = ["active", "someday", "completed", "archived"] as const;
 const TIME_OF_DAY = ["morning", "afternoon", "evening", "custom"] as const;
@@ -301,7 +303,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         brainstorm: z.string().optional(),
         link: z.string().optional(),
         domain_id: z.string().uuid().optional(),
-        priority: z.enum(["none", "low", "medium", "high"]).optional(),
+        priority: z.enum(TASK_PRIORITIES).optional(),
         tasks: z
           .array(
             z.object({
@@ -309,7 +311,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
               notes: z.string().optional(),
               context: z.string().optional(),
               link: z.string().optional(),
-              priority: z.enum(["none", "low", "medium", "high"]).optional(),
+              priority: z.enum(TASK_PRIORITIES).optional(),
             }),
           )
           .optional()
@@ -455,7 +457,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         brainstorm: z.string().nullable().optional(),
         link: z.string().nullable().optional(),
         domain_id: z.string().uuid().nullable().optional(),
-        priority: z.enum(["none", "low", "medium", "high"]).optional(),
+        priority: z.enum(TASK_PRIORITIES).optional(),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },

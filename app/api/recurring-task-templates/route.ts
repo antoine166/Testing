@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import { ENERGY_LEVELS, PRIORITIES } from "@/lib/tasks/constants";
 import { seedCompletionTemplate, topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
 import { parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
 
-const PRIORITIES = ["none", "low", "medium", "high"] as const;
-const ENERGY_LEVELS = ["low", "medium", "high"] as const;
 
 export async function GET() {
   const { supabase, user } = await requireUser();
