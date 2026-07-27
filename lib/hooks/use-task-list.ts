@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Task, TaskDomain, TaskProject } from "@/components/task-row";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { projectConversionToast, useToast } from "@/components/toast";
 
 /** Shared fetch + CRUD wiring for the Things-style smart-list pages (Inbox, Upcoming, Anytime, Someday, Logbook). */
 export function useTaskList() {
@@ -12,6 +13,7 @@ export function useTaskList() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   async function loadAll(signal?: AbortSignal) {
     try {
@@ -132,7 +134,8 @@ export function useTaskList() {
     }
     // The created project, so callers (Clarify's "very next action" prompt)
     // can immediately attach a first task to it.
-    const project: { id: string; domain_id: string | null } = await res.json();
+    const project: { id: string; name: string; domain_id: string | null } = await res.json();
+    showToast(...projectConversionToast(project, domains));
     await loadAll();
     return project;
   }

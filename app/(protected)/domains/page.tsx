@@ -9,6 +9,7 @@ import ReorderableTaskList from "@/components/reorderable-task-list";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
+import { projectConversionToast, useToast } from "@/components/toast";
 
 type Domain = {
   id: string;
@@ -33,6 +34,7 @@ export default function DomainsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [name, setName] = useState("");
   const [color, setColor] = useState("#6366f1");
@@ -313,6 +315,7 @@ export default function DomainsPage() {
       setError(body.error ?? "Failed to convert task to project");
       return;
     }
+    showToast(...projectConversionToast(await res.json(), domains));
     await loadDomains();
   }
 

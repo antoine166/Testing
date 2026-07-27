@@ -25,6 +25,7 @@ import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { isRevisitDue } from "@/lib/tasks/inbox";
+import { projectConversionToast, useToast } from "@/components/toast";
 
 type Checkin = {
   date: string;
@@ -118,6 +119,7 @@ export default function TodayDashboard() {
   const [reviewLogs, setReviewLogs] = useState<{ completed_at: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [energyLevel, setEnergyLevel] = useState<number | null>(null);
   const [focusLevel, setFocusLevel] = useState<number | null>(null);
@@ -379,6 +381,7 @@ export default function TodayDashboard() {
       setError(body.error ?? "Failed to convert task to project");
       return;
     }
+    showToast(...projectConversionToast(await res.json(), domains));
     await loadAll();
   }
 

@@ -23,6 +23,7 @@ import { isInInbox } from "@/lib/tasks/inbox";
 import { todayLocal } from "@/lib/date";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
+import { projectConversionToast, useToast } from "@/components/toast";
 import {
   describeRecurrence,
   type CompletionOffsetUnit,
@@ -75,6 +76,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
@@ -482,6 +484,7 @@ export default function TasksPage() {
       setError(body.error ?? "Failed to convert task to project");
       return;
     }
+    showToast(...projectConversionToast(await res.json(), domains));
     await loadAll();
   }
 
