@@ -21,6 +21,7 @@ export default function TrainingLogPage() {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [selectedDate, setSelectedDate] = useState(todayLocal());
   const [newName, setNewName] = useState("");
   const [newWeeklyTarget, setNewWeeklyTarget] = useState("");
@@ -74,7 +75,8 @@ export default function TrainingLogPage() {
 
   async function handleCreateWorkout(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!newName.trim()) return;
+    if (!newName.trim() || creating) return;
+    setCreating(true);
 
     const res = await fetch("/api/workouts", {
       method: "POST",
@@ -85,6 +87,7 @@ export default function TrainingLogPage() {
       }),
     });
 
+    setCreating(false);
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to create workout");
@@ -238,7 +241,8 @@ export default function TrainingLogPage() {
         </div>
         <button
           type="submit"
-          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          disabled={creating}
+          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 disabled:opacity-50"
         >
           Add
         </button>

@@ -109,6 +109,7 @@ export default function TasksPage() {
   const [energyLevel, setEnergyLevel] = useState<TaskEnergy | "">("");
 
   const [isRecurring, setIsRecurring] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
   const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>([]);
 
@@ -262,10 +263,12 @@ export default function TasksPage() {
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || creating) return;
+    setCreating(true);
 
     if (isRecurring) {
       if (recurrencePattern.recurrence_type === "weekly" && recurrencePattern.days_of_week.length === 0) {
+        setCreating(false);
         setError("Pick at least one day for a weekly recurring task.");
         return;
       }
@@ -288,11 +291,13 @@ export default function TasksPage() {
       });
 
       if (!res.ok) {
+        setCreating(false);
         const body = await res.json();
         setError(body.error ?? "Failed to create recurring task");
         return;
       }
 
+      setCreating(false);
       resetCreateForm();
       await loadRecurringTemplates();
       await loadAll();
@@ -323,6 +328,7 @@ export default function TasksPage() {
     });
 
     if (!res.ok) {
+      setCreating(false);
       const body = await res.json();
       setError(body.error ?? "Failed to create task");
       return;
@@ -336,6 +342,7 @@ export default function TasksPage() {
       await fetch(`/api/tasks/${task.id}/attachments`, { method: "POST", body: formData });
     }
 
+    setCreating(false);
     resetCreateForm();
     await loadAll();
   }
@@ -879,9 +886,10 @@ export default function TasksPage() {
           )}
           <button
             type="submit"
-            className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+            disabled={creating}
+            className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
           >
-            Add
+            {creating ? "Adding..." : "Add"}
           </button>
         </div>
 

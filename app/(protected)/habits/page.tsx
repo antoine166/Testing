@@ -20,6 +20,7 @@ export default function HabitsPage() {
   const [domains, setDomains] = useState<HabitDomain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const [name, setName] = useState("");
   const [frequency, setFrequency] = useState<HabitFrequency>("daily");
@@ -83,7 +84,8 @@ export default function HabitsPage() {
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || creating) return;
+    setCreating(true);
 
     const res = await fetch("/api/habits", {
       method: "POST",
@@ -97,6 +99,7 @@ export default function HabitsPage() {
       }),
     });
 
+    setCreating(false);
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to create habit");
@@ -253,7 +256,8 @@ export default function HabitsPage() {
 
         <button
           type="submit"
-          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          disabled={creating}
+          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 disabled:opacity-50"
         >
           Add
         </button>

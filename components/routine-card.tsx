@@ -157,6 +157,7 @@ export default function RoutineCard({
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(routine.time_of_day);
 
   const [newItemTitle, setNewItemTitle] = useState("");
+  const [addingItem, setAddingItem] = useState(false);
   const [newItemDuration, setNewItemDuration] = useState("");
 
   async function loadItems() {
@@ -190,7 +191,8 @@ export default function RoutineCard({
 
   async function handleAddItem(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!newItemTitle.trim()) return;
+    if (!newItemTitle.trim() || addingItem) return;
+    setAddingItem(true);
 
     const res = await fetch(`/api/routines/${routine.id}/items`, {
       method: "POST",
@@ -201,6 +203,7 @@ export default function RoutineCard({
       }),
     });
 
+    setAddingItem(false);
     if (res.ok) {
       setNewItemTitle("");
       setNewItemDuration("");
@@ -348,7 +351,8 @@ export default function RoutineCard({
         />
         <button
           type="submit"
-          className="rounded-md bg-zinc-950 px-3 py-1 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          disabled={addingItem}
+          className="rounded-md bg-zinc-950 px-3 py-1 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 disabled:opacity-50"
         >
           Add
         </button>

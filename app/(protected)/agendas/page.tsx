@@ -16,6 +16,7 @@ export default function AgendasPage() {
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const [personName, setPersonName] = useState("");
   const [note, setNote] = useState("");
@@ -47,7 +48,8 @@ export default function AgendasPage() {
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!personName.trim() || !note.trim()) return;
+    if (!personName.trim() || !note.trim() || creating) return;
+    setCreating(true);
 
     const res = await fetch("/api/agenda-items", {
       method: "POST",
@@ -55,6 +57,7 @@ export default function AgendasPage() {
       body: JSON.stringify({ person_name: personName, note }),
     });
 
+    setCreating(false);
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to add agenda item");
@@ -134,7 +137,8 @@ export default function AgendasPage() {
         </div>
         <button
           type="submit"
-          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          disabled={creating}
+          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 disabled:opacity-50"
         >
           Add
         </button>

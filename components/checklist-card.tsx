@@ -146,6 +146,7 @@ export default function ChecklistCard({
   const [name, setName] = useState(checklist.name);
 
   const [newItemTitle, setNewItemTitle] = useState("");
+  const [addingItem, setAddingItem] = useState(false);
 
   async function loadItems() {
     const res = await fetch(`/api/checklists/${checklist.id}/items`);
@@ -177,7 +178,8 @@ export default function ChecklistCard({
 
   async function handleAddItem(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!newItemTitle.trim()) return;
+    if (!newItemTitle.trim() || addingItem) return;
+    setAddingItem(true);
 
     const res = await fetch(`/api/checklists/${checklist.id}/items`, {
       method: "POST",
@@ -185,6 +187,7 @@ export default function ChecklistCard({
       body: JSON.stringify({ title: newItemTitle }),
     });
 
+    setAddingItem(false);
     if (res.ok) {
       setNewItemTitle("");
       await loadItems();
@@ -346,7 +349,8 @@ export default function ChecklistCard({
         />
         <button
           type="submit"
-          className="rounded-md bg-zinc-950 px-3 py-1 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          disabled={addingItem}
+          className="rounded-md bg-zinc-950 px-3 py-1 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 disabled:opacity-50"
         >
           Add
         </button>

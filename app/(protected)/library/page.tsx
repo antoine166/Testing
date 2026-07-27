@@ -17,6 +17,8 @@ export default function LibraryPage() {
   const [projects, setProjects] = useState<KnowledgeProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -87,7 +89,8 @@ export default function LibraryPage() {
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || creating) return;
+    setCreating(true);
 
     const res = await fetch("/api/knowledge-items", {
       method: "POST",
@@ -103,6 +106,7 @@ export default function LibraryPage() {
       }),
     });
 
+    setCreating(false);
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to save item");
@@ -120,7 +124,8 @@ export default function LibraryPage() {
 
   async function handleCreateFolder(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!newFolderName.trim()) return;
+    if (!newFolderName.trim() || creatingFolder) return;
+    setCreatingFolder(true);
 
     const res = await fetch("/api/knowledge-folders", {
       method: "POST",
@@ -128,6 +133,7 @@ export default function LibraryPage() {
       body: JSON.stringify({ name: newFolderName, parent_id: currentFolderId }),
     });
 
+    setCreatingFolder(false);
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to create folder");
@@ -299,7 +305,8 @@ export default function LibraryPage() {
         />
         <button
           type="submit"
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          disabled={creatingFolder}
+          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
         >
           + Folder
         </button>
@@ -416,9 +423,10 @@ export default function LibraryPage() {
         </div>
         <button
           type="submit"
-          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          disabled={creating}
+          className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
         >
-          Add
+          {creating ? "Adding..." : "Add"}
         </button>
       </form>
 
