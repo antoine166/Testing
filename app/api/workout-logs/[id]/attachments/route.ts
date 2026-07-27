@@ -27,14 +27,20 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const withUrls = await Promise.all(
-    data.map(async (attachment) => {
-      const { data: signed } = await supabase.storage
-        .from(BUCKET)
-        .createSignedUrl(attachment.storage_path, SIGNED_URL_TTL_SECONDS);
-      return { ...attachment, url: signed?.signedUrl ?? null };
-    }),
-  );
+  // One batch call to Storage instead of one round-trip per attachment.
+  const { data: signed } =
+    data.length > 0
+      ? await supabase.storage
+          .from(BUCKET)
+          .createSignedUrls(
+            data.map((a) => a.storage_path),
+            SIGNED_URL_TTL_SECONDS,
+          )
+      : { data: null };
+  const withUrls = data.map((attachment, i) => ({
+    ...attachment,
+    url: signed?.[i]?.signedUrl ?? null,
+  }));
 
   return NextResponse.json(withUrls);
 }

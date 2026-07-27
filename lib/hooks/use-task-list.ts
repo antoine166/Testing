@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Task, TaskDomain, TaskProject } from "@/components/task-row";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import {
   knowledgeConversionToast,
   projectConversionToast,
@@ -22,6 +22,7 @@ export function useTaskList() {
   const { showToast } = useToast();
 
   async function loadAll(signal?: AbortSignal) {
+    markLocalRefresh();
     try {
       const [domainsRes, projectsRes, tasksRes] = await Promise.all([
         fetch("/api/domains", { signal }),

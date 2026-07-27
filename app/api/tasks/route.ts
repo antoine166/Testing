@@ -11,7 +11,9 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("tasks")
-    .select("*, recurring_task_templates(recurrence_type, days_of_week, day_of_month, interval_days)")
+    .select(
+      "*, recurring_task_templates(recurrence_type, days_of_week, day_of_month, interval_days), task_attachments(count)",
+    )
     .is("deleted_at", null)
     // Manual order first (hand-arranged positions); nulls first so untouched
     // tasks and fresh captures surface at the top, newest first, exactly as
@@ -23,7 +25,14 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  // Flatten the count so rows can decide whether to fetch attachments at
+  // all (TaskRow skips the per-task attachments request when it's 0).
+  const withCounts = data.map(({ task_attachments, ...task }) => ({
+    ...task,
+    attachment_count: task_attachments?.[0]?.count ?? 0,
+  }));
+
+  return NextResponse.json(withCounts);
 }
 
 export async function POST(request: Request) {

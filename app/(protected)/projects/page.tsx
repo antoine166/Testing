@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import { type Task } from "@/components/task-row";
@@ -116,6 +116,7 @@ export default function ProjectsPage() {
   const [supportItems, setSupportItems] = useState<SupportItem[]>([]);
 
   async function loadAll() {
+    markLocalRefresh();
     try {
       const [domainsRes, projectsRes, tasksRes, templatesRes, itemsRes] = await Promise.all([
         fetch("/api/domains"),

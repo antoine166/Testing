@@ -28,25 +28,32 @@ export async function GET() {
     return NextResponse.json({ error: attachmentsError.message }, { status: 500 });
   }
 
-  const withAttachments = await Promise.all(
-    logs.map(async (log) => {
-      const logAttachments = attachments.filter((a) => a.workout_log_id === log.id);
-      const resolved = await Promise.all(
-        logAttachments.map(async (a) => {
-          const { data: signed } = await supabase.storage
-            .from(BUCKET)
-            .createSignedUrl(a.storage_path, SIGNED_URL_TTL_SECONDS);
-          return {
-            id: a.id,
-            filename: a.filename,
-            content_type: a.content_type,
-            url: signed?.signedUrl ?? null,
-          };
-        }),
-      );
-      return { ...log, attachments: resolved };
-    }),
+  // Sign every attachment in one batch call, then group by log — instead of
+  // one Storage round-trip per attachment.
+  const { data: signed } =
+    attachments.length > 0
+      ? await supabase.storage
+          .from(BUCKET)
+          .createSignedUrls(
+            attachments.map((a) => a.storage_path),
+            SIGNED_URL_TTL_SECONDS,
+          )
+      : { data: null };
+  const urlByPath = new Map(
+    (signed ?? []).map((s, i) => [attachments[i].storage_path, s.signedUrl ?? null]),
   );
+
+  const withAttachments = logs.map((log) => ({
+    ...log,
+    attachments: attachments
+      .filter((a) => a.workout_log_id === log.id)
+      .map((a) => ({
+        id: a.id,
+        filename: a.filename,
+        content_type: a.content_type,
+        url: urlByPath.get(a.storage_path) ?? null,
+      })),
+  }));
 
   return NextResponse.json(withAttachments);
 }

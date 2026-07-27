@@ -39,6 +39,8 @@ export type Task = {
   completed_at?: string | null;
   recurring_template_id?: string | null;
   recurring_task_templates?: RecurrencePattern | null;
+  /** From GET /api/tasks — lets rows skip the attachments fetch when 0. */
+  attachment_count?: number;
   estimated_minutes?: number | null;
   energy_level?: TaskEnergy | null;
   revisit_date?: string | null;
@@ -114,10 +116,14 @@ export type AttachmentStripHandle = { openPicker: () => void };
 
 const AttachmentStrip = forwardRef<
   AttachmentStripHandle,
-  { taskId: string; hideAddButton?: boolean }
->(function AttachmentStrip({ taskId, hideAddButton = false }, ref) {
+  { taskId: string; hideAddButton?: boolean; knownEmpty?: boolean }
+>(function AttachmentStrip({ taskId, hideAddButton = false, knownEmpty = false }, ref) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [loading, setLoading] = useState(true);
+  // knownEmpty comes from the list fetch's attachment_count — nothing to
+  // load, so skip the per-row request entirely (this is what turns a
+  // 150-task list from 150 attachment requests into ~0). Uploads via
+  // openPicker still work: handleUpload does its own loadAttachments().
+  const [loading, setLoading] = useState(!knownEmpty);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +138,7 @@ const AttachmentStrip = forwardRef<
   }
 
   useEffect(() => {
+    if (knownEmpty) return;
     const controller = new AbortController();
     fetch(`/api/tasks/${taskId}/attachments`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
@@ -141,7 +148,7 @@ const AttachmentStrip = forwardRef<
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [taskId]);
+  }, [taskId, knownEmpty]);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -763,7 +770,12 @@ export default function TaskRow({
                 : ""}
             </p>
           )}
-          <AttachmentStrip ref={attachmentRef} taskId={task.id} hideAddButton />
+          <AttachmentStrip
+            ref={attachmentRef}
+            taskId={task.id}
+            hideAddButton
+            knownEmpty={(task.attachment_count ?? 0) === 0}
+          />
         </div>
       </div>
       {confirmingDelete ? (

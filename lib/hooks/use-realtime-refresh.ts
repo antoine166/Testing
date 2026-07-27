@@ -10,6 +10,18 @@ import { createClient } from "@/lib/supabase/client";
  * RLS scopes which rows a client actually receives, so this is safe to
  * mount per-page with a plain table name list.
  */
+// postgres_changes events don't say which client caused them, so a page's
+// own write comes back as an event ~100–500ms later and re-runs the full
+// reload it just did. Pages call markLocalRefresh() at the start of their
+// post-mutation reload; any event landing inside this window is redundant
+// by construction (the reload reads state that already includes the write).
+const LOCAL_REFRESH_WINDOW_MS = 1000;
+let lastLocalRefresh = 0;
+
+export function markLocalRefresh() {
+  lastLocalRefresh = Date.now();
+}
+
 export function useRealtimeRefresh(tables: string[], onChange: () => void) {
   const onChangeRef = useRef(onChange);
   useEffect(() => {
@@ -28,6 +40,11 @@ export function useRealtimeRefresh(tables: string[], onChange: () => void) {
     const scheduleRefresh = () => {
       if (timeout) clearTimeout(timeout);
       timeout = setTimeout(() => {
+        // Skip the self-echo: this page (or another mounted hook) just did a
+        // full reload, so refetching again would return identical data. A
+        // genuinely remote write in this window was either captured by that
+        // reload or will arrive as its own later event.
+        if (Date.now() - lastLocalRefresh < LOCAL_REFRESH_WINDOW_MS) return;
         onChangeRef.current();
         // Fires only in response to an actual postgres_changes event (never
         // on initial mount), so this is a reliable "a change from elsewhere
