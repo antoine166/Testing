@@ -17,7 +17,6 @@ export default function DomainsPage() {
     loading,
     error,
     setError,
-    setDomains,
     handleUpdate: handleTaskUpdate,
     toggleDone: toggleTaskDone,
     handleDelete: handleTaskDelete,
@@ -46,8 +45,6 @@ export default function DomainsPage() {
   const [pPriority, setPPriority] = useState("none");
   const [pDue, setPDue] = useState("");
   const [pScheduled, setPScheduled] = useState("");
-
-  const [draggedId, setDraggedId] = useState<string | null>(null);
 
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -152,45 +149,6 @@ export default function DomainsPage() {
     await loadAll();
   }
 
-  function handleDragStart(id: string) {
-    setDraggedId(id);
-  }
-
-  function handleDragOver(e: React.DragEvent, targetId: string) {
-    e.preventDefault();
-    if (!draggedId || draggedId === targetId) return;
-
-    setDomains((prev) => {
-      const fromIndex = prev.findIndex((d) => d.id === draggedId);
-      const toIndex = prev.findIndex((d) => d.id === targetId);
-      if (fromIndex === -1 || toIndex === -1) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
-  }
-
-  async function handleDragEnd() {
-    if (!draggedId) return;
-    setDraggedId(null);
-
-    const results = await Promise.all(
-      domains.map((d, i) =>
-        fetch(`/api/domains/${d.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sort_order: i }),
-        }),
-      ),
-    );
-
-    if (results.some((r) => !r.ok)) {
-      setError("Couldn't save the new order — try again.");
-    }
-    await loadAll();
-  }
-
   async function handleAddTask(projectId: string, domainId: string | null, e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const title = (newTaskTitles[projectId] ?? "").trim();
@@ -276,26 +234,13 @@ export default function DomainsPage() {
         </p>
       ) : (
         <>
-          <p className="mb-2 text-xs text-zinc-500">Drag to reorder — this order is used everywhere domains are grouped.</p>
           <ul className="space-y-2">
           {domains.map((domain) => (
             <li
               key={domain.id}
-              draggable={editingId !== domain.id}
-              onDragStart={() => handleDragStart(domain.id)}
-              onDragOver={(e) => handleDragOver(e, domain.id)}
-              onDrop={(e) => e.preventDefault()}
-              onDragEnd={handleDragEnd}
-              className={`rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800 ${
-                editingId === domain.id ? "" : "cursor-grab active:cursor-grabbing"
-              } ${draggedId === domain.id ? "opacity-40" : ""}`}
+              className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
             >
               <div className="flex flex-wrap items-center gap-3">
-                {editingId !== domain.id && (
-                  <span className="select-none text-zinc-300 dark:text-zinc-600" aria-hidden>
-                    ⠿
-                  </span>
-                )}
                 {editingId === domain.id ? (
                   <>
                     <ColorPicker value={editColor} onChange={setEditColor} />

@@ -207,16 +207,15 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
-    // Otherwise the next top-up run just sees a deficit against the
-    // template's horizon and regenerates replacements for what was just
-    // deleted, silently undoing this. Also reset last_generated_date: it
-    // was left pointing at the (now-deleted) last occurrence, so without
-    // this, resuming later would resume generation *after* that stale
-    // future date instead of from today — a silent gap of up to
-    // horizon_count cycles before anything reappears.
+    // Delete the template itself, not just deactivate it — "This + future"
+    // means the series is over, and a lingering (deactivated) template row
+    // kept showing up in the Tasks page's Recurring list. Done occurrences
+    // keep their history (FK is on delete set null), and any trashed
+    // occurrences restore as plain tasks. Deleting also guarantees the
+    // top-up run can never regenerate what was just removed.
     await supabase
       .from("recurring_task_templates")
-      .update({ active: false, last_generated_date: null })
+      .delete()
       .eq("id", task.recurring_template_id);
 
     await syncTaskCalendarEvents(

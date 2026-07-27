@@ -154,7 +154,7 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
     return created;
   }
 
-  async function handleConvertToProject(id: string, skipConfirm = false) {
+  async function handleConvertToProject(id: string, skipConfirm = false, domainId?: string) {
     if (
       !skipConfirm &&
       !confirm(
@@ -162,7 +162,18 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       )
     )
       return null;
-    const res = await fetch(`/api/tasks/${id}/convert-to-project`, { method: "POST" });
+    // domainId lets the edit form's unsaved domain selection carry straight
+    // into the conversion — without it, a domain-less task would 400
+    // ("projects need a domain") until saved and re-edited.
+    const res = await fetch(`/api/tasks/${id}/convert-to-project`, {
+      method: "POST",
+      ...(domainId
+        ? {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ domain_id: domainId }),
+          }
+        : {}),
+    });
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to convert task to project");
