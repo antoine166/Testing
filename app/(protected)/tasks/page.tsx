@@ -23,7 +23,13 @@ import { isInInbox } from "@/lib/tasks/inbox";
 import { todayLocal } from "@/lib/date";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
-import { projectConversionToast, useToast } from "@/components/toast";
+import {
+  knowledgeConversionToast,
+  projectConversionToast,
+  recurringConversionToast,
+  taskTrashedToast,
+  useToast,
+} from "@/components/toast";
 import {
   describeRecurrence,
   type CompletionOffsetUnit,
@@ -467,6 +473,17 @@ export default function TasksPage() {
       return;
     }
 
+    if (scope === "following") {
+      showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
+    } else {
+      showToast(
+        ...taskTrashedToast(async () => {
+          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
+          if (undoRes.ok) await loadAll();
+        }),
+      );
+    }
+
     await loadAll();
     if (scope === "following") await loadRecurringTemplates();
   }
@@ -499,6 +516,7 @@ export default function TasksPage() {
       setError(body.error ?? "Failed to convert task to recurring");
       return;
     }
+    showToast(...recurringConversionToast(await res.json()));
     await loadAll();
     await loadRecurringTemplates();
   }
@@ -516,6 +534,7 @@ export default function TasksPage() {
       setError(body.error ?? "Failed to file task as reference");
       return;
     }
+    showToast(...knowledgeConversionToast(await res.json()));
     await loadAll();
   }
 

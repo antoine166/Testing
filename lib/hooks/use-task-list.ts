@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import type { Task, TaskDomain, TaskProject } from "@/components/task-row";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
-import { projectConversionToast, useToast } from "@/components/toast";
+import {
+  knowledgeConversionToast,
+  projectConversionToast,
+  recurringConversionToast,
+  taskTrashedToast,
+  useToast,
+} from "@/components/toast";
 
 /** Shared fetch + CRUD wiring for the Things-style smart-list pages (Inbox, Upcoming, Anytime, Someday, Logbook). */
 export function useTaskList() {
@@ -99,6 +105,18 @@ export function useTaskList() {
       setError(body.error ?? "Failed to delete task");
       return;
     }
+    if (scope === "following") {
+      // A whole series went — single-task Undo can't bring it back, so
+      // point at the Trash page instead.
+      showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
+    } else {
+      showToast(
+        ...taskTrashedToast(async () => {
+          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
+          if (undoRes.ok) await loadAll();
+        }),
+      );
+    }
     await loadAll();
   }
 
@@ -151,6 +169,7 @@ export function useTaskList() {
       setError(body.error ?? "Failed to convert task to recurring");
       return;
     }
+    showToast(...recurringConversionToast(await res.json()));
     await loadAll();
   }
 
@@ -168,6 +187,7 @@ export function useTaskList() {
       setError(body.error ?? "Failed to file task as reference");
       return;
     }
+    showToast(...knowledgeConversionToast(await res.json()));
     await loadAll();
   }
 

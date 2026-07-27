@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { enqueueCapture } from "@/lib/offline-queue";
+import { projectConversionToast, useToast } from "@/components/toast";
 
 // Minimal Web Speech API surface — TS has no built-in types for the
 // prefixed webkit implementation (the only one that ships in Chrome).
@@ -34,6 +35,7 @@ type TaskPriority = "none" | "low" | "medium" | "high";
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 export default function QuickCapture() {
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"task" | "project">("task");
   const [title, setTitle] = useState("");
@@ -231,6 +233,20 @@ export default function QuickCapture() {
       const formData = new FormData();
       formData.append("file", image);
       await fetch(`/api/tasks/${created.id}/attachments`, { method: "POST", body: formData });
+    }
+
+    // The modal closes over whatever page the user was on, so the capture
+    // needs a visible receipt — especially projects, which never appear in
+    // a smart list, and Waiting For items, which skip the Inbox.
+    if (mode === "project") {
+      showToast(...projectConversionToast(created, domains));
+    } else if (waitingFor) {
+      showToast(`Captured to Waiting For: “${created.title}”`, {
+        label: "View",
+        href: "/waiting-for",
+      });
+    } else {
+      showToast(`Captured to Inbox: “${created.title}”`, { label: "View", href: "/inbox" });
     }
 
     setSubmitting(false);

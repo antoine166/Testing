@@ -8,6 +8,12 @@ import { findStalledProjectIds } from "@/lib/projects/stalled";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import { type Task } from "@/components/task-row";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
+import {
+  knowledgeConversionToast,
+  recurringConversionToast,
+  taskTrashedToast,
+  useToast,
+} from "@/components/toast";
 
 type Domain = {
   id: string;
@@ -72,6 +78,7 @@ export default function ProjectsPage() {
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -367,6 +374,16 @@ export default function ProjectsPage() {
       setError(body.error ?? "Failed to delete task");
       return;
     }
+    if (scope === "following") {
+      showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
+    } else {
+      showToast(
+        ...taskTrashedToast(async () => {
+          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
+          if (undoRes.ok) await loadAll();
+        }),
+      );
+    }
     await loadAll();
   }
 
@@ -381,6 +398,7 @@ export default function ProjectsPage() {
       setError(body.error ?? "Failed to convert task to recurring");
       return;
     }
+    showToast(...recurringConversionToast(await res.json()));
     await loadAll();
   }
 
@@ -397,6 +415,7 @@ export default function ProjectsPage() {
       setError(body.error ?? "Failed to file task as reference");
       return;
     }
+    showToast(...knowledgeConversionToast(await res.json()));
     await loadAll();
   }
 

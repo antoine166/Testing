@@ -17,6 +17,7 @@ import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade"
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { isInInbox } from "@/lib/tasks/inbox";
 import { todayLocal } from "@/lib/date";
+import { projectConversionToast, useToast } from "@/components/toast";
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
@@ -36,6 +37,7 @@ export default function InboxPage() {
     handleConvertToKnowledgeItem,
     loadAll,
   } = useTaskList();
+  const { showToast } = useToast();
 
   const [captureMode, setCaptureMode] = useState<"task" | "project">("task");
   const [title, setTitle] = useState("");
@@ -156,6 +158,9 @@ export default function InboxPage() {
         setCreateError(body.error ?? "Failed to create project");
         return;
       }
+      // Projects never show in the Inbox list — without this, creating one
+      // from here looks like nothing happened.
+      showToast(...projectConversionToast(await res.json(), domains));
       resetForm();
       return;
     }

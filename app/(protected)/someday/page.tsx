@@ -6,6 +6,7 @@ import TaskRow from "@/components/task-row";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { todayLocal } from "@/lib/date";
+import { ticklerConversionToast, useToast } from "@/components/toast";
 
 type TicklerItem = { id: string; note: string; revisit_date: string };
 
@@ -27,6 +28,7 @@ export default function SomedayPage() {
   const [ticklerItems, setTicklerItems] = useState<TicklerItem[]>([]);
   const [ticklerLoading, setTicklerLoading] = useState(true);
   const [ticklerError, setTicklerError] = useState<string | null>(null);
+  const { showToast } = useToast();
   const [note, setNote] = useState("");
   const [revisitDate, setRevisitDate] = useState("");
 
@@ -100,6 +102,8 @@ export default function SomedayPage() {
       setTicklerError(body.error ?? "Failed to convert to task");
       return;
     }
+    // The new task lands in the Inbox, not on this page — say so.
+    showToast(...ticklerConversionToast(await res.json().catch(() => null)));
     await loadTicklerItems();
   }
 
