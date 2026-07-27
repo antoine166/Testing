@@ -11,6 +11,13 @@ import {
   taskTrashedToast,
   useToast,
 } from "@/components/toast";
+import {
+  applyTaskUpdates,
+  mergeServerTask,
+  needsFullReload,
+  removeSeriesFrom,
+  removeTask,
+} from "@/lib/tasks/optimistic";
 
 /**
  * Shared fetch + CRUD wiring for every page that lists tasks — the
@@ -92,17 +99,36 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
   useRealtimeRefresh(["tasks", "domains", "projects"], () => loadAll());
 
   async function handleUpdate(id: string, updates: Record<string, unknown>) {
+    // Local-first: the edit is on screen before the network round-trip.
+    // markLocalRefresh() keeps the realtime echo of this write from
+    // triggering a redundant full reload; on failure we put the snapshot
+    // back and surface the error.
+    const snapshot = tasks;
+    const target = tasks.find((t) => t.id === id);
+    markLocalRefresh();
+    setTasks((prev) => applyTaskUpdates(prev, id, updates));
+
     const res = await fetch(`/api/tasks/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
     });
+    markLocalRefresh();
     if (!res.ok) {
+      setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to update task");
       return;
     }
-    await loadAll();
+
+    if (needsFullReload(target, updates)) {
+      // Completing a recurring occurrence can generate the next one
+      // server-side — only a reload shows it.
+      await loadAll();
+    } else {
+      const serverTask = (await res.json()) as Task;
+      setTasks((prev) => mergeServerTask(prev, serverTask));
+    }
   }
 
   async function toggleDone(task: Task) {
@@ -116,17 +142,32 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
     // The Clarify flow passes skipConfirm: its Trash button is an explicit,
     // deliberate choice within a decision flow, so a second dialog is noise.
     if (!scope && !skipConfirm && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
+
+    // Local-first: the row disappears immediately; the snapshot comes back
+    // if the server says no.
+    const snapshot = tasks;
+    const anchor = tasks.find((t) => t.id === id);
+    markLocalRefresh();
+    setTasks((prev) =>
+      scope === "following" && anchor ? removeSeriesFrom(prev, anchor) : removeTask(prev, id),
+    );
+
     const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
     const res = await fetch(url, { method: "DELETE" });
+    markLocalRefresh();
     if (!res.ok) {
+      setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to delete task");
       return;
     }
     if (scope === "following") {
       // A whole series went — single-task Undo can't bring it back, so
-      // point at the Trash page instead.
+      // point at the Trash page instead. Reload: the series delete also
+      // removed its template, and onAfterRefresh keeps page extras (the
+      // Tasks page's Recurring list) in step.
       showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
+      await loadAll();
     } else {
       showToast(
         ...taskTrashedToast(async () => {
@@ -135,7 +176,6 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
         }),
       );
     }
-    await loadAll();
   }
 
   async function createTask(input: Record<string, unknown>) {
@@ -150,7 +190,10 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       return null;
     }
     const created: Task = await res.json();
-    await loadAll();
+    // Prepend instead of reloading — matches the API's newest-first-among-
+    // unsorted ordering closely enough; the next reload trues it.
+    markLocalRefresh();
+    setTasks((prev) => [created, ...prev]);
     return created;
   }
 
@@ -162,6 +205,12 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       )
     )
       return null;
+    // The task leaves the list immediately; conversions still reload after
+    // the server confirms, since they create entities outside this list.
+    const snapshot = tasks;
+    markLocalRefresh();
+    setTasks((prev) => removeTask(prev, id));
+
     // domainId lets the edit form's unsaved domain selection carry straight
     // into the conversion — without it, a domain-less task would 400
     // ("projects need a domain") until saved and re-edited.
@@ -175,6 +224,7 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
         : {}),
     });
     if (!res.ok) {
+      setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to convert task to project");
       return null;
@@ -188,12 +238,17 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
   }
 
   async function handleConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
+    const snapshot = tasks;
+    markLocalRefresh();
+    setTasks((prev) => removeTask(prev, id));
+
     const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(pattern),
     });
     if (!res.ok) {
+      setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to convert task to recurring");
       return;
@@ -210,8 +265,13 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       )
     )
       return;
+    const snapshot = tasks;
+    markLocalRefresh();
+    setTasks((prev) => removeTask(prev, id));
+
     const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
     if (!res.ok) {
+      setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to file task as reference");
       return;
