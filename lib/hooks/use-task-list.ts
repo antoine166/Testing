@@ -19,6 +19,8 @@ import {
   removeTask,
 } from "@/lib/tasks/optimistic";
 
+const OFFLINE_ERROR = "You're offline — that change wasn't saved.";
+
 /**
  * Shared fetch + CRUD wiring for every page that lists tasks — the
  * Things-style smart lists (Inbox, Upcoming, Anytime, Someday, Logbook,
@@ -108,11 +110,21 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
     markLocalRefresh();
     setTasks((prev) => applyTaskUpdates(prev, id, updates));
 
-    const res = await fetch(`/api/tasks/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
+    // fetch REJECTS (rather than returning !ok) when there's no network at
+    // all — without the catch, an offline edit would keep its optimistic
+    // state forever with no error. Same pattern in every mutation below.
+    let res: Response;
+    try {
+      res = await fetch(`/api/tasks/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+    } catch {
+      setTasks(snapshot);
+      setError(OFFLINE_ERROR);
+      return;
+    }
     markLocalRefresh();
     if (!res.ok) {
       setTasks(snapshot);
@@ -153,7 +165,14 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
     );
 
     const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
-    const res = await fetch(url, { method: "DELETE" });
+    let res: Response;
+    try {
+      res = await fetch(url, { method: "DELETE" });
+    } catch {
+      setTasks(snapshot);
+      setError(OFFLINE_ERROR);
+      return;
+    }
     markLocalRefresh();
     if (!res.ok) {
       setTasks(snapshot);
@@ -171,19 +190,30 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
     } else {
       showToast(
         ...taskTrashedToast(async () => {
-          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
-          if (undoRes.ok) await loadAll();
+          try {
+            const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
+            if (undoRes.ok) await loadAll();
+            else setError("Couldn't restore the task — it's still in Trash.");
+          } catch {
+            setError(OFFLINE_ERROR);
+          }
         }),
       );
     }
   }
 
   async function createTask(input: Record<string, unknown>) {
-    const res = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+    } catch {
+      setError(OFFLINE_ERROR);
+      return null;
+    }
     if (!res.ok) {
       const body = await res.json();
       setError(body.error ?? "Failed to create task");
@@ -214,15 +244,22 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
     // domainId lets the edit form's unsaved domain selection carry straight
     // into the conversion — without it, a domain-less task would 400
     // ("projects need a domain") until saved and re-edited.
-    const res = await fetch(`/api/tasks/${id}/convert-to-project`, {
-      method: "POST",
-      ...(domainId
-        ? {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ domain_id: domainId }),
-          }
-        : {}),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/tasks/${id}/convert-to-project`, {
+        method: "POST",
+        ...(domainId
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ domain_id: domainId }),
+            }
+          : {}),
+      });
+    } catch {
+      setTasks(snapshot);
+      setError(OFFLINE_ERROR);
+      return null;
+    }
     if (!res.ok) {
       setTasks(snapshot);
       const body = await res.json();
@@ -242,11 +279,18 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
     markLocalRefresh();
     setTasks((prev) => removeTask(prev, id));
 
-    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pattern),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pattern),
+      });
+    } catch {
+      setTasks(snapshot);
+      setError(OFFLINE_ERROR);
+      return;
+    }
     if (!res.ok) {
       setTasks(snapshot);
       const body = await res.json();
@@ -269,7 +313,14 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
     markLocalRefresh();
     setTasks((prev) => removeTask(prev, id));
 
-    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    let res: Response;
+    try {
+      res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
+    } catch {
+      setTasks(snapshot);
+      setError(OFFLINE_ERROR);
+      return;
+    }
     if (!res.ok) {
       setTasks(snapshot);
       const body = await res.json();
