@@ -25,6 +25,7 @@ import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { isRevisitDue } from "@/lib/tasks/inbox";
+import { PRIORITIES } from "@/lib/tasks/constants";
 import {
   knowledgeConversionToast,
   projectConversionToast,
@@ -57,8 +58,6 @@ const PRIORITY_RANK: Record<TaskPriority, number> = {
   low: 2,
   none: 3,
 };
-
-const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 function currentTimeOfDay(): "morning" | "afternoon" | "evening" {
   const hour = new Date().getHours();

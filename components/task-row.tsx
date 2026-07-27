@@ -12,10 +12,17 @@ import RecurrenceFields, {
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
+import {
+  PRIORITIES,
+  STATUSES,
+  type TaskEnergy,
+  type TaskPriority,
+  type TaskStatus,
+} from "@/lib/tasks/constants";
 
-export type TaskStatus = "todo" | "in_progress" | "done";
-export type TaskPriority = "none" | "low" | "medium" | "high";
-export type TaskEnergy = "low" | "medium" | "high";
+// Re-exported so the many existing `from "@/components/task-row"` type
+// imports keep working; the definitions live in lib/tasks/constants.ts.
+export type { TaskStatus, TaskPriority, TaskEnergy };
 
 export type Task = {
   id: string;
@@ -66,8 +73,6 @@ type Attachment = {
   url: string | null;
 };
 
-const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
-const STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
 
 const NOTES_PREVIEW_LENGTH = 200;
 

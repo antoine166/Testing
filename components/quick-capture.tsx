@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { enqueueCapture } from "@/lib/offline-queue";
 import { projectConversionToast, useToast } from "@/components/toast";
+import { PRIORITIES, type TaskPriority } from "@/lib/tasks/constants";
 
 // Minimal Web Speech API surface — TS has no built-in types for the
 // prefixed webkit implementation (the only one that ships in Chrome).
@@ -31,8 +32,6 @@ type Domain = {
   name: string;
 };
 
-type TaskPriority = "none" | "low" | "medium" | "high";
-const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 export default function QuickCapture() {
   const { showToast } = useToast();

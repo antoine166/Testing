@@ -16,10 +16,9 @@ import MindSweepFlow from "@/components/mind-sweep-flow";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { isInInbox } from "@/lib/tasks/inbox";
+import { PRIORITIES } from "@/lib/tasks/constants";
 import { todayLocal } from "@/lib/date";
 import { projectConversionToast, useToast } from "@/components/toast";
-
-const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 export default function InboxPage() {
   const {
