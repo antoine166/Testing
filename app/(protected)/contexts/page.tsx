@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import SmartListHeader from "@/components/smart-list-header";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import { useTaskList } from "@/lib/hooks/use-task-list";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 import { todayLocal } from "@/lib/date";
 
 type ContextRow = { id: string; name: string };
@@ -31,36 +31,18 @@ export default function ContextsPage() {
   } = useTaskList({ done: false });
 
   const [contextRows, setContextRows] = useState<ContextRow[]>([]);
-  const [contextsError, setContextsError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | "all" | "none">("all");
 
-  async function loadContexts() {
-    try {
-      const res = await fetch("/api/contexts");
+  // Page-level loading comes from useTaskList; only the error surface is
+  // shown for the contexts extras, so `loading` isn't destructured here.
+  const { error: contextsError } = usePageData(
+    async (signal) => {
+      const res = await fetch("/api/contexts", { signal });
       if (!res.ok) throw new Error("Failed to load contexts");
       setContextRows(await res.json());
-      setContextsError(null);
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      setContextsError(err instanceof Error ? err.message : "Something went wrong");
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetch("/api/contexts", { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load contexts"))))
-      .then((data: ContextRow[]) => setContextRows(data))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setContextsError(err instanceof Error ? err.message : "Something went wrong");
-      });
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["contexts"], () => loadContexts());
+    },
+    { tables: ["contexts"] },
+  );
 
   const today = todayLocal();
 

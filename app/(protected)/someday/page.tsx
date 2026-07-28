@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import SmartListHeader from "@/components/smart-list-header";
 import TaskRow from "@/components/task-row";
 import { useTaskList } from "@/lib/hooks/use-task-list";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 import { todayLocal } from "@/lib/date";
 import { ticklerConversionToast, useToast } from "@/components/toast";
 
@@ -26,43 +26,24 @@ export default function SomedayPage() {
   } = useTaskList({ done: false });
 
   const [ticklerItems, setTicklerItems] = useState<TicklerItem[]>([]);
-  const [ticklerLoading, setTicklerLoading] = useState(true);
-  const [ticklerError, setTicklerError] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
   const { showToast } = useToast();
   const [note, setNote] = useState("");
   const [revisitDate, setRevisitDate] = useState("");
 
-  async function loadTicklerItems(signal?: AbortSignal) {
-    try {
+  const {
+    loading: ticklerLoading,
+    error: ticklerError,
+    setError: setTicklerError,
+    reload: loadTicklerItems,
+  } = usePageData(
+    async (signal) => {
       const res = await fetch("/api/tickler-items", { signal });
       if (!res.ok) throw new Error("Failed to load tickler items");
       setTicklerItems(await res.json());
-      setTicklerError(null);
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      setTicklerError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setTicklerLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetch("/api/tickler-items", { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load tickler items"))))
-      .then((data: TicklerItem[]) => setTicklerItems(data))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setTicklerError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setTicklerLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["tickler_items"], () => loadTicklerItems());
+    },
+    { tables: ["tickler_items"] },
+  );
 
   async function handleCapture(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

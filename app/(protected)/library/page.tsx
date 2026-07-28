@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import KnowledgeItemRow, {
   KNOWLEDGE_TYPES,
   parseTags,
@@ -9,14 +9,12 @@ import KnowledgeItemRow, {
   type KnowledgeProject,
   type KnowledgeType,
 } from "@/components/knowledge-item-row";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 
 export default function LibraryPage() {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [folders, setFolders] = useState<KnowledgeFolder[]>([]);
   const [projects, setProjects] = useState<KnowledgeProject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
 
@@ -32,60 +30,20 @@ export default function LibraryPage() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
 
-  async function loadAll() {
-    try {
+  const { loading, error, setError, reload: loadAll } = usePageData(
+    async (signal) => {
       const [itemsRes, foldersRes, projectsRes] = await Promise.all([
-        fetch("/api/knowledge-items"),
-        fetch("/api/knowledge-folders"),
-        fetch("/api/projects"),
+        fetch("/api/knowledge-items", { signal }),
+        fetch("/api/knowledge-folders", { signal }),
+        fetch("/api/projects", { signal }),
       ]);
       if (!itemsRes.ok || !foldersRes.ok || !projectsRes.ok) throw new Error("Failed to load library");
       setItems(await itemsRes.json());
       setFolders(await foldersRes.json());
       setProjects(await projectsRes.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    Promise.all([
-      fetch("/api/knowledge-items", { signal: controller.signal }),
-      fetch("/api/knowledge-folders", { signal: controller.signal }),
-      fetch("/api/projects", { signal: controller.signal }),
-    ])
-      .then(async ([itemsRes, foldersRes, projectsRes]) => {
-        if (!itemsRes.ok || !foldersRes.ok || !projectsRes.ok) {
-          throw new Error("Failed to load library");
-        }
-        return Promise.all([itemsRes.json(), foldersRes.json(), projectsRes.json()]);
-      })
-      .then(
-        ([itemsData, foldersData, projectsData]: [
-          KnowledgeItem[],
-          KnowledgeFolder[],
-          KnowledgeProject[],
-        ]) => {
-          setItems(itemsData);
-          setFolders(foldersData);
-          setProjects(projectsData);
-        },
-      )
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["knowledge_items", "knowledge_folders", "projects"], () => loadAll());
+    },
+    { tables: ["knowledge_items", "knowledge_folders", "projects"] },
+  );
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

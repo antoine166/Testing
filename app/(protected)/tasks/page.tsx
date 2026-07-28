@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import TaskRow, { type TaskPriority, type TaskEnergy } from "@/components/task-row";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -151,25 +151,15 @@ export default function TasksPage() {
     setProjectId(projectFilter ?? "");
   }
 
-  async function loadRecurringTemplates() {
-    const res = await fetch("/api/recurring-task-templates");
-    if (res.ok) setRecurringTemplates(await res.json());
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetch("/api/recurring-task-templates", { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
-      .then((data: RecurringTemplate[]) => setRecurringTemplates(data))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-      });
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["recurring_task_templates"], () => loadRecurringTemplates());
+  // The page's main loading/error surface comes from useTaskList; template
+  // load failures were (and stay) silent, so only `reload` is destructured.
+  const { reload: loadRecurringTemplates } = usePageData(
+    async (signal) => {
+      const res = await fetch("/api/recurring-task-templates", { signal });
+      if (res.ok) setRecurringTemplates(await res.json());
+    },
+    { tables: ["recurring_task_templates"] },
+  );
 
   // Deep-link from a recurring task's own edit form ("Edit the recurring
   // pattern for this series") — auto-opens the otherwise-collapsed
