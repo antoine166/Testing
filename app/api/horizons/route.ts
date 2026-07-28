@@ -30,13 +30,26 @@ export async function PUT(request: Request) {
 
   const body = await request.json();
 
+  // Merge onto the existing row so a partial update doesn't blank the other
+  // fields — same semantics as the MCP connector's update_horizons. (The app
+  // form always sends all three, but the API shouldn't rely on that.)
+  const { data: existing, error: readError } = await supabase
+    .from("horizons")
+    .select("goals, vision, purpose")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (readError) {
+    return NextResponse.json({ error: readError.message }, { status: 500 });
+  }
+
   const { data, error } = await supabase
     .from("horizons")
     .upsert({
       user_id: user.id,
-      goals: typeof body.goals === "string" ? body.goals : "",
-      vision: typeof body.vision === "string" ? body.vision : "",
-      purpose: typeof body.purpose === "string" ? body.purpose : "",
+      goals: typeof body.goals === "string" ? body.goals : (existing?.goals ?? ""),
+      vision: typeof body.vision === "string" ? body.vision : (existing?.vision ?? ""),
+      purpose: typeof body.purpose === "string" ? body.purpose : (existing?.purpose ?? ""),
       updated_at: new Date().toISOString(),
     })
     .select()
