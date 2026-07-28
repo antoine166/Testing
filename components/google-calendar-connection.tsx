@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 export default function GoogleCalendarDisconnectButton({
   connectionId,
@@ -12,12 +13,15 @@ export default function GoogleCalendarDisconnectButton({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const { confirm } = useConfirmDialog();
 
   async function handleDisconnect() {
     if (
-      !confirm(
-        `Disconnect ${label}? Its events disappear from the Life OS calendar, and time-blocked tasks stop syncing to it. Events already pushed to Google Calendar stay there.`,
-      )
+      !(await confirm({
+        message: `Disconnect ${label}? Its events disappear from the Life OS calendar, and time-blocked tasks stop syncing to it. Events already pushed to Google Calendar stay there.`,
+        confirmLabel: "Disconnect",
+        danger: true,
+      }))
     ) {
       return;
     }

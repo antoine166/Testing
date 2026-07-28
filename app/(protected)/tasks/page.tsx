@@ -14,6 +14,7 @@ import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { useTaskList } from "@/lib/hooks/use-task-list";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 import { isInInbox } from "@/lib/tasks/inbox";
 import { PRIORITIES } from "@/lib/tasks/constants";
 import { todayLocal } from "@/lib/date";
@@ -63,6 +64,7 @@ export default function TasksPage() {
   const editTemplateId = searchParams.get("editTemplate");
   const recurringDetailsRef = useRef<HTMLDetailsElement>(null);
   const openedEditTemplateRef = useRef(false);
+  const { confirm } = useConfirmDialog();
 
   const {
     domains,
@@ -376,9 +378,12 @@ export default function TasksPage() {
 
   async function handleDeleteTemplate(id: string) {
     if (
-      !confirm(
-        "Delete this recurring task? Already-generated occurrences stay as regular tasks — only future generation stops.",
-      )
+      !(await confirm({
+        message:
+          "Delete this recurring task? Already-generated occurrences stay as regular tasks — only future generation stops.",
+        confirmLabel: "Delete",
+        danger: true,
+      }))
     )
       return;
     const res = await fetch(`/api/recurring-task-templates/${id}`, { method: "DELETE" });
@@ -467,9 +472,11 @@ export default function TasksPage() {
 
   async function handleBulkDelete() {
     if (
-      !confirm(
-        `Move ${selectedIds.size} task${selectedIds.size === 1 ? "" : "s"} to trash? You can restore them within 30 days.`,
-      )
+      !(await confirm({
+        message: `Move ${selectedIds.size} task${selectedIds.size === 1 ? "" : "s"} to trash? You can restore them within 30 days.`,
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
     )
       return;
     await runBulkAction(

@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { todayLocal } from "@/lib/date";
 import { usePageData } from "@/lib/hooks/use-page-data";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 // The people layer (SCOPE.md §3.10a): everything involving one person in
 // one place — their open tasks (real person_id links), delegations
@@ -25,6 +26,7 @@ type PersonTask = {
 type AgendaItem = { id: string; person_name: string; note: string; done: boolean };
 
 export default function PeoplePage() {
+  const { confirm } = useConfirmDialog();
   const [people, setPeople] = useState<Person[]>([]);
   const [tasks, setTasks] = useState<PersonTask[]>([]);
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
@@ -95,9 +97,11 @@ export default function PeoplePage() {
 
   async function handleDelete(person: Person) {
     if (
-      !confirm(
-        `Move ${person.name} to trash? Their linked tasks and agenda items stay — only the person entry is trashed (recoverable for 30 days).`,
-      )
+      !(await confirm({
+        message: `Move ${person.name} to trash? Their linked tasks and agenda items stay — only the person entry is trashed (recoverable for 30 days).`,
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
     ) {
       return;
     }

@@ -10,8 +10,10 @@ import KnowledgeItemRow, {
   type KnowledgeType,
 } from "@/components/knowledge-item-row";
 import { usePageData } from "@/lib/hooks/use-page-data";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 export default function LibraryPage() {
+  const { confirm } = useConfirmDialog();
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [folders, setFolders] = useState<KnowledgeFolder[]>([]);
   const [projects, setProjects] = useState<KnowledgeProject[]>([]);
@@ -104,9 +106,11 @@ export default function LibraryPage() {
 
   async function handleDeleteFolder(id: string) {
     if (
-      !confirm(
-        "Delete this folder? Subfolders go with it, but items inside just become unfiled.",
-      )
+      !(await confirm({
+        message: "Delete this folder? Subfolders go with it, but items inside just become unfiled.",
+        confirmLabel: "Delete",
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -137,7 +141,14 @@ export default function LibraryPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Move this item to trash? You can restore it within 30 days.")) return;
+    if (
+      !(await confirm({
+        message: "Move this item to trash? You can restore it within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
+    )
+      return;
 
     const res = await fetch(`/api/knowledge-items/${id}`, { method: "DELETE" });
 

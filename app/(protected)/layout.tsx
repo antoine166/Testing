@@ -7,6 +7,7 @@ import RealtimeLayoutRefresher from "@/components/realtime-layout-refresher";
 import RealtimeIndicator from "@/components/realtime-indicator";
 import OfflineQueueIndicator from "@/components/offline-queue-indicator";
 import { ToastProvider } from "@/components/toast";
+import { ConfirmDialogProvider } from "@/components/confirm-dialog";
 import { todayLocal } from "@/lib/date";
 
 export default async function ProtectedLayout({
@@ -74,6 +75,7 @@ export default async function ProtectedLayout({
 
   return (
     <ToastProvider>
+      <ConfirmDialogProvider>
       <div className="flex min-h-screen flex-col md:flex-row">
         <Suspense fallback={<div className="w-64 shrink-0" />}>
           <SidebarNav
@@ -96,6 +98,7 @@ export default async function ProtectedLayout({
       <RealtimeLayoutRefresher />
       <RealtimeIndicator />
       <OfflineQueueIndicator />
+      </ConfirmDialogProvider>
     </ToastProvider>
   );
 }

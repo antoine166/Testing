@@ -7,6 +7,7 @@ import RoutineCard, {
   type TimeOfDay,
 } from "@/components/routine-card";
 import { usePageData } from "@/lib/hooks/use-page-data";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 const TIME_ORDER: Record<TimeOfDay, number> = {
   morning: 0,
@@ -16,6 +17,7 @@ const TIME_ORDER: Record<TimeOfDay, number> = {
 };
 
 export default function RoutinesPage() {
+  const { confirm } = useConfirmDialog();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [creating, setCreating] = useState(false);
 
@@ -71,7 +73,14 @@ export default function RoutinesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Move this routine to trash? You can restore it, with its steps, within 30 days.")) return;
+    if (
+      !(await confirm({
+        message: "Move this routine to trash? You can restore it, with its steps, within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
+    )
+      return;
 
     const res = await fetch(`/api/routines/${id}`, { method: "DELETE" });
 

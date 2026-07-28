@@ -13,8 +13,10 @@ import HabitRow, {
   type HabitLogRow,
   type HabitFrequency,
 } from "@/components/habit-row";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 export default function HabitsPage() {
+  const { confirm } = useConfirmDialog();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLogRow[]>([]);
   const [domains, setDomains] = useState<HabitDomain[]>([]);
@@ -94,7 +96,14 @@ export default function HabitsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Move this habit to trash? You can restore it, with its log history, within 30 days.")) return;
+    if (
+      !(await confirm({
+        message: "Move this habit to trash? You can restore it, with its log history, within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
+    )
+      return;
 
     const res = await fetch(`/api/habits/${id}`, { method: "DELETE" });
 

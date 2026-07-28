@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/toast";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 type TrashItem = {
   id: string;
@@ -49,6 +50,7 @@ export default function TrashPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
+  const { confirm } = useConfirmDialog();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,7 +83,14 @@ export default function TrashPage() {
   }
 
   async function handlePurge(item: TrashItem) {
-    if (!confirm(`Permanently delete "${item.name}"? This can't be undone.`)) return;
+    if (
+      !(await confirm({
+        message: `Permanently delete "${item.name}"? This can't be undone.`,
+        confirmLabel: "Delete",
+        danger: true,
+      }))
+    )
+      return;
 
     const res = await fetch(`/api/trash/${item.type}/${item.id}`, { method: "DELETE" });
 

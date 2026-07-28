@@ -2,9 +2,11 @@
 
 import { useState, type FormEvent } from "react";
 import ChecklistCard, { type Checklist } from "@/components/checklist-card";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 import { usePageData } from "@/lib/hooks/use-page-data";
 
 export default function ChecklistsPage() {
+  const { confirm } = useConfirmDialog();
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [creating, setCreating] = useState(false);
 
@@ -58,7 +60,14 @@ export default function ChecklistsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Move this checklist to trash? You can restore it, with its items, within 30 days.")) return;
+    if (
+      !(await confirm({
+        message: "Move this checklist to trash? You can restore it, with its items, within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
+    )
+      return;
 
     const res = await fetch(`/api/checklists/${id}`, { method: "DELETE" });
 

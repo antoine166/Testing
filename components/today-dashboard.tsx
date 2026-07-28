@@ -22,6 +22,7 @@ import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade"
 import { isRevisitDue } from "@/lib/tasks/inbox";
 import { PRIORITIES } from "@/lib/tasks/constants";
 import { projectConversionToast, ticklerConversionToast, useToast } from "@/components/toast";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 type Checkin = {
   date: string;
@@ -114,6 +115,7 @@ export default function TodayDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
+  const { confirm } = useConfirmDialog();
 
   const [energyLevel, setEnergyLevel] = useState<number | null>(null);
   const [focusLevel, setFocusLevel] = useState<number | null>(null);
@@ -301,7 +303,14 @@ export default function TodayDashboard() {
   }
 
   async function handleDeleteHabit(id: string) {
-    if (!confirm("Move this habit to trash? You can restore it, with its log history, within 30 days.")) return;
+    if (
+      !(await confirm({
+        message: "Move this habit to trash? You can restore it, with its log history, within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
+    )
+      return;
 
     const res = await fetch(`/api/habits/${id}`, { method: "DELETE" });
 

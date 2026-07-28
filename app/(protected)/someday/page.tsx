@@ -7,6 +7,7 @@ import { useTaskList } from "@/lib/hooks/use-task-list";
 import { usePageData } from "@/lib/hooks/use-page-data";
 import { todayLocal } from "@/lib/date";
 import { ticklerConversionToast, useToast } from "@/components/toast";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 type TicklerItem = { id: string; note: string; revisit_date: string };
 
@@ -28,6 +29,7 @@ export default function SomedayPage() {
   const [ticklerItems, setTicklerItems] = useState<TicklerItem[]>([]);
   const [capturing, setCapturing] = useState(false);
   const { showToast } = useToast();
+  const { confirm } = useConfirmDialog();
   const [note, setNote] = useState("");
   const [revisitDate, setRevisitDate] = useState("");
 
@@ -69,7 +71,14 @@ export default function SomedayPage() {
   }
 
   async function handleTicklerDelete(id: string) {
-    if (!confirm("Move this tickler item to trash? You can restore it within 30 days.")) return;
+    if (
+      !(await confirm({
+        message: "Move this tickler item to trash? You can restore it within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
+    )
+      return;
     const res = await fetch(`/api/tickler-items/${id}`, { method: "DELETE" });
     if (!res.ok) {
       const body = await res.json();

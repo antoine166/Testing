@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 export type Checklist = {
   id: string;
@@ -139,6 +140,7 @@ export default function ChecklistCard({
   onUpdate: (id: string, updates: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
 }) {
+  const { confirm } = useConfirmDialog();
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
 
@@ -241,7 +243,14 @@ export default function ChecklistCard({
   }
 
   async function handleReset() {
-    if (!confirm("Uncheck everything on this checklist?")) return;
+    if (
+      !(await confirm({
+        message: "Uncheck everything on this checklist?",
+        confirmLabel: "Uncheck",
+        danger: false,
+      }))
+    )
+      return;
     await fetch(`/api/checklists/${checklist.id}/reset`, { method: "POST" });
     await loadItems();
   }
