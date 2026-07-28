@@ -35,10 +35,12 @@ Core value: **capture must be frictionless.** If Quick Capture ever gets more co
 The most important feature. Available from everywhere in the app.
 
 - Floating action button (bottom-right) + keyboard shortcut (`C`)
-- Modal with a single required field: **title**
-- Optional: notes, due date, domain tag
-- On submit → saved as a task with no domain assigned, which makes it an inbox item (see 3.4)
-- If a domain is set at capture time, the task is already "processed" and skips the inbox
+- Modal with a single required field: **title** (auto-focused — the fast path is type-and-Enter, everything else is skippable)
+- A **Task / Project** mode toggle: a captured thought that's clearly multi-step can be created as a project directly
+- Optional fields *(shape reviewed and blessed July 2026 — issue #114; the original spec was "title + notes/due/domain" but the extra fields earned their place in practice)*: link, notes, priority, due date, scheduled date, photo attachment, and Waiting For (task mode); domain (project mode only)
+- Every input has a visible label, matching the full add-task form's styling (placeholders alone read as an unlabeled wall in a 9-control modal)
+- On submit, a task → saved with no domain, which makes it an inbox item (see 3.4) — unless Waiting For was checked, which files it to Waiting For (3.10) directly. **Deliberate**: there is no domain picker in task mode — assigning a domain is a Clarify decision (GTD: capture first, process later), so captured tasks always land in the Inbox
+- A project → created under the chosen domain (or none)
 - Must be dismissible with `Escape`
 - **Voice capture**: a 🎤 button beside the title field dictates via the Web Speech API (browser-native, no server, no API key) — final transcript appends to whatever's already typed. Feature-detected: the button simply doesn't render in browsers without speech recognition
 - **Offline queueing**: if the save request fails with a network error (not a real server rejection — an invalid submission still surfaces its error normally), the capture is stashed in IndexedDB (`lib/offline-queue.ts`) instead of lost, including a photo attachment if one was added. It replays automatically against the real API the moment the browser reports it's back online (or on next app load), oldest first — a network error mid-replay stops the run and leaves the rest queued for later, while a genuine server rejection (4xx/5xx) drops just that one entry rather than retrying forever. A persistent badge (`components/offline-queue-indicator.tsx`, same visual language as the realtime "Synced" pulse) shows how many captures are waiting, so it's never a silent black box. This is Quick-Capture-only — the app has no general offline data access (see 8)
@@ -806,7 +808,7 @@ Supabase is called **server-side only** (via the service-role client or the user
 - [x] Claude Connector (MCP) — remote MCP server for claude.ai / Claude Desktop (3.11a), also expanded to full read/write per 3.11a
 
 ### Phase 4 — Polish
-- [ ] Supabase Realtime (live updates across tabs) — infra shipped (publication membership, `REPLICA IDENTITY FULL`); a cross-tab bug (edits not propagating) was root-caused to the client never forwarding its JWT to Realtime on `INITIAL_SESSION` and a fix shipped, pending live confirmation
+- [x] Supabase Realtime (live updates across tabs) — infra shipped (publication membership, `REPLICA IDENTITY FULL`); a cross-tab bug (edits not propagating) was root-caused to the client never forwarding its JWT to Realtime on `INITIAL_SESSION`, fixed, and confirmed live (two-tab test, July 28)
 - [x] Mobile UX pass (touch targets, hover-only controls, wrapping fixes audited and fixed); no dedicated live-device QA pass yet
 - [x] Habit analytics (`/analytics` — streaks, task completion, check-in trends over a rolling window, plus a **System-trust** row: median capture→clarify latency via `tasks.clarified_at`, inbox count + oldest age, stalled projects, review streak); weekly review is a guided no-AI flow at `/weekly-review` with history/streak/cadence (see 3.11)
 - [x] Daily Shutdown ritual (3.5b), Contexts view (3.4c), Do Now energy pre-filter (3.6), Natural Planning flow (3.11), voice capture (3.1), Waiting For → Agenda handoff (3.10a), in-app User Guide (`/guide`)
