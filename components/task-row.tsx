@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
 import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
+import type { RemovalKind } from "@/components/leave-transition";
 import { daysSince, todayLocal } from "@/lib/date";
 import { tapHaptic } from "@/lib/haptics";
 import RecurrenceFields, {
@@ -285,6 +286,7 @@ export default function TaskRow({
   selected = false,
   onSelectChange,
   dragProps,
+  leaving,
 }: {
   task: Task;
   domains: TaskDomain[];
@@ -303,6 +305,8 @@ export default function TaskRow({
   onSelectChange?: (checked: boolean) => void;
   /** Present when the list supports drag-to-reorder (ReorderableTaskList). */
   dragProps?: TaskDragProps;
+  /** Set on the short-lived snapshot row rendered while a removed task's space collapses (#121/#138) — styles the leave animation and disables interaction. */
+  leaving?: RemovalKind;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -698,9 +702,10 @@ export default function TaskRow({
       onDragOver={dragProps ? (e) => dragProps.onDragOver(e) : undefined}
       onDrop={dragProps ? (e) => e.preventDefault() : undefined}
       onDragEnd={dragProps ? () => dragProps.onDragEnd() : undefined}
+      aria-hidden={leaving ? true : undefined}
       className={`flex items-start justify-between gap-3 rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
-        fadingOut ? "task-swipe-out" : ""
-      } ${dragProps ? "cursor-grab active:cursor-grabbing" : ""} ${
+        leaving ? `row-leaving row-leaving-${leaving}` : ""
+      } ${fadingOut ? "task-swipe-out" : ""} ${dragProps ? "cursor-grab active:cursor-grabbing" : ""} ${
         dragProps?.dragging ? "opacity-40" : ""
       }`}
     >

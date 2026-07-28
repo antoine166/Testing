@@ -6,6 +6,7 @@ import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { todayLocal } from "@/lib/date";
 import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { useConfirmDialog } from "@/components/confirm-dialog";
+import { markRemovalKind } from "@/components/leave-transition";
 import {
   knowledgeConversionToast,
   projectConversionToast,
@@ -159,6 +160,10 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
   }
 
   async function toggleDone(task: Task) {
+    // The row is about to leave lists that filter on done-ness — tell the
+    // leave transition why (↩️ badge for un-completing, plain collapse for
+    // completing, whose celebration TaskRow already owns).
+    markRemovalKind(task.id, task.status === "done" ? "undone" : "done");
     return handleUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
   }
 
@@ -188,6 +193,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     const snapshot = tasks;
     const anchor = tasks.find((t) => t.id === id);
     markLocalRefresh();
+    markRemovalKind(id, "trash");
     setTasks((prev) =>
       scope === "following" && anchor ? removeSeriesFrom(prev, anchor) : removeTask(prev, id),
     );
@@ -270,6 +276,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     // the server confirms, since they create entities outside this list.
     const snapshot = tasks;
     markLocalRefresh();
+    markRemovalKind(id, "convert");
     setTasks((prev) => removeTask(prev, id));
 
     // domainId lets the edit form's unsaved domain selection carry straight
@@ -311,6 +318,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
   ): Promise<boolean> {
     const snapshot = tasks;
     markLocalRefresh();
+    markRemovalKind(id, "convert");
     setTasks((prev) => removeTask(prev, id));
 
     let res: Response;
@@ -348,6 +356,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
       return false;
     const snapshot = tasks;
     markLocalRefresh();
+    markRemovalKind(id, "convert");
     setTasks((prev) => removeTask(prev, id));
 
     let res: Response;

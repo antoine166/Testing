@@ -173,7 +173,86 @@ body {
 }
 
 /* Calmer days / accessibility: keep the state change, drop the motion. */
+/* Leave transitions (#121 + #138): a row leaving its list collapses
+   instead of the rows below jumping up in one frame. max-height keyframe
+   (from a value taller than any collapsed row) rather than a measured
+   height — close enough visually, and needs no layout reads. The 60ms
+   delay lets the reason badge land before the space starts closing. */
+@keyframes row-collapse {
+  from {
+    max-height: 200px;
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+  }
+}
+
+.row-leaving {
+  position: relative;
+  overflow: hidden;
+  pointer-events: none;
+  animation: row-collapse 260ms ease 60ms both;
+}
+
+/* Why the row left: 🗑️ trashed, ↩️ un-completed back to life. Plain
+   completions keep TaskRow's own check/strike/swipe celebration and just
+   collapse. */
+@keyframes leave-badge-pop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9) translateY(-10px);
+    opacity: 0;
+  }
+}
+
+.row-leaving-trash::after,
+.row-leaving-undone::after,
+.row-leaving-restore::after {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  animation: leave-badge-pop 280ms ease-out both;
+}
+
+.row-leaving-trash::after {
+  content: "🗑️";
+}
+
+.row-leaving-undone::after,
+.row-leaving-restore::after {
+  content: "↩️";
+}
+
+.row-leaving-trash > * {
+  opacity: 0.45;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .row-leaving {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+  }
+  .row-leaving-trash::after,
+  .row-leaving-undone::after,
+  .row-leaving-restore::after {
+    animation: none;
+    content: none;
+  }
   .task-swipe-out {
     transition: opacity 200ms ease;
     transform: none;
