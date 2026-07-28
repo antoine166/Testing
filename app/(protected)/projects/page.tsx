@@ -3,23 +3,10 @@
 import { Fragment, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { useTaskList } from "@/lib/hooks/use-task-list";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
 import ReorderableTaskList from "@/components/reorderable-task-list";
-import { type Task } from "@/components/task-row";
-import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
-import {
-  knowledgeConversionToast,
-  recurringConversionToast,
-  taskTrashedToast,
-  useToast,
-} from "@/components/toast";
-
-type Domain = {
-  id: string;
-  name: string;
-  color: string;
-};
 
 type ProjectStatus = "active" | "someday" | "completed" | "archived";
 type ProjectPriority = "none" | "low" | "medium" | "high";
@@ -42,10 +29,6 @@ type Project = {
   last_reviewed_at: string | null;
   created_at: string;
 };
-
-// Full task rows — this page shows each project's tasks underneath it, not
-// just counts for the stalled check.
-type ProjectTask = Task;
 
 type SupportItem = { id: string; title: string; type: string; url: string | null; project_id: string | null };
 
@@ -73,12 +56,25 @@ export default function ProjectsPage() {
   const searchParams = useSearchParams();
   const domainFilter = searchParams.get("domain");
 
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [tasks, setTasks] = useState<ProjectTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { showToast } = useToast();
+  // Shared fetch + task-CRUD wiring (July 2026 de-dup, issue #112): the
+  // task rows under each project get the same optimistic, offline-safe,
+  // undo-toasted handlers as every other task list, instead of the page's
+  // former hand-rolled copies.
+  const {
+    domains,
+    projects,
+    tasks,
+    loading,
+    error,
+    setError,
+    handleUpdate: handleTaskUpdate,
+    toggleDone: toggleTaskDone,
+    handleDelete: handleTaskDelete,
+    handleConvertToRecurring: handleTaskConvertToRecurring,
+    handleConvertToKnowledgeItem: handleTaskConvertToKnowledgeItem,
+    createTask,
+    loadAll,
+  } = useTaskList<Project>({ onAfterRefresh: () => loadExtras() });
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -115,79 +111,27 @@ export default function ProjectsPage() {
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [supportItems, setSupportItems] = useState<SupportItem[]>([]);
 
-  async function loadAll() {
-    markLocalRefresh();
-    try {
-      const [domainsRes, projectsRes, tasksRes, templatesRes, itemsRes] = await Promise.all([
-        fetch("/api/domains"),
-        fetch("/api/projects"),
-        fetch("/api/tasks"),
-        fetch("/api/project-templates"),
-        fetch("/api/knowledge-items"),
-      ]);
-      if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok || !templatesRes.ok || !itemsRes.ok) {
-        throw new Error("Failed to load projects");
-      }
-      setDomains(await domainsRes.json());
-      setProjects(await projectsRes.json());
-      setTasks(await tasksRes.json());
-      setTemplates(await templatesRes.json());
-      setSupportItems(await itemsRes.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
+  // Templates + reference items are page-specific extras the shared hook
+  // doesn't fetch. onAfterRefresh keeps them in step with the hook's
+  // reloads; the effect covers first paint (the hook's initial load
+  // doesn't run onAfterRefresh); the realtime subscription covers edits
+  // to just these tables from another tab. Same pattern as the Tasks
+  // page's recurring-template list.
+  async function loadExtras() {
+    const [templatesRes, itemsRes] = await Promise.all([
+      fetch("/api/project-templates"),
+      fetch("/api/knowledge-items"),
+    ]);
+    if (!templatesRes.ok || !itemsRes.ok) return;
+    setTemplates(await templatesRes.json());
+    setSupportItems(await itemsRes.json());
   }
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    Promise.all([
-      fetch("/api/domains", { signal: controller.signal }),
-      fetch("/api/projects", { signal: controller.signal }),
-      fetch("/api/tasks", { signal: controller.signal }),
-      fetch("/api/project-templates", { signal: controller.signal }),
-      fetch("/api/knowledge-items", { signal: controller.signal }),
-    ])
-      .then(async ([domainsRes, projectsRes, tasksRes, templatesRes, itemsRes]) => {
-        if (!domainsRes.ok || !projectsRes.ok || !tasksRes.ok || !templatesRes.ok || !itemsRes.ok) {
-          throw new Error("Failed to load projects");
-        }
-        return Promise.all([
-          domainsRes.json(),
-          projectsRes.json(),
-          tasksRes.json(),
-          templatesRes.json(),
-          itemsRes.json(),
-        ]);
-      })
-      .then(
-        ([domainsData, projectsData, tasksData, templatesData, itemsData]: [
-          Domain[],
-          Project[],
-          ProjectTask[],
-          ProjectTemplate[],
-          SupportItem[],
-        ]) => {
-          setDomains(domainsData);
-          setProjects(projectsData);
-          setTasks(tasksData);
-          setTemplates(templatesData);
-          setSupportItems(itemsData);
-        },
-      )
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
+    loadExtras();
   }, []);
 
-  useRealtimeRefresh(["projects", "domains", "tasks", "project_templates", "knowledge_items"], () => loadAll());
+  useRealtimeRefresh(["project_templates", "knowledge_items"], () => loadExtras());
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -325,99 +269,17 @@ export default function ProjectsPage() {
     if (!title) return;
 
     setAddingTaskId(project.id);
-    const res = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        project_id: project.id,
-        domain_id: project.domain_id,
-      }),
+    // createTask (shared hook) prepends the new row locally instead of a
+    // full reload — same optimistic behavior as every other task list.
+    const created = await createTask({
+      title,
+      project_id: project.id,
+      domain_id: project.domain_id,
     });
     setAddingTaskId(null);
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to create task");
-      return;
-    }
+    if (!created) return;
 
     setNewTaskTitles((prev) => ({ ...prev, [project.id]: "" }));
-    await loadAll();
-  }
-
-  // Task row handlers — same wiring as the Domains page, so the task rows
-  // shown under each project here are fully live (complete/edit/delete/convert).
-  async function handleTaskUpdate(id: string, updates: Record<string, unknown>) {
-    const res = await fetch(`/api/tasks/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to update task");
-      return;
-    }
-    await loadAll();
-  }
-
-  async function toggleTaskDone(task: Task) {
-    await handleTaskUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
-  }
-
-  async function handleTaskDelete(id: string, scope?: "skip" | "following") {
-    if (!scope && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
-    const url = scope === "following" ? `/api/tasks/${id}?scope=following` : `/api/tasks/${id}`;
-    const res = await fetch(url, { method: "DELETE" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to delete task");
-      return;
-    }
-    if (scope === "following") {
-      showToast("Series moved to Trash", { label: "View Trash", href: "/trash" });
-    } else {
-      showToast(
-        ...taskTrashedToast(async () => {
-          const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
-          if (undoRes.ok) await loadAll();
-        }),
-      );
-    }
-    await loadAll();
-  }
-
-  async function handleTaskConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
-    const res = await fetch(`/api/tasks/${id}/convert-to-recurring`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pattern),
-    });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to convert task to recurring");
-      return;
-    }
-    showToast(...recurringConversionToast(await res.json()));
-    await loadAll();
-  }
-
-  async function handleTaskConvertToKnowledgeItem(id: string) {
-    if (
-      !confirm(
-        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
-      )
-    )
-      return;
-    const res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to file task as reference");
-      return;
-    }
-    showToast(...knowledgeConversionToast(await res.json()));
-    await loadAll();
   }
 
   async function handleSaveAsTemplate(project: Project) {
