@@ -1,3 +1,48 @@
+/**
+ * Prefer a client-supplied YYYY-MM-DD over a server-computed fallback.
+ *
+ * Server routes run in UTC, so "today" computed there is wrong for
+ * Antoine every evening (10pm Eastern is already tomorrow in UTC — the
+ * #112 item 4 bug). Clients send `client_date: todayLocal()` alongside
+ * requests that need a date stamp; routes resolve it through this so a
+ * missing or malformed value degrades to the old server behavior
+ * instead of storing garbage.
+ */
+export function clientDateOr(value: unknown, fallback: string): string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return fallback;
+  const [year, month, day] = value.split("-").map(Number);
+  const d = new Date(year, month - 1, day);
+  const roundTrips =
+    d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+  return roundTrips ? value : fallback;
+}
+
+/** Add n days (may be negative) to a YYYY-MM-DD date string. */
+export function addDays(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + n);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+/** Add n days (may be negative) to a Date, returning a new Date. */
+export function addDaysDate(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+/** "2026-07-15" (or a full timestamp) -> "July 2026". */
+export function monthLabel(dateStr: string): string {
+  const [year, month] = dateStr.split("T")[0].split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export function todayLocal(): string {
   const now = new Date();
   const offsetMs = now.getTimezoneOffset() * 60000;

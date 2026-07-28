@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
 import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
-import { todayLocal } from "@/lib/date";
+import { daysSince, todayLocal } from "@/lib/date";
 import { tapHaptic } from "@/lib/haptics";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
@@ -98,11 +98,6 @@ function linkLabel(url: string): string {
   } catch {
     return url;
   }
-}
-
-function daysSince(date: string): number {
-  const ms = Date.now() - new Date(`${date}T00:00:00`).getTime();
-  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
 }
 
 /** "14:30:00" (Postgres time) -> "2:30 PM". */

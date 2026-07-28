@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import { clientDateOr } from "@/lib/date";
 
 export async function GET(request: Request) {
   const { supabase, user } = await requireUser();
@@ -47,8 +48,10 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const date =
-    typeof body.date === "string" ? body.date : new Date().toISOString().slice(0, 10);
+  // Both app callers send todayLocal() as body.date; validate it (and keep
+  // the server-UTC fallback only for a malformed/missing value) rather
+  // than trusting any string into a date column (#112 item 4).
+  const date = clientDateOr(body.date, new Date().toISOString().slice(0, 10));
   const energyLevel = Number(body.energy_level);
   const focusLevel = Number(body.focus_level);
 

@@ -432,6 +432,7 @@ export default function TodayDashboard() {
         waiting_for: newTaskWaitingFor || undefined,
         waiting_on: newTaskWaitingFor && newTaskWaitingOn.trim() ? newTaskWaitingOn.trim() : undefined,
         follow_up_date: newTaskWaitingFor && newTaskFollowUpDate ? newTaskFollowUpDate : undefined,
+        client_date: today,
         someday: newTaskSomeday || undefined,
         revisit_date: newTaskSomeday && newTaskRevisitDate ? newTaskRevisitDate : undefined,
         context: newTaskContext.trim() || undefined,

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Task, TaskDomain, TaskProject } from "@/components/task-row";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
+import { todayLocal } from "@/lib/date";
 import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import {
@@ -129,7 +130,9 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
       res = await fetch(`/api/tasks/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
+        // client_date: the server runs in UTC and can't know what day it
+        // is locally — it uses this for waiting_since (#112 item 4).
+        body: JSON.stringify({ ...updates, client_date: todayLocal() }),
       });
     } catch {
       setTasks(snapshot);
@@ -234,7 +237,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
       res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, client_date: todayLocal() }),
       });
     } catch {
       showToast(OFFLINE_ERROR);

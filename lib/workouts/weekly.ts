@@ -3,6 +3,7 @@
 // weeks, current week excluded from the backward streak walk until it
 // closes), kept as a standalone copy rather than shared since workouts
 // have no other frequency modes to unify with.
+import { addDaysDate } from "@/lib/date";
 
 export type WorkoutLogForWeekly = { logged_date: string };
 
@@ -16,12 +17,6 @@ function formatLocalDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
 }
 
 function weekKey(dateStr: string): string {
@@ -56,13 +51,13 @@ export function computeWeeklyGoalStreak(
   }
 
   let current = (countsByWeek.get(currentWeekKey) ?? 0) >= target ? 1 : 0;
-  let cursor = addDays(parseLocalDate(currentWeekKey), -7);
+  let cursor = addDaysDate(parseLocalDate(currentWeekKey), -7);
   for (let i = 0; i < 520; i++) {
     const key = weekKey(formatLocalDate(cursor));
     const count = countsByWeek.get(key) ?? 0;
     if (count >= target) {
       current++;
-      cursor = addDays(cursor, -7);
+      cursor = addDaysDate(cursor, -7);
     } else {
       break;
     }
@@ -79,7 +74,7 @@ export function computeWeeklyGoalStreak(
     const weekDate = parseLocalDate(key);
 
     if (count >= target) {
-      run = prevWeek && formatLocalDate(addDays(prevWeek, 7)) === key ? run + 1 : 1;
+      run = prevWeek && formatLocalDate(addDaysDate(prevWeek, 7)) === key ? run + 1 : 1;
       longest = Math.max(longest, run);
       prevWeek = weekDate;
     } else {
