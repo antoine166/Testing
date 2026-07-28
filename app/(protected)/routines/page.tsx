@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import RoutineCard, {
   TIMES_OF_DAY,
   type Routine,
   type TimeOfDay,
 } from "@/components/routine-card";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 
 const TIME_ORDER: Record<TimeOfDay, number> = {
   morning: 0,
@@ -17,42 +17,19 @@ const TIME_ORDER: Record<TimeOfDay, number> = {
 
 export default function RoutinesPage() {
   const [routines, setRoutines] = useState<Routine[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const [name, setName] = useState("");
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>("morning");
 
-  async function loadRoutines() {
-    try {
-      const res = await fetch("/api/routines");
+  const { loading, error, setError, reload: loadRoutines } = usePageData(
+    async (signal) => {
+      const res = await fetch("/api/routines", { signal });
       if (!res.ok) throw new Error("Failed to load routines");
       setRoutines(await res.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetch("/api/routines", { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load routines"))))
-      .then((data: Routine[]) => setRoutines(data))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["routines", "routine_items"], () => loadRoutines());
+    },
+    { tables: ["routines", "routine_items"] },
+  );
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 import WorkoutRow, { type Workout, type WorkoutLog } from "@/components/workout-row";
 
 const HISTORY_WINDOW_OPTIONS = [7, 14, 28, 74, 148] as const;
@@ -19,8 +19,6 @@ function shiftDate(date: string, deltaDays: number): string {
 export default function TrainingLogPage() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [selectedDate, setSelectedDate] = useState(todayLocal());
   const [newName, setNewName] = useState("");
@@ -28,50 +26,20 @@ export default function TrainingLogPage() {
   const [historyWindow, setHistoryWindow] =
     useState<(typeof HISTORY_WINDOW_OPTIONS)[number]>(7);
 
-  async function loadAll() {
-    try {
+  const { loading, error, setError, reload: loadAll } = usePageData(
+    async (signal) => {
       const [workoutsRes, logsRes] = await Promise.all([
-        fetch("/api/workouts"),
-        fetch("/api/workout-logs"),
+        fetch("/api/workouts", { signal }),
+        fetch("/api/workout-logs", { signal }),
       ]);
       if (!workoutsRes.ok || !logsRes.ok) {
         throw new Error("Failed to load training log");
       }
       setWorkouts(await workoutsRes.json());
       setLogs(await logsRes.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const opts = { signal: controller.signal };
-
-    Promise.all([fetch("/api/workouts", opts), fetch("/api/workout-logs", opts)])
-      .then(async ([workoutsRes, logsRes]) => {
-        if (!workoutsRes.ok || !logsRes.ok) {
-          throw new Error("Failed to load training log");
-        }
-        return Promise.all([workoutsRes.json(), logsRes.json()]);
-      })
-      .then(([workoutsData, logsData]) => {
-        setWorkouts(workoutsData);
-        setLogs(logsData);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["workouts", "workout_logs"], () => loadAll());
+    },
+    { tables: ["workouts", "workout_logs"] },
+  );
 
   async function handleCreateWorkout(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

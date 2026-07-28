@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   computeStreak,
   isHabitDueToday,
@@ -10,7 +10,7 @@ import { findStalledProjectIds } from "@/lib/projects/stalled";
 import { reviewStreakWeeks } from "@/lib/reviews/streak";
 import { todayLocal, lastNDays, daysSince } from "@/lib/date";
 import { isInInbox } from "@/lib/tasks/inbox";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 
 type HabitFrequency = "daily" | "specific_days" | "times_per_week";
 
@@ -76,8 +76,6 @@ export default function AnalyticsPage() {
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [reviewLogs, setReviewLogs] = useState<ReviewLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState<(typeof WINDOW_OPTIONS)[number]>(28);
 
   function domainColor(habit: Habit): string {
@@ -88,8 +86,8 @@ export default function AnalyticsPage() {
   const days = lastNDays(windowDays);
   const last7 = lastNDays(7);
 
-  async function loadAll(signal?: AbortSignal) {
-    try {
+  const { loading, error } = usePageData(
+    async (signal) => {
       const opts = { signal };
       const [habitsRes, logsRes, tasksRes, checkinsRes, domainsRes, workoutsRes, workoutLogsRes, projectsRes, reviewLogsRes] =
         await Promise.all([
@@ -124,78 +122,10 @@ export default function AnalyticsPage() {
       setWorkoutLogs(await workoutLogsRes.json());
       setProjects(await projectsRes.json());
       setReviewLogs(reviewLogsRes.ok ? await reviewLogsRes.json() : []);
-      setError(null);
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const opts = { signal: controller.signal };
-
-    Promise.all([
-      fetch("/api/habits", opts),
-      fetch("/api/habit-logs", opts),
-      fetch("/api/tasks", opts),
-      fetch("/api/checkins", opts),
-      fetch("/api/domains", opts),
-      fetch("/api/workouts", opts),
-      fetch("/api/workout-logs", opts),
-      fetch("/api/projects", opts),
-      fetch("/api/weekly-review-logs", opts),
-    ])
-      .then(async ([habitsRes, logsRes, tasksRes, checkinsRes, domainsRes, workoutsRes, workoutLogsRes, projectsRes, reviewLogsRes]) => {
-        if (
-          !habitsRes.ok ||
-          !logsRes.ok ||
-          !tasksRes.ok ||
-          !checkinsRes.ok ||
-          !domainsRes.ok ||
-          !workoutsRes.ok ||
-          !workoutLogsRes.ok ||
-          !projectsRes.ok
-        ) {
-          throw new Error("Failed to load analytics");
-        }
-        return Promise.all([
-          habitsRes.json(),
-          logsRes.json(),
-          tasksRes.json(),
-          checkinsRes.json(),
-          domainsRes.json(),
-          workoutsRes.json(),
-          workoutLogsRes.json(),
-          projectsRes.json(),
-          reviewLogsRes.ok ? reviewLogsRes.json() : [],
-        ]);
-      })
-      .then(([habitsData, logsData, tasksData, checkinsData, domainsData, workoutsData, workoutLogsData, projectsData, reviewLogsData]) => {
-        setHabits(habitsData);
-        setLogs(logsData);
-        setTasks(tasksData);
-        setCheckins(checkinsData);
-        setDomains(domainsData);
-        setWorkouts(workoutsData);
-        setWorkoutLogs(workoutLogsData);
-        setProjects(projectsData);
-        setReviewLogs(reviewLogsData);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(
-    ["habits", "habit_logs", "tasks", "daily_checkins", "domains", "workouts", "workout_logs", "projects", "weekly_review_logs"],
-    () => loadAll(),
+    },
+    {
+      tables: ["habits", "habit_logs", "tasks", "daily_checkins", "domains", "workouts", "workout_logs", "projects", "weekly_review_logs"],
+    },
   );
 
   if (loading) {

@@ -1,48 +1,23 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import ChecklistCard, { type Checklist } from "@/components/checklist-card";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 
 export default function ChecklistsPage() {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const [name, setName] = useState("");
 
-  async function loadChecklists() {
-    try {
-      const res = await fetch("/api/checklists");
+  const { loading, error, setError, reload: loadChecklists } = usePageData(
+    async (signal) => {
+      const res = await fetch("/api/checklists", { signal });
       if (!res.ok) throw new Error("Failed to load checklists");
       setChecklists(await res.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetch("/api/checklists", { signal: controller.signal })
-      .then((res) =>
-        res.ok ? res.json() : Promise.reject(new Error("Failed to load checklists")),
-      )
-      .then((data: Checklist[]) => setChecklists(data))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["checklists", "checklist_items"], () => loadChecklists());
+    },
+    { tables: ["checklists", "checklist_items"] },
+  );
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

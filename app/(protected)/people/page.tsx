@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 
 // The people layer (SCOPE.md §3.10a): everything involving one person in
 // one place — their open tasks (real person_id links), delegations
@@ -27,8 +27,6 @@ export default function PeoplePage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [tasks, setTasks] = useState<PersonTask[]>([]);
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [newName, setNewName] = useState("");
   const [newNotes, setNewNotes] = useState("");
@@ -38,12 +36,12 @@ export default function PeoplePage() {
   const [linkTaskFor, setLinkTaskFor] = useState<string | null>(null);
   const [linkTaskId, setLinkTaskId] = useState("");
 
-  async function loadAll() {
-    try {
+  const { loading, error, setError, reload: loadAll } = usePageData(
+    async (signal) => {
       const [peopleRes, tasksRes, agendaRes] = await Promise.all([
-        fetch("/api/people"),
-        fetch("/api/tasks"),
-        fetch("/api/agenda-items"),
+        fetch("/api/people", { signal }),
+        fetch("/api/tasks", { signal }),
+        fetch("/api/agenda-items", { signal }),
       ]);
       if (!peopleRes.ok || !tasksRes.ok || !agendaRes.ok) {
         throw new Error("Failed to load people");
@@ -51,41 +49,9 @@ export default function PeoplePage() {
       setPeople(await peopleRes.json());
       setTasks(await tasksRes.json());
       setAgendaItems(await agendaRes.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    Promise.all([
-      fetch("/api/people", { signal: controller.signal }),
-      fetch("/api/tasks", { signal: controller.signal }),
-      fetch("/api/agenda-items", { signal: controller.signal }),
-    ])
-      .then(async ([peopleRes, tasksRes, agendaRes]) => {
-        if (!peopleRes.ok || !tasksRes.ok || !agendaRes.ok) {
-          throw new Error("Failed to load people");
-        }
-        return Promise.all([peopleRes.json(), tasksRes.json(), agendaRes.json()]);
-      })
-      .then(([peopleData, tasksData, agendaData]: [Person[], PersonTask[], AgendaItem[]]) => {
-        setPeople(peopleData);
-        setTasks(tasksData);
-        setAgendaItems(agendaData);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["people", "tasks", "agenda_items"], () => loadAll());
+    },
+    { tables: ["people", "tasks", "agenda_items"] },
+  );
 
   const openTasks = useMemo(() => tasks.filter((t) => t.status !== "done"), [tasks]);
   const linkableTasks = useMemo(
