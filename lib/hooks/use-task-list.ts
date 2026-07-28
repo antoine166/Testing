@@ -6,7 +6,7 @@ import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { todayLocal } from "@/lib/date";
 import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { useConfirmDialog } from "@/components/confirm-dialog";
-import { markRemovalKind } from "@/components/leave-transition";
+import { markRemovalKind, markTaskAdded } from "@/components/leave-transition";
 import {
   knowledgeConversionToast,
   projectConversionToast,
@@ -258,6 +258,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     // Prepend instead of reloading — matches the API's newest-first-among-
     // unsorted ordering closely enough; the next reload trues it.
     markLocalRefresh();
+    markTaskAdded(created.id);
     setTasks((prev) => [created, ...prev]);
     return created;
   }

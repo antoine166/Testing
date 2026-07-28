@@ -26,7 +26,40 @@ export function markRemovalKind(id: string, kind: RemovalKind) {
   setTimeout(() => recentRemovals.delete(id), 2000);
 }
 
-export const LEAVE_MS = 260;
+export const LEAVE_MS = 420;
+
+// Enter animation (#138 feedback round): rows created by a local add grow
+// in instead of blinking in. Same registry idea as removals — only ids
+// registered here animate, so refetches and realtime inserts stay instant.
+const recentAdditions = new Set<string>();
+
+export function markTaskAdded(id: string) {
+  recentAdditions.add(id);
+  setTimeout(() => recentAdditions.delete(id), 2000);
+}
+
+/** One-shot: true for a just-added id the first time its row mounts. */
+export function consumeTaskAdded(id: string): boolean {
+  if (!recentAdditions.has(id)) return false;
+  recentAdditions.delete(id);
+  return true;
+}
+
+/**
+ * Merge live items with leaving snapshots at (approximately) their old
+ * positions — for pages that render rows with a plain .map() instead of
+ * ReorderableTaskList.
+ */
+export function withLeaving<T extends { id: string }>(
+  items: T[],
+  leaving: LeavingEntry<T>[],
+): Array<{ item: T; leaving?: RemovalKind }> {
+  const display: Array<{ item: T; leaving?: RemovalKind }> = items.map((item) => ({ item }));
+  for (const l of leaving) {
+    display.splice(Math.min(l.index, display.length), 0, { item: l.item, leaving: l.kind });
+  }
+  return display;
+}
 
 export type LeavingEntry<T> = { item: T; kind: RemovalKind; index: number };
 

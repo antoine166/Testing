@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
 import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
-import type { RemovalKind } from "@/components/leave-transition";
+import { consumeTaskAdded, type RemovalKind } from "@/components/leave-transition";
 import { daysSince, todayLocal } from "@/lib/date";
 import { tapHaptic } from "@/lib/haptics";
 import RecurrenceFields, {
@@ -320,6 +320,9 @@ export default function TaskRow({
   // Un-completing (in views where done tasks are still shown) stays instant.
   const [completing, setCompleting] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
+  // One-shot on mount: true only for a row the user just added locally —
+  // it grows in (row-entering) instead of blinking in (#138 feedback).
+  const [entering] = useState(() => consumeTaskAdded(task.id));
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Holds the click-time "commit the completion" closure while the animation
@@ -705,7 +708,7 @@ export default function TaskRow({
       aria-hidden={leaving ? true : undefined}
       className={`flex items-start justify-between gap-3 rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
         leaving ? `row-leaving row-leaving-${leaving}` : ""
-      } ${fadingOut ? "task-swipe-out" : ""} ${dragProps ? "cursor-grab active:cursor-grabbing" : ""} ${
+      } ${entering && !leaving ? "row-entering" : ""} ${fadingOut ? "task-swipe-out" : ""} ${dragProps ? "cursor-grab active:cursor-grabbing" : ""} ${
         dragProps?.dragging ? "opacity-40" : ""
       }`}
     >
