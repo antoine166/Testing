@@ -194,7 +194,10 @@ export default function TasksPage() {
     setTitle("");
     setLink("");
     setNotes("");
-    resetDomainProject();
+    // Reset back to the page's filter, not to blank — when viewing one
+    // project's tasks (/tasks?project=X), the next add should still land
+    // in that project, same as the form's initial state.
+    resetDomainProject(domainFilter ?? "", projectFilter ?? "");
     setPriority("none");
     setDueDate("");
     setScheduledDate("");
