@@ -11,7 +11,12 @@ import TaskRow, { type TaskPriority, type TaskEnergy } from "@/components/task-r
 import { type Routine } from "@/components/routine-card";
 import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { useTaskList } from "@/lib/hooks/use-task-list";
-import { markTaskAdded, useLeaveTransition, withLeaving } from "@/components/leave-transition";
+import {
+  markRemovalKind,
+  markTaskAdded,
+  useLeaveTransition,
+  withLeaving,
+} from "@/components/leave-transition";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -262,6 +267,10 @@ export default function TodayDashboard() {
   }
 
   async function addHabitLog(habit: Habit, date: string) {
+    // If this log clears the habit for today it leaves the due list —
+    // plain collapse (the punch in HabitRow already celebrated). Expires
+    // unused when the habit stays (times_per_week under target).
+    markRemovalKind(habit.id, "done");
     const result = await postHabitLog(habit.id, date);
     if (!result.ok) {
       setError(result.error);
@@ -533,13 +542,6 @@ export default function TodayDashboard() {
   const appointmentsDisplay = withLeaving(appointmentsToday, useLeaveTransition(appointmentsToday));
   const plannedDisplay = withLeaving(plannedToday, useLeaveTransition(plannedToday));
 
-  if (loading || tasksLoading) {
-    return <p className="text-sm text-zinc-500">Loading...</p>;
-  }
-
-  const dueRoutines = routines.filter(
-    (r) => r.active && (r.time_of_day === currentTimeOfDay() || r.time_of_day === "custom"),
-  );
   // Today page only ever shows habits still needing attention — done for
   // today (or, for times_per_week habits, the week's target already hit)
   // drops them from here entirely, though they stay visible on /habits.
@@ -551,6 +553,16 @@ export default function TodayDashboard() {
       const bAtRisk = isAtRisk(b, logs.filter((l) => l.habit_id === b.id), today);
       return (bAtRisk ? 1 : 0) - (aAtRisk ? 1 : 0);
     });
+  // Hook — must sit above the loading early-return, like the task lists'.
+  const dueHabitsDisplay = withLeaving(dueHabits, useLeaveTransition(dueHabits));
+
+  if (loading || tasksLoading) {
+    return <p className="text-sm text-zinc-500">Loading...</p>;
+  }
+
+  const dueRoutines = routines.filter(
+    (r) => r.active && (r.time_of_day === currentTimeOfDay() || r.time_of_day === "custom"),
+  );
   const atRiskCount = dueHabits.filter((h) =>
     isAtRisk(h, logs.filter((l) => l.habit_id === h.id), today),
   ).length;
@@ -1135,9 +1147,10 @@ export default function TodayDashboard() {
           <p className="text-sm text-zinc-500">No habits due today.</p>
         ) : (
           <ul className="space-y-2">
-            {dueHabits.map((habit) => (
+            {dueHabitsDisplay.map(({ item: habit, leaving }) => (
               <HabitRow
-                key={habit.id}
+                key={leaving ? `leaving-${habit.id}` : habit.id}
+                leaving={leaving}
                 habit={habit}
                 logs={logs.filter((l) => l.habit_id === habit.id)}
                 today={today}
