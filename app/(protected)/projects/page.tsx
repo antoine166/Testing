@@ -112,6 +112,9 @@ export default function ProjectsPage() {
 
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [supportItems, setSupportItems] = useState<SupportItem[]>([]);
+  // #125: which project card is currently playing its completion
+  // celebration — a multi-week effort deserves more than a status dropdown.
+  const [celebratingId, setCelebratingId] = useState<string | null>(null);
 
   // Templates + reference items are page-specific extras the shared hook
   // doesn't fetch. onAfterRefresh keeps them in step with the hook's
@@ -282,6 +285,41 @@ export default function ProjectsPage() {
     if (!created) return;
 
     setNewTaskTitles((prev) => ({ ...prev, [project.id]: "" }));
+  }
+
+  async function handleCompleteProject(project: Project) {
+    const openCount = tasks.filter(
+      (t) => t.project_id === project.id && t.status !== "done",
+    ).length;
+    if (
+      !(await confirm({
+        message: `Complete “${project.name}”?${
+          openCount > 0
+            ? ` Its ${openCount} open task${openCount === 1 ? "" : "s"} will stay with the completed project.`
+            : ""
+        }`,
+        confirmLabel: "Complete project",
+      }))
+    )
+      return;
+
+    // Celebration first, save behind it — finishing a project should feel
+    // like a milestone (#125: ~3× the task/habit effect), not a dropdown.
+    setCelebratingId(project.id);
+    setTimeout(() => setCelebratingId(null), 1800);
+
+    const res = await fetch(`/api/projects/${project.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "completed" }),
+    });
+    if (!res.ok) {
+      setCelebratingId(null);
+      const body = await res.json();
+      setError(body.error ?? "Failed to complete project");
+      return;
+    }
+    await loadAll();
   }
 
   async function handleSaveAsTemplate(project: Project) {
@@ -761,10 +799,20 @@ export default function ProjectsPage() {
       <Fragment key={project.id}>
         <li>
         <div
-          className={`rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800 ${
+          className={`relative rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800 ${
             isSub ? "ml-6 border-l-2" : ""
-          }`}
+          } ${celebratingId === project.id ? "project-celebrate-card" : ""}`}
         >
+          {celebratingId === project.id && (
+            <span className="pointer-events-none absolute inset-0 z-10 overflow-visible">
+              <span className="project-celebrate-ring" />
+              <span className="project-celebrate-ring project-celebrate-ring-2" />
+              <span className="project-celebrate-ring project-celebrate-ring-3" />
+              <span className="project-celebrate-emoji absolute inset-0 flex items-center justify-center text-5xl">
+                🎉
+              </span>
+            </span>
+          )}
           {editingId === project.id ? (
             <div className="space-y-2">
               <input
@@ -1015,6 +1063,26 @@ export default function ProjectsPage() {
                 >
                   🧭
                 </Link>
+                {project.status !== "completed" && (
+                  <button
+                    onClick={() => handleCompleteProject(project)}
+                    aria-label="Complete project"
+                    title="Complete project"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 dark:hover:text-emerald-400"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   onClick={() => startEdit(project)}
                   aria-label="Edit project"
