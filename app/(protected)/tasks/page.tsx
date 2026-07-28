@@ -156,6 +156,24 @@ export default function TasksPage() {
 
   // The page's main loading/error surface comes from useTaskList; template
   // load failures were (and stay) silent, so only `reload` is destructured.
+  // A project-filtered view shows that project's reference material too
+  // (#132 follow-up): same 📖 block as the Projects page, so filed-as-
+  // reference items stay visible next to the project's tasks.
+  const [referenceItems, setReferenceItems] = useState<
+    { id: string; title: string; type: string; url: string | null; project_id: string | null }[]
+  >([]);
+  usePageData(
+    async (signal) => {
+      if (!projectFilter) return;
+      const res = await fetch("/api/knowledge-items", { signal });
+      if (res.ok) setReferenceItems(await res.json());
+    },
+    { tables: ["knowledge_items"] },
+  );
+  const projectReferences = projectFilter
+    ? referenceItems.filter((i) => i.project_id === projectFilter)
+    : [];
+
   const { reload: loadRecurringTemplates } = usePageData(
     async (signal) => {
       const res = await fetch("/api/recurring-task-templates", { signal });
@@ -526,6 +544,34 @@ export default function TasksPage() {
             Clear filter
           </Link>
         </p>
+      )}
+
+      {projectReferences.length > 0 && (
+        <div className="mb-4 rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-900/60">
+          <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">Reference</p>
+          <ul className="mt-1 space-y-0.5">
+            {projectReferences.map((item) => (
+              <li key={item.id} className="flex items-center gap-1.5 text-sm">
+                <span className="text-xs">📖</span>
+                {item.url ? (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate text-blue-600 underline dark:text-blue-400"
+                  >
+                    {item.title}
+                  </a>
+                ) : (
+                  <Link href="/library" className="truncate hover:underline">
+                    {item.title}
+                  </Link>
+                )}
+                <span className="text-xs text-zinc-400">{item.type}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <form
