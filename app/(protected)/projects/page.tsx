@@ -1,57 +1,22 @@
 "use client";
 
-import { Fragment, useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
+import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
-import ReorderableTaskList from "@/components/reorderable-task-list";
 import { useConfirmDialog } from "@/components/confirm-dialog";
+import ProjectCard from "@/components/project-card";
+import ProjectCreateForm from "@/components/project-create-form";
+import {
+  type Project,
+  type ProjectPriority,
+  type ProjectStatus,
+  type ProjectTemplate,
+  type SupportItem,
+} from "@/lib/projects/types";
 
-type ProjectStatus = "active" | "someday" | "completed" | "archived";
-type ProjectPriority = "none" | "low" | "medium" | "high";
-
-type Project = {
-  id: string;
-  domain_id: string | null;
-  parent_project_id: string | null;
-  name: string;
-  description: string | null;
-  purpose: string | null;
-  outcome_vision: string | null;
-  brainstorm: string | null;
-  status: ProjectStatus;
-  priority: ProjectPriority;
-  due_date: string | null;
-  scheduled_date: string | null;
-  link: string | null;
-  review_every_days: number | null;
-  last_reviewed_at: string | null;
-  created_at: string;
-};
-
-type SupportItem = { id: string; title: string; type: string; url: string | null; project_id: string | null };
-
-type ProjectTemplate = {
-  id: string;
-  name: string;
-  domain_id: string | null;
-  priority: ProjectPriority;
-  project_template_tasks: { id: string; title: string }[];
-};
-
-const STATUSES: ProjectStatus[] = ["active", "someday", "completed", "archived"];
-const PRIORITIES: ProjectPriority[] = ["none", "low", "medium", "high"];
 const NO_DOMAIN_KEY = "__none__";
-
-function linkLabel(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
 
 export default function ProjectsPage() {
   const searchParams = useSearchParams();
@@ -77,20 +42,6 @@ export default function ProjectsPage() {
     createTask,
     loadAll,
   } = useTaskList<Project>({ onAfterRefresh: () => loadExtras() });
-
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [purpose, setPurpose] = useState("");
-  const [outcomeVision, setOutcomeVision] = useState("");
-  const [brainstorm, setBrainstorm] = useState("");
-  const [nextAction, setNextAction] = useState("");
-  const [domainId, setDomainId] = useState(domainFilter ?? "");
-  const [parentProjectId, setParentProjectId] = useState("");
-  const [status, setStatus] = useState<ProjectStatus>("active");
-  const [priority, setPriority] = useState<ProjectPriority>("none");
-  const [dueDate, setDueDate] = useState("");
-  const [scheduledDate, setScheduledDate] = useState("");
-  const [link, setLink] = useState("");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -137,78 +88,6 @@ export default function ProjectsPage() {
   }, []);
 
   useRealtimeRefresh(["project_templates", "knowledge_items"], () => loadExtras());
-
-  async function handleCreate(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    // A top-level project needs a domain (subprojects inherit their parent's).
-    if (!domainId && !parentProjectId) {
-      setError("Pick a domain for the project — it needs one to show in your sidebar.");
-      return;
-    }
-
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        description: description || undefined,
-        purpose: purpose || undefined,
-        outcome_vision: outcomeVision || undefined,
-        brainstorm: brainstorm || undefined,
-        domain_id: domainId || null,
-        parent_project_id: parentProjectId || null,
-        status,
-        priority,
-        due_date: dueDate || undefined,
-        scheduled_date: scheduledDate || undefined,
-        link: link || undefined,
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to create project");
-      return;
-    }
-
-    const project = await res.json();
-
-    if (nextAction.trim()) {
-      await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: nextAction,
-          project_id: project.id,
-          domain_id: domainId || null,
-        }),
-      });
-    }
-
-    setName("");
-    setDescription("");
-    setPurpose("");
-    setOutcomeVision("");
-    setBrainstorm("");
-    setNextAction("");
-    setDomainId("");
-    setParentProjectId("");
-    setStatus("active");
-    setPriority("none");
-    setDueDate("");
-    setScheduledDate("");
-    setLink("");
-    await loadAll();
-  }
-
-  function selectParentProject(id: string) {
-    setParentProjectId(id);
-    if (id) {
-      const parent = projects.find((p) => p.id === id);
-      setDomainId(parent?.domain_id ?? "");
-    }
-  }
 
   function selectEditParentProject(id: string) {
     setEditParentProjectId(id);
@@ -453,259 +332,14 @@ export default function ProjectsPage() {
         </p>
       )}
 
-      <form
-        onSubmit={handleCreate}
-        className="mb-8 space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
-      >
-        <div>
-          <label
-            htmlFor="name"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            New project
-          </label>
-          <input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Kitchen remodel"
-            required
-            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="description"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Description (optional)
-          </label>
-          <textarea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-        <details className="group">
-          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-            Define this project (GTD Natural Planning)
-          </summary>
-          <div className="mt-2 space-y-3 pl-4">
-            <div>
-              <label
-                htmlFor="purpose"
-                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                Purpose — why does this matter?
-              </label>
-              <textarea
-                id="purpose"
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                rows={2}
-                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="outcome_vision"
-                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                Outcome vision — what does &ldquo;done&rdquo; look like?
-              </label>
-              <textarea
-                id="outcome_vision"
-                value={outcomeVision}
-                onChange={(e) => setOutcomeVision(e.target.value)}
-                rows={2}
-                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="brainstorm"
-                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                Brainstorm — ideas, approaches, things to consider
-              </label>
-              <textarea
-                id="brainstorm"
-                value={brainstorm}
-                onChange={(e) => setBrainstorm(e.target.value)}
-                rows={3}
-                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="next_action"
-                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                Next action — the very next physical step
-              </label>
-              <input
-                id="next_action"
-                value={nextAction}
-                onChange={(e) => setNextAction(e.target.value)}
-                placeholder="e.g. Draft the outline"
-                className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <p className="mt-1 text-xs text-zinc-500">
-                If filled in, creates this as the first task in the project.
-              </p>
-            </div>
-          </div>
-        </details>
-        <div>
-          <label
-            htmlFor="link"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Link (optional)
-          </label>
-          <input
-            id="link"
-            type="url"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="e.g. a shared doc or spec"
-            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label
-              htmlFor="parent_project"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Parent project
-            </label>
-            <select
-              id="parent_project"
-              value={parentProjectId}
-              onChange={(e) => selectParentProject(e.target.value)}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              <option value="">None (top-level project)</option>
-              {parentOptions().map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label
-              htmlFor="domain"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Domain
-            </label>
-            <select
-              id="domain"
-              value={domainId}
-              disabled={!!parentProjectId}
-              onChange={(e) => setDomainId(e.target.value)}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              <option value="">{parentProjectId ? "No domain" : "Choose a domain…"}</option>
-              {domains.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-            {parentProjectId && (
-              <p className="mt-1 text-xs text-zinc-500">Inherits the parent&apos;s domain.</p>
-            )}
-          </div>
-          <div>
-            <label
-              htmlFor="status"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Status
-            </label>
-            <select
-              id="status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label
-              htmlFor="priority"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Priority
-            </label>
-            <select
-              id="priority"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as ProjectPriority)}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label
-              htmlFor="due_date"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Due date
-            </label>
-            <input
-              id="due_date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => {
-                const value = e.target.value;
-                setDueDate(value);
-              }}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="scheduled_date"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Scheduled
-            </label>
-            <input
-              id="scheduled_date"
-              type="date"
-              value={scheduledDate}
-              onChange={(e) => {
-                const value = e.target.value;
-                setScheduledDate(value);
-              }}
-              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <button
-            type="submit"
-            className="h-9 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-          >
-            Add
-          </button>
-        </div>
-      </form>
+      <ProjectCreateForm
+        domains={domains}
+        projects={projects}
+        parentOptions={parentOptions}
+        domainFilter={domainFilter}
+        setError={setError}
+        loadAll={loadAll}
+      />
 
       {templates.length > 0 && (
         <details className="mb-8 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
@@ -780,7 +414,63 @@ export default function ProjectsPage() {
                   </h2>
                 </div>
                 <ul className="space-y-2">
-                  {groupProjects.map((project) => renderProjectItem(project))}
+                  {groupProjects.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      childrenByParent={childrenByParent}
+                      celebratingId={celebratingId}
+                      editingId={editingId}
+                      setEditingId={setEditingId}
+                      editName={editName}
+                      setEditName={setEditName}
+                      editDescription={editDescription}
+                      setEditDescription={setEditDescription}
+                      editPurpose={editPurpose}
+                      setEditPurpose={setEditPurpose}
+                      editOutcomeVision={editOutcomeVision}
+                      setEditOutcomeVision={setEditOutcomeVision}
+                      editBrainstorm={editBrainstorm}
+                      setEditBrainstorm={setEditBrainstorm}
+                      editDomainId={editDomainId}
+                      setEditDomainId={setEditDomainId}
+                      editParentProjectId={editParentProjectId}
+                      selectEditParentProject={selectEditParentProject}
+                      editStatus={editStatus}
+                      setEditStatus={setEditStatus}
+                      editPriority={editPriority}
+                      setEditPriority={setEditPriority}
+                      editDueDate={editDueDate}
+                      setEditDueDate={setEditDueDate}
+                      editScheduledDate={editScheduledDate}
+                      setEditScheduledDate={setEditScheduledDate}
+                      editLink={editLink}
+                      setEditLink={setEditLink}
+                      editReviewEveryDays={editReviewEveryDays}
+                      setEditReviewEveryDays={setEditReviewEveryDays}
+                      parentOptions={parentOptions}
+                      domains={domains}
+                      projects={projects}
+                      handleUpdate={handleUpdate}
+                      startEdit={startEdit}
+                      handleDelete={handleDelete}
+                      handleCompleteProject={handleCompleteProject}
+                      handleSaveAsTemplate={handleSaveAsTemplate}
+                      isStalled={isStalled}
+                      supportItems={supportItems}
+                      tasks={tasks}
+                      loadAll={loadAll}
+                      toggleTaskDone={toggleTaskDone}
+                      handleTaskUpdate={handleTaskUpdate}
+                      handleTaskDelete={handleTaskDelete}
+                      handleTaskConvertToRecurring={handleTaskConvertToRecurring}
+                      handleTaskConvertToKnowledgeItem={handleTaskConvertToKnowledgeItem}
+                      newTaskTitles={newTaskTitles}
+                      setNewTaskTitles={setNewTaskTitles}
+                      addingTaskId={addingTaskId}
+                      handleAddTask={handleAddTask}
+                    />
+                  ))}
                 </ul>
               </div>
             );
@@ -789,434 +479,4 @@ export default function ProjectsPage() {
       )}
     </div>
   );
-
-  function renderProjectItem(project: Project) {
-    const isSub = !!project.parent_project_id;
-    const children = childrenByParent.get(project.id) ?? [];
-    const canBecomeSubproject = editingId !== project.id || children.length === 0;
-
-    return (
-      <Fragment key={project.id}>
-        <li>
-        <div
-          className={`relative rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800 ${
-            isSub ? "ml-6 border-l-2" : ""
-          } ${celebratingId === project.id ? "project-celebrate-card" : ""}`}
-        >
-          {celebratingId === project.id && (
-            <span className="pointer-events-none absolute inset-0 z-10 overflow-visible">
-              <span className="project-celebrate-ring" />
-              <span className="project-celebrate-ring project-celebrate-ring-2" />
-              <span className="project-celebrate-ring project-celebrate-ring-3" />
-              <span className="project-celebrate-emoji absolute inset-0 flex items-center justify-center text-5xl">
-                🎉
-              </span>
-            </span>
-          )}
-          {editingId === project.id ? (
-            <div className="space-y-2">
-              <input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <textarea
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                rows={2}
-                className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <details className="group">
-                <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-                  GTD Natural Planning
-                </summary>
-                <div className="mt-2 space-y-2 pl-4">
-                  <textarea
-                    value={editPurpose}
-                    onChange={(e) => setEditPurpose(e.target.value)}
-                    placeholder="Purpose — why does this matter?"
-                    rows={2}
-                    className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <textarea
-                    value={editOutcomeVision}
-                    onChange={(e) => setEditOutcomeVision(e.target.value)}
-                    placeholder="Outcome vision — what does &quot;done&quot; look like?"
-                    rows={2}
-                    className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <textarea
-                    value={editBrainstorm}
-                    onChange={(e) => setEditBrainstorm(e.target.value)}
-                    placeholder="Brainstorm — ideas, approaches, things to consider"
-                    rows={3}
-                    className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </div>
-              </details>
-              <input
-                type="url"
-                value={editLink}
-                onChange={(e) => setEditLink(e.target.value)}
-                placeholder="Link (optional)"
-                className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={editParentProjectId}
-                  disabled={!canBecomeSubproject}
-                  onChange={(e) => selectEditParentProject(e.target.value)}
-                  title={
-                    canBecomeSubproject
-                      ? undefined
-                      : "This project has its own subprojects, so it can't become a subproject itself."
-                  }
-                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  <option value="">None (top-level project)</option>
-                  {parentOptions(project.id).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={editDomainId}
-                  disabled={!!editParentProjectId}
-                  onChange={(e) => setEditDomainId(e.target.value)}
-                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  <option value="">No domain</option>
-                  {domains.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={editStatus}
-                  onChange={(e) =>
-                    setEditStatus(e.target.value as ProjectStatus)
-                  }
-                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={editPriority}
-                  onChange={(e) => setEditPriority(e.target.value as ProjectPriority)}
-                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="date"
-                  value={editDueDate}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setEditDueDate(value);
-                  }}
-                  title="Due date"
-                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-                <input
-                  type="date"
-                  value={editScheduledDate}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setEditScheduledDate(value);
-                  }}
-                  title="Scheduled date"
-                  className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-                <label
-                  className="flex items-center gap-1 text-xs text-zinc-500"
-                  title="How often this project needs a look in the Weekly Review. Blank = every review."
-                >
-                  Review every
-                  <input
-                    type="number"
-                    min="1"
-                    value={editReviewEveryDays}
-                    onChange={(e) => setEditReviewEveryDays(e.target.value)}
-                    placeholder="—"
-                    className="w-14 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  days
-                </label>
-                <button
-                  onClick={() => handleUpdate(project.id)}
-                  className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditingId(null)}
-                  className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                  {project.name}
-                </p>
-                {project.description && (
-                  <p className="mt-0.5 text-sm text-zinc-500">
-                    {project.description}
-                  </p>
-                )}
-                {project.purpose && (
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    <span className="font-medium">Purpose:</span> {project.purpose}
-                  </p>
-                )}
-                {project.outcome_vision && (
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    <span className="font-medium">Done looks like:</span> {project.outcome_vision}
-                  </p>
-                )}
-                {project.brainstorm && (
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    <span className="font-medium">Brainstorm:</span> {project.brainstorm}
-                  </p>
-                )}
-                {project.link && (
-                  <a
-                    href={project.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-0.5 block truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    {linkLabel(project.link)}
-                  </a>
-                )}
-                <p className="mt-1 text-xs text-zinc-500">
-                  {project.status}
-                  {project.priority !== "none" ? ` · ${project.priority} priority` : ""}
-                  {project.due_date ? ` · due ${project.due_date}` : ""}
-                  {project.scheduled_date ? ` · scheduled ${project.scheduled_date}` : ""}
-                </p>
-                {isStalled(project) && (
-                  <p className="mt-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                    ⚠ Stalled — no next action. Add a task to move this forward.
-                  </p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Link
-                  href={`/tasks?project=${project.id}`}
-                  aria-label="View tasks"
-                  title="View tasks"
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M9 6h11M9 12h11M9 18h11" />
-                    <path d="M4 6h.01M4 12h.01M4 18h.01" />
-                  </svg>
-                </Link>
-                <button
-                  onClick={() => handleSaveAsTemplate(project)}
-                  aria-label="Save as template"
-                  title="Save as template — reuse this project's shape (fields + open tasks)"
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="8" y="8" width="12" height="12" rx="2" />
-                    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-                  </svg>
-                </button>
-                <Link
-                  href={`/plan?project=${project.id}`}
-                  aria-label="Plan project (Natural Planning Model)"
-                  title="Plan project (Natural Planning Model)"
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-                >
-                  🧭
-                </Link>
-                {project.status !== "completed" && (
-                  <button
-                    onClick={() => handleCompleteProject(project)}
-                    aria-label="Complete project"
-                    title="Complete project"
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 dark:hover:text-emerald-400"
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M20 6 9 17l-5-5" />
-                    </svg>
-                  </button>
-                )}
-                <button
-                  onClick={() => startEdit(project)}
-                  aria-label="Edit project"
-                  title="Edit project"
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleDelete(project.id)}
-                  aria-label="Delete project"
-                  title="Delete project"
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 6h18" />
-                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                    <path d="M10 11v6M14 11v6" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            {supportItems.some((item) => item.project_id === project.id) && (
-              <div className="mt-2 rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-900/60">
-                <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
-                  Reference
-                </p>
-                <ul className="mt-1 space-y-0.5">
-                  {supportItems
-                    .filter((item) => item.project_id === project.id)
-                    .map((item) => (
-                      <li key={item.id} className="flex items-center gap-1.5 text-sm">
-                        <span className="text-xs">📖</span>
-                        {item.url ? (
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="truncate text-blue-600 underline dark:text-blue-400"
-                          >
-                            {item.title}
-                          </a>
-                        ) : (
-                          <Link href="/library" className="truncate hover:underline">
-                            {item.title}
-                          </Link>
-                        )}
-                        <span className="text-xs text-zinc-400">{item.type}</span>
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            )}
-            {(() => {
-              const openTasks = tasks.filter(
-                (t) => t.project_id === project.id && t.status !== "done",
-              );
-              const doneCount = tasks.filter(
-                (t) => t.project_id === project.id && t.status === "done",
-              ).length;
-              if (openTasks.length === 0 && doneCount === 0) return null;
-              return (
-                <div className="mt-2">
-                  {openTasks.length > 0 ? (
-                    <ul className="space-y-2">
-                      <ReorderableTaskList
-                        tasks={openTasks}
-                        onReordered={loadAll}
-                        domains={domains}
-                        projects={projects}
-                        onToggleDone={toggleTaskDone}
-                        onUpdate={handleTaskUpdate}
-                        onDelete={handleTaskDelete}
-                        onConvertToRecurring={handleTaskConvertToRecurring}
-                        onConvertToKnowledgeItem={handleTaskConvertToKnowledgeItem}
-                      />
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-zinc-500">
-                      No open tasks{doneCount > 0 ? ` — ${doneCount} done` : ""}.
-                    </p>
-                  )}
-                  {openTasks.length > 0 && doneCount > 0 && (
-                    <p className="mt-1 text-xs text-zinc-400">{doneCount} done</p>
-                  )}
-                </div>
-              );
-            })()}
-            <form
-              onSubmit={(e) => handleAddTask(project, e)}
-              className="mt-2 flex flex-wrap gap-2"
-            >
-              <input
-                value={newTaskTitles[project.id] ?? ""}
-                onChange={(e) =>
-                  setNewTaskTitles((prev) => ({ ...prev, [project.id]: e.target.value }))
-                }
-                placeholder="Add a task to this project"
-                disabled={addingTaskId === project.id}
-                className="min-w-[10rem] flex-1 rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <button
-                type="submit"
-                disabled={addingTaskId === project.id || !(newTaskTitles[project.id] ?? "").trim()}
-                className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-              >
-                {addingTaskId === project.id ? "Adding..." : "Add"}
-              </button>
-            </form>
-            </>
-          )}
-        </div>
-      </li>
-      {!isSub && children.map((child) => renderProjectItem(child))}
-      </Fragment>
-    );
-  }
 }
