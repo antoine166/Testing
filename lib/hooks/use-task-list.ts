@@ -32,9 +32,15 @@ const OFFLINE_ERROR = "You're offline — that change wasn't saved.";
  * should stay in step with task changes (e.g. the Tasks page's
  * recurring-template list after a series delete or conversion).
  */
-export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => void | Promise<void> }) {
+export function useTaskList<P extends TaskProject = TaskProject>(options?: {
+  done?: boolean;
+  onAfterRefresh?: () => void | Promise<void>;
+}) {
+  // Generic over the project row type: /api/projects always returns full
+  // rows, but most pages only need the TaskProject subset — the Projects
+  // page passes its richer Project type instead of re-fetching.
   const [domains, setDomains] = useState<TaskDomain[]>([]);
-  const [projects, setProjects] = useState<TaskProject[]>([]);
+  const [projects, setProjects] = useState<P[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
