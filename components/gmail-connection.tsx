@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 export default function GmailDisconnectButton({
   connectionId,
@@ -12,9 +13,16 @@ export default function GmailDisconnectButton({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const { confirm } = useConfirmDialog();
 
   async function handleDisconnect() {
-    if (!confirm(`Disconnect ${label}? Forwarded emails will stop checking this account for a link.`)) {
+    if (
+      !(await confirm({
+        message: `Disconnect ${label}? Forwarded emails will stop checking this account for a link.`,
+        confirmLabel: "Disconnect",
+        danger: true,
+      }))
+    ) {
       return;
     }
     setBusy(true);

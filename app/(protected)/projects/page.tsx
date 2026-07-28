@@ -7,6 +7,7 @@ import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
 import ReorderableTaskList from "@/components/reorderable-task-list";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 type ProjectStatus = "active" | "someday" | "completed" | "archived";
 type ProjectPriority = "none" | "low" | "medium" | "high";
@@ -55,6 +56,7 @@ function linkLabel(url: string): string {
 export default function ProjectsPage() {
   const searchParams = useSearchParams();
   const domainFilter = searchParams.get("domain");
+  const { confirm, prompt } = useConfirmDialog();
 
   // Shared fetch + task-CRUD wiring (July 2026 de-dup, issue #112): the
   // task rows under each project get the same optimistic, offline-safe,
@@ -283,7 +285,7 @@ export default function ProjectsPage() {
   }
 
   async function handleSaveAsTemplate(project: Project) {
-    const name = prompt("Template name:", project.name);
+    const name = await prompt({ message: "Template name:", defaultValue: project.name });
     if (name === null) return;
     const res = await fetch("/api/project-templates", {
       method: "POST",
@@ -299,7 +301,7 @@ export default function ProjectsPage() {
   }
 
   async function handleUseTemplate(template: ProjectTemplate) {
-    const name = prompt("Name for the new project:", template.name);
+    const name = await prompt({ message: "Name for the new project:", defaultValue: template.name });
     if (name === null) return;
     const res = await fetch(`/api/project-templates/${template.id}/instantiate`, {
       method: "POST",
@@ -315,7 +317,7 @@ export default function ProjectsPage() {
   }
 
   async function handleRenameTemplate(template: ProjectTemplate) {
-    const name = prompt("Rename template:", template.name);
+    const name = await prompt({ message: "Rename template:", defaultValue: template.name });
     if (name === null || !name.trim() || name.trim() === template.name) return;
     const res = await fetch(`/api/project-templates/${template.id}`, {
       method: "PUT",
@@ -333,7 +335,13 @@ export default function ProjectsPage() {
   async function handleDeleteTemplate(template: ProjectTemplate) {
     // Hard delete (not trash-backed) — same as recurring task templates, so
     // the confirm carries the weight.
-    if (!confirm(`Delete the template "${template.name}"? This can't be undone. Projects already created from it are unaffected.`)) {
+    if (
+      !(await confirm({
+        message: `Delete the template "${template.name}"? This can't be undone. Projects already created from it are unaffected.`,
+        confirmLabel: "Delete",
+        danger: true,
+      }))
+    ) {
       return;
     }
     const res = await fetch(`/api/project-templates/${template.id}`, { method: "DELETE" });
@@ -350,7 +358,7 @@ export default function ProjectsPage() {
     const message = hasSubprojects
       ? "Move this project to trash? Its subprojects and all their tasks move with it, and you can restore them together within 30 days."
       : "Move this project to trash? Its tasks move with it, and you can restore them together within 30 days.";
-    if (!confirm(message)) {
+    if (!(await confirm({ message, confirmLabel: "Move to Trash", danger: true }))) {
       return;
     }
 

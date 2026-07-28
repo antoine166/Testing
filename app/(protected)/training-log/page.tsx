@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
 import { usePageData } from "@/lib/hooks/use-page-data";
 import WorkoutRow, { type Workout, type WorkoutLog } from "@/components/workout-row";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 const HISTORY_WINDOW_OPTIONS = [7, 14, 28, 74, 148] as const;
 
@@ -17,6 +18,7 @@ function shiftDate(date: string, deltaDays: number): string {
 }
 
 export default function TrainingLogPage() {
+  const { confirm } = useConfirmDialog();
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [creating, setCreating] = useState(false);
@@ -83,9 +85,12 @@ export default function TrainingLogPage() {
 
   async function handleDeleteWorkout(id: string) {
     if (
-      !confirm(
-        "Move this workout to trash? Its logged history moves with it and can be restored, within 30 days.",
-      )
+      !(await confirm({
+        message:
+          "Move this workout to trash? Its logged history moves with it and can be restored, within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
     )
       return;
 

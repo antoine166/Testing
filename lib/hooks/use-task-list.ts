@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Task, TaskDomain, TaskProject } from "@/components/task-row";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 import {
   knowledgeConversionToast,
   projectConversionToast,
@@ -45,6 +46,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
+  const { confirm } = useConfirmDialog();
 
   // Filter server-side: every smart list except the Logbook only ever shows
   // not-done tasks, and the Logbook only done ones — no reason to download
@@ -106,7 +108,10 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
 
   useRealtimeRefresh(["tasks", "domains", "projects"], () => loadAll());
 
-  async function handleUpdate(id: string, updates: Record<string, unknown>) {
+  // Mutations return whether they actually happened (false = failed or
+  // cancelled), so decision flows like Clarify can stop advancing past a
+  // silent failure (#118) — most call sites just ignore the value.
+  async function handleUpdate(id: string, updates: Record<string, unknown>): Promise<boolean> {
     // Local-first: the edit is on screen before the network round-trip.
     // markLocalRefresh() keeps the realtime echo of this write from
     // triggering a redundant full reload; on failure we put the snapshot
@@ -129,14 +134,14 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     } catch {
       setTasks(snapshot);
       showToast(OFFLINE_ERROR);
-      return;
+      return false;
     }
     markLocalRefresh();
     if (!res.ok) {
       setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to update task");
-      return;
+      return false;
     }
 
     if (needsFullReload(target, updates)) {
@@ -147,19 +152,33 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
       const serverTask = (await res.json()) as Task;
       setTasks((prev) => mergeServerTask(prev, serverTask));
     }
+    return true;
   }
 
   async function toggleDone(task: Task) {
-    await handleUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
+    return handleUpdate(task.id, { status: task.status === "done" ? "todo" : "done" });
   }
 
-  async function handleDelete(id: string, scope?: "skip" | "following", skipConfirm = false) {
+  async function handleDelete(
+    id: string,
+    scope?: "skip" | "following",
+    skipConfirm = false,
+  ): Promise<boolean> {
     // Recurring tasks route through TaskRow's own "Skip this one" / "This +
     // future" picker, which is itself the confirmation step — a plain
     // (non-recurring) delete never shows that picker and still needs one.
     // The Clarify flow passes skipConfirm: its Trash button is an explicit,
     // deliberate choice within a decision flow, so a second dialog is noise.
-    if (!scope && !skipConfirm && !confirm("Move this task to trash? You can restore it within 30 days.")) return;
+    if (
+      !scope &&
+      !skipConfirm &&
+      !(await confirm({
+        message: "Move this task to trash? You can restore it within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
+    )
+      return false;
 
     // Local-first: the row disappears immediately; the snapshot comes back
     // if the server says no.
@@ -177,14 +196,14 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     } catch {
       setTasks(snapshot);
       showToast(OFFLINE_ERROR);
-      return;
+      return false;
     }
     markLocalRefresh();
     if (!res.ok) {
       setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to delete task");
-      return;
+      return false;
     }
     if (scope === "following") {
       // A whole series went — single-task Undo can't bring it back, so
@@ -206,6 +225,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
         }),
       );
     }
+    return true;
   }
 
   async function createTask(input: Record<string, unknown>) {
@@ -236,9 +256,11 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
   async function handleConvertToProject(id: string, skipConfirm = false, domainId?: string) {
     if (
       !skipConfirm &&
-      !confirm(
-        "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
-      )
+      !(await confirm({
+        message:
+          "Convert this task into a project? A new project will be created with its details, and the task will move to Trash.",
+        confirmLabel: "Convert",
+      }))
     )
       return null;
     // The task leaves the list immediately; conversions still reload after
@@ -280,7 +302,10 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     return project;
   }
 
-  async function handleConvertToRecurring(id: string, pattern: RecurrencePatternDraft) {
+  async function handleConvertToRecurring(
+    id: string,
+    pattern: RecurrencePatternDraft,
+  ): Promise<boolean> {
     const snapshot = tasks;
     markLocalRefresh();
     setTasks((prev) => removeTask(prev, id));
@@ -295,26 +320,29 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     } catch {
       setTasks(snapshot);
       showToast(OFFLINE_ERROR);
-      return;
+      return false;
     }
     if (!res.ok) {
       setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to convert task to recurring");
-      return;
+      return false;
     }
     showToast(...recurringConversionToast(await res.json()));
     await loadAll();
+    return true;
   }
 
-  async function handleConvertToKnowledgeItem(id: string, skipConfirm = false) {
+  async function handleConvertToKnowledgeItem(id: string, skipConfirm = false): Promise<boolean> {
     if (
       !skipConfirm &&
-      !confirm(
-        "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
-      )
+      !(await confirm({
+        message:
+          "File this task as reference? A knowledge library item will be created from its title/notes/link, and the task will move to Trash.",
+        confirmLabel: "File it",
+      }))
     )
-      return;
+      return false;
     const snapshot = tasks;
     markLocalRefresh();
     setTasks((prev) => removeTask(prev, id));
@@ -325,16 +353,17 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     } catch {
       setTasks(snapshot);
       showToast(OFFLINE_ERROR);
-      return;
+      return false;
     }
     if (!res.ok) {
       setTasks(snapshot);
       const body = await res.json();
       setError(body.error ?? "Failed to file task as reference");
-      return;
+      return false;
     }
     showToast(...knowledgeConversionToast(await res.json()));
     await loadAll();
+    return true;
   }
 
   return {

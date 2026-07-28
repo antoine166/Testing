@@ -8,8 +8,10 @@ import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 
 export default function DomainsPage() {
+  const { confirm } = useConfirmDialog();
   const {
     domains,
     tasks,
@@ -131,9 +133,12 @@ export default function DomainsPage() {
 
   async function handleDelete(id: string) {
     if (
-      !confirm(
-        "Move this domain to trash? Its projects and tasks move with it, and you can restore them together within 30 days.",
-      )
+      !(await confirm({
+        message:
+          "Move this domain to trash? Its projects and tasks move with it, and you can restore them together within 30 days.",
+        confirmLabel: "Move to Trash",
+        danger: true,
+      }))
     ) {
       return;
     }

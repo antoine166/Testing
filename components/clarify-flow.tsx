@@ -28,11 +28,13 @@ type Props = {
   tasks: Task[];
   domains: TaskDomain[];
   projects: TaskProject[];
-  onUpdate: (id: string, updates: Record<string, unknown>) => Promise<void>;
-  onTrash: (id: string) => Promise<void>;
-  onToggleDone: (task: Task) => Promise<void>;
+  // Mutation callbacks report success (false/null = failed or cancelled)
+  // so the flow can stop instead of advancing past a silent failure (#118).
+  onUpdate: (id: string, updates: Record<string, unknown>) => Promise<boolean>;
+  onTrash: (id: string) => Promise<boolean>;
+  onToggleDone: (task: Task) => Promise<boolean>;
   onConvertToProject: (id: string) => Promise<{ id: string; domain_id: string | null } | null>;
-  onConvertToReference: (id: string) => Promise<void>;
+  onConvertToReference: (id: string) => Promise<boolean>;
   onCreateTask: (input: Record<string, unknown>) => Promise<Task | null>;
   onExit: () => void;
 };
@@ -53,6 +55,7 @@ export default function ClarifyFlow({
   const [index, setIndex] = useState(0);
   const [panel, setPanel] = useState<Panel>("decide");
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [processed, setProcessed] = useState(0);
   const locations = useContexts();
 
@@ -135,17 +138,28 @@ export default function ClarifyFlow({
     setProcessed((n) => n + 1);
     setIndex((i) => i + 1);
     setPanel("decide");
+    setActionError(null);
   }
 
   function skip() {
     setIndex((i) => i + 1);
     setPanel("decide");
+    setActionError(null);
   }
 
   async function act(action: () => Promise<unknown>) {
     setBusy(true);
+    setActionError(null);
     try {
-      await action();
+      // The shared handlers report failure to page-level error state that
+      // this full-screen flow hides — so a failed save used to advance
+      // anyway and the item silently stayed unprocessed (#118). false/null
+      // means it didn't happen: stay on the item and say so here.
+      const result = await action();
+      if (result === false || result === null) {
+        setActionError("That didn't go through — the item is unchanged. Check your connection and try again.");
+        return;
+      }
       advance();
     } finally {
       setBusy(false);
@@ -213,6 +227,12 @@ export default function ClarifyFlow({
           </button>
         </div>
       </div>
+
+      {actionError && (
+        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+          {actionError}
+        </p>
+      )}
 
       {/* Persistent editable header — available under every action panel. */}
       <div className="space-y-2">
@@ -343,8 +363,8 @@ export default function ClarifyFlow({
               disabled={busy}
               onClick={() =>
                 act(async () => {
-                  await onUpdate(task.id, edited());
-                  await onConvertToReference(task.id);
+                  if (!(await onUpdate(task.id, edited()))) return false;
+                  return onConvertToReference(task.id);
                 })
               }
               className={`${neutralButton} block w-full`}
@@ -372,8 +392,8 @@ export default function ClarifyFlow({
               disabled={busy}
               onClick={() =>
                 act(async () => {
-                  await onUpdate(task.id, edited());
-                  await onToggleDone(task);
+                  if (!(await onUpdate(task.id, edited()))) return false;
+                  return onToggleDone(task);
                 })
               }
               className="rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
@@ -661,8 +681,8 @@ export default function ClarifyFlow({
               disabled={busy || !nextAction.trim()}
               onClick={() =>
                 act(async () => {
-                  if (!newProject) return;
-                  await onCreateTask({
+                  if (!newProject) return true;
+                  return onCreateTask({
                     title: nextAction.trim(),
                     project_id: newProject.id,
                     domain_id: newProject.domain_id ?? undefined,
