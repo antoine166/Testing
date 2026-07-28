@@ -316,21 +316,29 @@ export default function QuickCapture() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="flex gap-2">
-                <input
-                  ref={titleRef}
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={
-                    listening
-                      ? "Listening…"
-                      : mode === "project"
-                        ? "Project name"
-                        : "What's on your mind?"
-                  }
-                  required
-                  className="w-full flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
+              <div>
+                <label
+                  htmlFor="qc-title"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  {mode === "project" ? "New project" : "New task"}
+                </label>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    id="qc-title"
+                    ref={titleRef}
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder={
+                      listening
+                        ? "Listening…"
+                        : mode === "project"
+                          ? "Project name"
+                          : "What's on your mind?"
+                    }
+                    required
+                    className="w-full flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
                 {speechSupported && (
                   <button
                     type="button"
@@ -346,73 +354,122 @@ export default function QuickCapture() {
                     {listening ? "■" : "🎤"}
                   </button>
                 )}
+                </div>
               </div>
-              <input
-                type="url"
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-                placeholder="Link (optional)"
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Notes (optional)"
-                rows={2}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
+              <div>
+                <label
+                  htmlFor="qc-link"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Link (optional)
+                </label>
+                <input
+                  id="qc-link"
+                  type="url"
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="qc-notes"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Notes (optional)
+                </label>
+                <textarea
+                  id="qc-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </div>
 
               <div className="flex flex-wrap gap-3">
                 {mode === "project" && (
-                  <select
-                    value={domainId}
-                    onChange={(e) => setDomainId(e.target.value)}
-                    className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  <div className="flex-1">
+                    <label
+                      htmlFor="qc-domain"
+                      className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                    >
+                      Domain
+                    </label>
+                    <select
+                      id="qc-domain"
+                      value={domainId}
+                      onChange={(e) => setDomainId(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      <option value="">No domain</option>
+                      {domains.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label
+                    htmlFor="qc-priority"
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
                   >
-                    <option value="">No domain</option>
-                    {domains.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
+                    Priority
+                  </label>
+                  <select
+                    id="qc-priority"
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value as TaskPriority)}
+                    className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
                       </option>
                     ))}
                   </select>
-                )}
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                  className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-3">
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setDueDate(value);
-                  }}
-                  aria-label="Due date"
-                  title="Due date"
-                  className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-                <input
-                  type="date"
-                  value={scheduledDate}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setScheduledDate(value);
-                  }}
-                  aria-label="Scheduled date"
-                  title="Scheduled date"
-                  className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label
+                    htmlFor="qc-due-date"
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                  >
+                    Due date
+                  </label>
+                  <input
+                    id="qc-due-date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setDueDate(value);
+                    }}
+                    className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="qc-scheduled-date"
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                  >
+                    Scheduled
+                  </label>
+                  <input
+                    id="qc-scheduled-date"
+                    type="date"
+                    value={scheduledDate}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setScheduledDate(value);
+                    }}
+                    className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </div>
                 {mode === "task" && (
                   <label
                     aria-label="Add image"
