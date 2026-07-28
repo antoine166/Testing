@@ -546,34 +546,6 @@ export default function TasksPage() {
         </p>
       )}
 
-      {projectReferences.length > 0 && (
-        <div className="mb-4 rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-900/60">
-          <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">Reference</p>
-          <ul className="mt-1 space-y-0.5">
-            {projectReferences.map((item) => (
-              <li key={item.id} className="flex items-center gap-1.5 text-sm">
-                <span className="text-xs">📖</span>
-                {item.url ? (
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate text-blue-600 underline dark:text-blue-400"
-                  >
-                    {item.title}
-                  </a>
-                ) : (
-                  <Link href="/library" className="truncate hover:underline">
-                    {item.title}
-                  </Link>
-                )}
-                <span className="text-xs text-zinc-400">{item.type}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <form
         onSubmit={handleCreate}
         className="mb-8 space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
@@ -1027,6 +999,38 @@ export default function TasksPage() {
                 })
               )}
             </ul>
+          )}
+
+          {/* The project's filed reference material, below its tasks —
+              support material shouldn't outrank the next actions. */}
+          {projectReferences.length > 0 && (
+            <div className="mt-6 rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-900/60">
+              <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
+                Reference
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {projectReferences.map((item) => (
+                  <li key={item.id} className="flex items-center gap-1.5 text-sm">
+                    <span className="text-xs">📖</span>
+                    {item.url ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-blue-600 underline dark:text-blue-400"
+                      >
+                        {item.title}
+                      </a>
+                    ) : (
+                      <Link href="/library" className="truncate hover:underline">
+                        {item.title}
+                      </Link>
+                    )}
+                    <span className="text-xs text-zinc-400">{item.type}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       ) : (
