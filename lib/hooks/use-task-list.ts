@@ -122,7 +122,7 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       });
     } catch {
       setTasks(snapshot);
-      setError(OFFLINE_ERROR);
+      showToast(OFFLINE_ERROR);
       return;
     }
     markLocalRefresh();
@@ -170,7 +170,7 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       res = await fetch(url, { method: "DELETE" });
     } catch {
       setTasks(snapshot);
-      setError(OFFLINE_ERROR);
+      showToast(OFFLINE_ERROR);
       return;
     }
     markLocalRefresh();
@@ -193,9 +193,9 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
           try {
             const undoRes = await fetch(`/api/trash/task/${id}`, { method: "PATCH" });
             if (undoRes.ok) await loadAll();
-            else setError("Couldn't restore the task — it's still in Trash.");
+            else showToast("Couldn't restore the task — it's still in Trash.");
           } catch {
-            setError(OFFLINE_ERROR);
+            showToast(OFFLINE_ERROR);
           }
         }),
       );
@@ -211,7 +211,7 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
         body: JSON.stringify(input),
       });
     } catch {
-      setError(OFFLINE_ERROR);
+      showToast(OFFLINE_ERROR);
       return null;
     }
     if (!res.ok) {
@@ -257,7 +257,7 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       });
     } catch {
       setTasks(snapshot);
-      setError(OFFLINE_ERROR);
+      showToast(OFFLINE_ERROR);
       return null;
     }
     if (!res.ok) {
@@ -288,7 +288,7 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       });
     } catch {
       setTasks(snapshot);
-      setError(OFFLINE_ERROR);
+      showToast(OFFLINE_ERROR);
       return;
     }
     if (!res.ok) {
@@ -318,7 +318,7 @@ export function useTaskList(options?: { done?: boolean; onAfterRefresh?: () => v
       res = await fetch(`/api/tasks/${id}/convert-to-knowledge-item`, { method: "POST" });
     } catch {
       setTasks(snapshot);
-      setError(OFFLINE_ERROR);
+      showToast(OFFLINE_ERROR);
       return;
     }
     if (!res.ok) {
