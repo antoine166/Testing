@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
 import { generateNextCompletionOccurrence } from "@/lib/recurring-tasks/topup";
-import { todayLocal } from "@/lib/date";
+import { clientDateOr, todayLocal } from "@/lib/date";
 import { syncTaskCalendarEvent, syncTaskCalendarEvents } from "@/lib/google-calendar/sync";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -110,7 +110,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     updates.waiting_for = body.waiting_for;
     if (!existing?.waiting_for && body.waiting_for) {
-      updates.waiting_since = new Date().toISOString().slice(0, 10);
+      // Client's local date over the server's UTC clock (#112 item 4).
+      updates.waiting_since = clientDateOr(body.client_date, new Date().toISOString().slice(0, 10));
     } else if (!body.waiting_for) {
       // Wins over any follow_up_date/waiting_on in the same payload — a
       // task that's no longer Waiting For can't have a follow-up date or a

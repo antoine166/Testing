@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { todayLocal } from "@/lib/date";
 import { enqueueCapture } from "@/lib/offline-queue";
 import { projectConversionToast, useToast } from "@/components/toast";
 import { PRIORITIES, type TaskPriority } from "@/lib/tasks/constants";
@@ -188,6 +189,10 @@ export default function QuickCapture() {
             due_date: dueDate || undefined,
             scheduled_date: scheduledDate || undefined,
             waiting_for: waitingFor || undefined,
+            // Captured at capture time (and preserved through the offline
+            // queue): the server's UTC clock can't know the local date,
+            // which waiting_since needs (#112 item 4).
+            client_date: todayLocal(),
           };
 
     let res: Response;

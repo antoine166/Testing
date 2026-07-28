@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { todayLocal } from "@/lib/date";
 import { usePageData } from "@/lib/hooks/use-page-data";
 
 // The people layer (SCOPE.md §3.10a): everything involving one person in
@@ -265,7 +266,7 @@ export default function PeoplePage() {
                             <li key={t.id} className="flex items-baseline justify-between gap-2 text-sm">
                               <span>
                                 {t.title}
-                                {t.follow_up_date && t.follow_up_date <= new Date().toISOString().slice(0, 10) && (
+                                {t.follow_up_date && t.follow_up_date <= todayLocal() && (
                                   <span className="ml-1 text-xs text-red-600 dark:text-red-400">
                                     🔔 follow up
                                   </span>

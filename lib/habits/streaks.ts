@@ -1,3 +1,5 @@
+import { addDaysDate } from "@/lib/date";
+
 export type HabitFrequency = "daily" | "specific_days" | "times_per_week";
 
 export type Habit = {
@@ -20,12 +22,6 @@ function formatLocalDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
 }
 
 function isRequiredDay(habit: Habit, date: Date): boolean {
@@ -55,19 +51,19 @@ function computeDailyStreak(
   // If today is required and not logged yet, give grace until the day
   // ends instead of immediately breaking the streak.
   if (isRequiredDay(habit, cursor) && !loggedDates.has(formatLocalDate(cursor))) {
-    cursor = addDays(cursor, -1);
+    cursor = addDaysDate(cursor, -1);
   }
 
   for (let i = 0; i < 3650; i++) {
     if (isRequiredDay(habit, cursor)) {
       if (loggedDates.has(formatLocalDate(cursor))) {
         current++;
-        cursor = addDays(cursor, -1);
+        cursor = addDaysDate(cursor, -1);
       } else {
         break;
       }
     } else {
-      cursor = addDays(cursor, -1);
+      cursor = addDaysDate(cursor, -1);
     }
   }
 
@@ -81,14 +77,14 @@ function computeDailyStreak(
     if (!isRequiredDay(habit, date)) continue;
 
     if (prevDate) {
-      let expected = addDays(prevDate, 1);
+      let expected = addDaysDate(prevDate, 1);
       let consecutive = true;
       while (expected < date) {
         if (isRequiredDay(habit, expected)) {
           consecutive = false;
           break;
         }
-        expected = addDays(expected, 1);
+        expected = addDaysDate(expected, 1);
       }
       run = consecutive ? run + 1 : 1;
     } else {
@@ -127,13 +123,13 @@ function computeWeeklyStreak(
   // computeDailyStreak crediting today once it's logged) before walking
   // backward through fully-elapsed weeks.
   let current = (countsByWeek.get(currentWeekKey) ?? 0) >= target ? 1 : 0;
-  let cursor = addDays(parseLocalDate(currentWeekKey), -7);
+  let cursor = addDaysDate(parseLocalDate(currentWeekKey), -7);
   for (let i = 0; i < 520; i++) {
     const key = getWeekKey(cursor);
     const count = countsByWeek.get(key) ?? 0;
     if (count >= target) {
       current++;
-      cursor = addDays(cursor, -7);
+      cursor = addDaysDate(cursor, -7);
     } else {
       break;
     }
@@ -150,7 +146,7 @@ function computeWeeklyStreak(
     const weekDate = parseLocalDate(key);
 
     if (count >= target) {
-      run = prevWeek && formatLocalDate(addDays(prevWeek, 7)) === key ? run + 1 : 1;
+      run = prevWeek && formatLocalDate(addDaysDate(prevWeek, 7)) === key ? run + 1 : 1;
       longest = Math.max(longest, run);
       prevWeek = weekDate;
     } else {
@@ -228,12 +224,12 @@ export function isAtRisk(habit: Habit, logs: HabitLog[], today: string): boolean
   }
 
   const loggedDates = new Set(logs.map((l) => l.logged_date));
-  let cursor = addDays(parseLocalDate(today), -1);
+  let cursor = addDaysDate(parseLocalDate(today), -1);
   for (let i = 0; i < 3650; i++) {
     if (isRequiredDay(habit, cursor)) {
       return !loggedDates.has(formatLocalDate(cursor));
     }
-    cursor = addDays(cursor, -1);
+    cursor = addDaysDate(cursor, -1);
   }
   return false;
 }

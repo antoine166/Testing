@@ -267,6 +267,7 @@ export default function TasksPage() {
         context: context.trim() || undefined,
         estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : undefined,
         energy_level: energyLevel || undefined,
+        client_date: todayLocal(),
       }),
     });
 

@@ -1,3 +1,5 @@
+import { addDaysDate } from "@/lib/date";
+
 export type RecurrenceType = "weekly" | "monthly" | "monthly_nth_weekday" | "yearly" | "interval" | "completion";
 export type MonthClamp = "clamp" | "roll";
 export type CompletionOffsetUnit = "day" | "week" | "month" | "year";
@@ -24,12 +26,6 @@ function formatLocalDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
 }
 
 function daysInMonth(year: number, month: number): number {
@@ -68,7 +64,7 @@ function weeklyOccurrences(startAfter: Date, daysOfWeek: number[], count: number
   // Cap the search so a malformed template (e.g. empty days_of_week slipping
   // past validation) can't spin forever instead of just returning nothing.
   for (let i = 0; i < 3650 && results.length < count; i++) {
-    cursor = addDays(cursor, 1);
+    cursor = addDaysDate(cursor, 1);
     if (daysOfWeek.includes(cursor.getDay())) {
       results.push(new Date(cursor));
     }
@@ -156,7 +152,7 @@ function intervalOccurrences(startAfter: Date, intervalDays: number, count: numb
   const results: Date[] = [];
   let cursor = new Date(startAfter);
   for (let i = 0; i < count; i++) {
-    cursor = addDays(cursor, intervalDays);
+    cursor = addDaysDate(cursor, intervalDays);
     results.push(new Date(cursor));
   }
   return results;
@@ -177,7 +173,7 @@ export function nextOccurrences(template: RecurringTemplate, today: string, coun
   const todayDate = parseLocalDate(today);
   const startAfter = template.last_generated_date
     ? parseLocalDate(template.last_generated_date)
-    : addDays(todayDate, -1);
+    : addDaysDate(todayDate, -1);
 
   if (template.recurrence_type === "weekly") {
     if (!template.days_of_week || template.days_of_week.length === 0) return [];
@@ -210,7 +206,7 @@ export function nextOccurrences(template: RecurringTemplate, today: string, coun
     // means when you've just created the recurring task.
     const intervalStartAfter = template.last_generated_date
       ? startAfter
-      : addDays(todayDate, -template.interval_days);
+      : addDaysDate(todayDate, -template.interval_days);
     return intervalOccurrences(intervalStartAfter, template.interval_days, count).map(formatLocalDate);
   }
 
@@ -220,8 +216,8 @@ export function nextOccurrences(template: RecurringTemplate, today: string, coun
 /** completion-anchored next date: `completedDate` + `count` `unit`(s), month/year clamped (e.g. Jan 31 + 1 month -> Feb 28). */
 export function addCompletionOffset(completedDate: string, count: number, unit: CompletionOffsetUnit): string {
   const date = parseLocalDate(completedDate);
-  if (unit === "day") return formatLocalDate(addDays(date, count));
-  if (unit === "week") return formatLocalDate(addDays(date, count * 7));
+  if (unit === "day") return formatLocalDate(addDaysDate(date, count));
+  if (unit === "week") return formatLocalDate(addDaysDate(date, count * 7));
   if (unit === "month") return formatLocalDate(addMonthsClamped(date, count, "clamp"));
   return formatLocalDate(addMonthsClamped(date, count * 12, "clamp"));
 }
