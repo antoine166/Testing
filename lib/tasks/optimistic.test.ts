@@ -57,7 +57,9 @@ describe("mergeServerTask", () => {
 
   it("preserves joined/list-only fields the bare server row doesn't carry", () => {
     const local = task({ id: "a", attachment_count: 3 });
-    local.recurring_task_templates = { recurrence_type: "daily" } as Task["recurring_task_templates"];
+    local.recurring_task_templates = {
+      recurrence_type: "daily",
+    } as unknown as Task["recurring_task_templates"];
     // A bare PUT response row has neither key at all.
     const server = task({ id: "a", title: "renamed" });
     delete (server as Record<string, unknown>).attachment_count;
