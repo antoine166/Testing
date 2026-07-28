@@ -4,6 +4,7 @@ import { useState } from "react";
 import TaskRow, { type Task, type TaskDomain, type TaskProject } from "@/components/task-row";
 import RecurringTaskGroup from "@/components/recurring-task-group";
 import { groupRecurringTasks } from "@/lib/recurring-tasks/group";
+import { useLeaveTransition } from "@/components/leave-transition";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 
 type CommonRowProps = {
@@ -85,6 +86,22 @@ export default function ReorderableTaskList({
 
   const entries = groupRecurringTasks(ordered);
 
+  // Rows that just left the list stay mounted briefly (flagged leaving) so
+  // their space collapses instead of snapping shut (#121/#138). Approximate
+  // position: the flat pre-grouping index — close enough visually.
+  const leavingEntries = useLeaveTransition(ordered);
+  type DisplayEntry =
+    | (typeof entries)[number]
+    | { type: "leaving"; task: Task; kind: (typeof leavingEntries)[number]["kind"] };
+  const display: DisplayEntry[] = [...entries];
+  for (const l of leavingEntries) {
+    display.splice(Math.min(l.index, display.length), 0, {
+      type: "leaving",
+      task: l.item,
+      kind: l.kind,
+    });
+  }
+
   return (
     <>
       {error && (
@@ -92,9 +109,16 @@ export default function ReorderableTaskList({
           {error}
         </li>
       )}
-      {entries.map((entry) =>
+      {display.map((entry) =>
         entry.type === "group" ? (
           <RecurringTaskGroup key={entry.templateId} tasks={entry.tasks} {...rowProps} />
+        ) : entry.type === "leaving" ? (
+          <TaskRow
+            key={`leaving-${entry.task.id}`}
+            task={entry.task}
+            {...rowProps}
+            leaving={entry.kind}
+          />
         ) : (
           <TaskRow
             key={entry.task.id}

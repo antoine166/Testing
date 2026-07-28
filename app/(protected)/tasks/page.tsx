@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import TaskRow, { type TaskPriority, type TaskEnergy } from "@/components/task-row";
 import { usePageData } from "@/lib/hooks/use-page-data";
+import { markTaskAdded } from "@/components/leave-transition";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -281,6 +282,7 @@ export default function TasksPage() {
     }
 
     const task = await res.json();
+    markTaskAdded(task.id);
 
     if (image) {
       const formData = new FormData();

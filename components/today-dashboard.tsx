@@ -11,6 +11,7 @@ import TaskRow, { type TaskPriority, type TaskEnergy } from "@/components/task-r
 import { type Routine } from "@/components/routine-card";
 import { markLocalRefresh, useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { useTaskList } from "@/lib/hooks/use-task-list";
+import { markTaskAdded, useLeaveTransition, withLeaving } from "@/components/leave-transition";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -449,6 +450,7 @@ export default function TodayDashboard() {
     }
 
     const created = await res.json();
+    markTaskAdded(created.id);
 
     if (newTaskImage) {
       const formData = new FormData();
@@ -510,6 +512,27 @@ export default function TodayDashboard() {
     await loadExtras();
   }
 
+  const todayTasks = [...tasks]
+    .filter((t) => t.scheduled_date === today && t.status !== "done")
+    .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+  // GTD's hard landscape: a scheduled_time makes this a real appointment,
+  // not just a day it's planned for — kept visually separate so "Today"
+  // doesn't quietly become a to-do list with dates.
+  const appointmentsToday = todayTasks
+    .filter((t) => t.scheduled_time)
+    .sort((a, b) => (a.scheduled_time ?? "").localeCompare(b.scheduled_time ?? ""));
+  const plannedToday = todayTasks.filter((t) => !t.scheduled_time);
+  const overdueTasks = [...tasks]
+    .filter((t) => t.scheduled_date && t.scheduled_date < today && t.status !== "done")
+    .sort((a, b) => (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? ""));
+
+  // Leave transitions (#121/#138) for the three plain-mapped task lists —
+  // ReorderableTaskList pages get this built in; Today wires it per list.
+  // Hooks, so they must sit above the loading early-return.
+  const overdueDisplay = withLeaving(overdueTasks, useLeaveTransition(overdueTasks));
+  const appointmentsDisplay = withLeaving(appointmentsToday, useLeaveTransition(appointmentsToday));
+  const plannedDisplay = withLeaving(plannedToday, useLeaveTransition(plannedToday));
+
   if (loading || tasksLoading) {
     return <p className="text-sm text-zinc-500">Loading...</p>;
   }
@@ -531,19 +554,6 @@ export default function TodayDashboard() {
   const atRiskCount = dueHabits.filter((h) =>
     isAtRisk(h, logs.filter((l) => l.habit_id === h.id), today),
   ).length;
-  const todayTasks = [...tasks]
-    .filter((t) => t.scheduled_date === today && t.status !== "done")
-    .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
-  // GTD's hard landscape: a scheduled_time makes this a real appointment,
-  // not just a day it's planned for — kept visually separate so "Today"
-  // doesn't quietly become a to-do list with dates.
-  const appointmentsToday = todayTasks
-    .filter((t) => t.scheduled_time)
-    .sort((a, b) => (a.scheduled_time ?? "").localeCompare(b.scheduled_time ?? ""));
-  const plannedToday = todayTasks.filter((t) => !t.scheduled_time);
-  const overdueTasks = [...tasks]
-    .filter((t) => t.scheduled_date && t.scheduled_date < today && t.status !== "done")
-    .sort((a, b) => (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? ""));
   // GTD's tickler file: a Someday/Maybe item whose date-specific trigger
   // has arrived should actually surface, not just wait to be noticed. Shares
   // isRevisitDue with the Inbox so this nudge and the Inbox never disagree
@@ -749,9 +759,10 @@ export default function TodayDashboard() {
             </span>
           </div>
           <ul className="space-y-2">
-            {overdueTasks.map((task) => (
+            {overdueDisplay.map(({ item: task, leaving }) => (
               <TaskRow
-                key={task.id}
+                key={leaving ? `leaving-${task.id}` : task.id}
+                leaving={leaving}
                 task={task}
                 domains={domains}
                 projects={projects}
@@ -1062,9 +1073,10 @@ export default function TodayDashboard() {
                   Appointments
                 </h3>
                 <ul className="space-y-2">
-                  {appointmentsToday.map((task) => (
+                  {appointmentsDisplay.map(({ item: task, leaving }) => (
                     <TaskRow
-                      key={task.id}
+                      key={leaving ? `leaving-${task.id}` : task.id}
+                      leaving={leaving}
                       task={task}
                       domains={domains}
                       projects={projects}
@@ -1087,9 +1099,10 @@ export default function TodayDashboard() {
                   </h3>
                 )}
                 <ul className="space-y-2">
-                  {plannedToday.map((task) => (
+                  {plannedDisplay.map(({ item: task, leaving }) => (
                     <TaskRow
-                      key={task.id}
+                      key={leaving ? `leaving-${task.id}` : task.id}
+                      leaving={leaving}
                       task={task}
                       domains={domains}
                       projects={projects}
