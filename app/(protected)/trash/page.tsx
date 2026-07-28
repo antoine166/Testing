@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/toast";
 import { useConfirmDialog } from "@/components/confirm-dialog";
+import { markRemovalKind, useLeaveTransition, withLeaving } from "@/components/leave-transition";
 
 type TrashItem = {
   id: string;
@@ -79,6 +80,7 @@ export default function TrashPage() {
     }
 
     showToast(`Restored “${item.name}”`, RESTORE_DESTINATIONS[item.type]);
+    markRemovalKind(item.id, "restore");
     setItems((prev) => prev.filter((i) => !(i.type === item.type && i.id === item.id)));
   }
 
@@ -100,8 +102,12 @@ export default function TrashPage() {
       return;
     }
 
+    markRemovalKind(item.id, "trash");
     setItems((prev) => prev.filter((i) => !(i.type === item.type && i.id === item.id)));
   }
+
+  // Restored/purged rows collapse out (↩️ / 🗑️) instead of snapping (#138).
+  const display = withLeaving(items, useLeaveTransition(items));
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
@@ -124,12 +130,15 @@ export default function TrashPage() {
         <p className="text-sm text-zinc-500">Trash is empty.</p>
       ) : (
         <ul className="space-y-2">
-          {items.map((item) => {
+          {display.map(({ item, leaving }) => {
             const remaining = daysRemaining(item.deleted_at);
             return (
               <li
-                key={`${item.type}-${item.id}`}
-                className="flex items-center gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800"
+                key={`${leaving ? "leaving-" : ""}${item.type}-${item.id}`}
+                aria-hidden={leaving ? true : undefined}
+                className={`flex items-center gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800 ${
+                  leaving ? `row-leaving row-leaving-${leaving}` : ""
+                }`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

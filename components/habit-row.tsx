@@ -9,6 +9,7 @@ import {
   type HabitFrequency,
 } from "@/lib/habits/streaks";
 import { lastSevenDays } from "@/lib/date";
+import type { RemovalKind } from "@/components/leave-transition";
 import { tapHaptic } from "@/lib/haptics";
 
 const RING_R = 9;
@@ -187,11 +188,14 @@ export default function HabitRow({
   onRemoveLog,
   onUpdate,
   onDelete,
+  leaving,
 }: {
   habit: Habit;
   logs: HabitLogRow[];
   today: string;
   domains?: HabitDomain[];
+  /** Set on the snapshot row rendered while a cleared habit's space collapses out of the Today list (#121) — see components/leave-transition.tsx. */
+  leaving?: RemovalKind;
   /** `date` defaults to today from callers, but any date lets the week's checkbox row log/unlog past days too. */
   onToggle: (habit: Habit, date: string, loggedOnDate: boolean) => void;
   /** times_per_week "extra credit" only: logs one more instance for today once the week's target is already hit. */
@@ -403,9 +407,10 @@ export default function HabitRow({
 
   return (
     <li
+      aria-hidden={leaving ? true : undefined}
       className={`flex items-center gap-3 rounded-md border px-4 py-3 ${
-        celebrate ? "habit-row-flash " : ""
-      }${
+        leaving ? `row-leaving row-leaving-${leaving} ` : ""
+      }${celebrate ? "habit-row-flash " : ""}${
         atRisk
           ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40"
           : "border-zinc-200 dark:border-zinc-800"
