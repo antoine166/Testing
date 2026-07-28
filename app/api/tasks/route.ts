@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/require-user";
+import { clientDateOr } from "@/lib/date";
 import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
 
 export async function GET(request: Request) {
@@ -94,7 +95,12 @@ export async function POST(request: Request) {
         typeof body.scheduled_time === "string" && body.scheduled_time ? body.scheduled_time : undefined,
       someday: typeof body.someday === "boolean" ? body.someday : undefined,
       waiting_for: typeof body.waiting_for === "boolean" ? body.waiting_for : undefined,
-      waiting_since: body.waiting_for === true ? new Date().toISOString().slice(0, 10) : undefined,
+      // The client's local date, not the server's UTC one — at 10pm
+      // Eastern the server already thinks it's tomorrow (#112 item 4).
+      waiting_since:
+        body.waiting_for === true
+          ? clientDateOr(body.client_date, new Date().toISOString().slice(0, 10))
+          : undefined,
       waiting_on:
         body.waiting_for === true && typeof body.waiting_on === "string" && body.waiting_on.trim()
           ? body.waiting_on.trim()

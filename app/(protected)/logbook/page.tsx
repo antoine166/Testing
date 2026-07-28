@@ -1,18 +1,11 @@
 "use client";
 
 import SmartListHeader from "@/components/smart-list-header";
+import { monthLabel } from "@/lib/date";
 import { type Task } from "@/components/task-row";
 import { renderGroupedEntries } from "@/components/recurring-task-group";
 import { groupRecurringTasks } from "@/lib/recurring-tasks/group";
 import { useTaskList } from "@/lib/hooks/use-task-list";
-
-function monthLabel(dateStr: string): string {
-  const [year, month] = dateStr.split("T")[0].split("-").map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-}
 
 export default function LogbookPage() {
   const { domains, projects, tasks, loading, error, handleUpdate, toggleDone, handleDelete } =

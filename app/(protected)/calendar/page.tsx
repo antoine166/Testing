@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import type { Task, TaskDomain } from "@/components/task-row";
-import { todayLocal } from "@/lib/date";
+import { addDays, monthLabel, todayLocal } from "@/lib/date";
 
 type GCalEvent = {
   id: string;
@@ -27,15 +27,6 @@ const HOUR_PX = 48; // 1 hour of grid height
 const DAY_START_SCROLL_HOUR = 7;
 const DEFAULT_BLOCK_MINUTES = 60;
 const SNAP_MINUTES = 15;
-
-function addDays(dateStr: string, n: number): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + n);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate(),
-  ).padStart(2, "0")}`;
-}
 
 /** The Sunday on or before dateStr — same 0=Sun convention as habits. */
 function weekStartOf(dateStr: string): string {
@@ -75,11 +66,6 @@ function dayLabel(dateStr: string): { weekday: string; day: number } {
     weekday: date.toLocaleDateString(undefined, { weekday: "short" }),
     day: date.getDate(),
   };
-}
-
-function monthLabel(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
 function domainColor(task: Task, domains: TaskDomain[]): string | null {
