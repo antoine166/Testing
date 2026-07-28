@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import SmartListHeader from "@/components/smart-list-header";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 
 type AgendaItem = {
   id: string;
@@ -14,37 +14,19 @@ type AgendaItem = {
 
 export default function AgendasPage() {
   const [items, setItems] = useState<AgendaItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const [personName, setPersonName] = useState("");
   const [note, setNote] = useState("");
 
-  async function loadAll() {
-    const res = await fetch("/api/agenda-items");
-    if (!res.ok) {
-      setError("Failed to load agendas");
-      return;
-    }
-    setItems(await res.json());
-    setError(null);
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/agenda-items", { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
-      .then((data: AgendaItem[]) => setItems(data))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["agenda_items"], () => loadAll());
+  const { loading, error, setError, reload: loadAll } = usePageData(
+    async (signal) => {
+      const res = await fetch("/api/agenda-items", { signal });
+      if (!res.ok) throw new Error("Failed to load agendas");
+      setItems(await res.json());
+    },
+    { tables: ["agenda_items"] },
+  );
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
 import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
 import { isAtRisk, isPendingToday } from "@/lib/habits/streaks";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { usePageData } from "@/lib/hooks/use-page-data";
 import HabitRow, {
   FrequencyFields,
   FREQUENCIES,
@@ -18,8 +18,6 @@ export default function HabitsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLogRow[]>([]);
   const [domains, setDomains] = useState<HabitDomain[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const [name, setName] = useState("");
@@ -30,12 +28,12 @@ export default function HabitsPage() {
 
   const today = todayLocal();
 
-  async function loadAll() {
-    try {
+  const { loading, error, setError, reload: loadAll } = usePageData(
+    async (signal) => {
       const [habitsRes, logsRes, domainsRes] = await Promise.all([
-        fetch("/api/habits"),
-        fetch("/api/habit-logs"),
-        fetch("/api/domains"),
+        fetch("/api/habits", { signal }),
+        fetch("/api/habit-logs", { signal }),
+        fetch("/api/domains", { signal }),
       ]);
       if (!habitsRes.ok || !logsRes.ok || !domainsRes.ok) {
         throw new Error("Failed to load habits");
@@ -43,44 +41,9 @@ export default function HabitsPage() {
       setHabits(await habitsRes.json());
       setLogs(await logsRes.json());
       setDomains(await domainsRes.json());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const opts = { signal: controller.signal };
-
-    Promise.all([
-      fetch("/api/habits", opts),
-      fetch("/api/habit-logs", opts),
-      fetch("/api/domains", opts),
-    ])
-      .then(async ([habitsRes, logsRes, domainsRes]) => {
-        if (!habitsRes.ok || !logsRes.ok || !domainsRes.ok) {
-          throw new Error("Failed to load habits");
-        }
-        return Promise.all([habitsRes.json(), logsRes.json(), domainsRes.json()]);
-      })
-      .then(([habitsData, logsData, domainsData]) => {
-        setHabits(habitsData);
-        setLogs(logsData);
-        setDomains(domainsData);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  useRealtimeRefresh(["habits", "habit_logs", "domains"], () => loadAll());
+    },
+    { tables: ["habits", "habit_logs", "domains"] },
+  );
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
