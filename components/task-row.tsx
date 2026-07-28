@@ -351,6 +351,19 @@ export default function TaskRow({
     }
   }, [task.status, completing, fadingOut]);
 
+  // Failure path: if the save was rejected and reverted (e.g. offline), the
+  // task settles back to not-done after the animation already committed.
+  // Without this the checkmark/strikethrough would stay painted forever on
+  // a task that never actually completed — the revert would be invisible.
+  // pendingCommitRef guards the pre-commit window, where "not done +
+  // animating" is the normal state, not a revert.
+  useEffect(() => {
+    if (task.status !== "done" && !pendingCommitRef.current && (completing || fadingOut)) {
+      setCompleting(false);
+      setFadingOut(false);
+    }
+  }, [task.status, completing, fadingOut]);
+
   function handleToggleClick() {
     if (task.status === "done") {
       onToggleDone(task);
