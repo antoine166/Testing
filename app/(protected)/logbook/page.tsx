@@ -2,7 +2,8 @@
 
 import SmartListHeader from "@/components/smart-list-header";
 import { monthLabel } from "@/lib/date";
-import { type Task } from "@/components/task-row";
+import TaskRow, { type Task } from "@/components/task-row";
+import { useLeaveTransition, type RemovalKind } from "@/components/leave-transition";
 import { renderGroupedEntries } from "@/components/recurring-task-group";
 import { groupRecurringTasks } from "@/lib/recurring-tasks/group";
 import { useTaskList } from "@/lib/hooks/use-task-list";
@@ -15,11 +16,27 @@ export default function LogbookPage() {
     .filter((t) => t.status === "done")
     .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
 
+  // Un-checking a task removes it from this done-only list — keep a
+  // snapshot row collapsing (↩️ badge) in its month instead of the list
+  // snapping shut (#138). Leaving rows render at the top of their month:
+  // close enough, and it keeps the recurring-series grouping untouched.
+  const leavingByMonth = new Map<string, { task: Task; kind: RemovalKind }[]>();
+  for (const l of useLeaveTransition(doneTasks)) {
+    const label = l.item.completed_at ? monthLabel(l.item.completed_at) : "Undated";
+    if (!leavingByMonth.has(label)) leavingByMonth.set(label, []);
+    leavingByMonth.get(label)!.push({ task: l.item, kind: l.kind });
+  }
+
   const byMonth = new Map<string, Task[]>();
   for (const task of doneTasks) {
     const label = task.completed_at ? monthLabel(task.completed_at) : "Undated";
     if (!byMonth.has(label)) byMonth.set(label, []);
     byMonth.get(label)!.push(task);
+  }
+  for (const label of leavingByMonth.keys()) {
+    // A month whose last visible task just left still needs its section
+    // rendered for the collapse to play.
+    if (!byMonth.has(label)) byMonth.set(label, []);
   }
 
   return (
@@ -44,6 +61,18 @@ export default function LogbookPage() {
                 {label}
               </h2>
               <ul className="space-y-2">
+                {(leavingByMonth.get(label) ?? []).map(({ task, kind }) => (
+                  <TaskRow
+                    key={`leaving-${task.id}`}
+                    task={task}
+                    leaving={kind}
+                    domains={domains}
+                    projects={projects}
+                    onToggleDone={toggleDone}
+                    onUpdate={handleUpdate}
+                    onDelete={handleDelete}
+                  />
+                ))}
                 {renderGroupedEntries(groupRecurringTasks(monthTasks), {
                   domains,
                   projects,
