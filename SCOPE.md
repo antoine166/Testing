@@ -234,7 +234,7 @@ A simple log of named workouts, separate from Habits (no domain tagging, and unl
 - **History**: the Training Log page lists logged days (most recent first) below the day-picker, filtered to a selectable window — 7/14/28/74/148 days, defaulting to 7 — and the Analytics page (§11 Phase 4) shows workout name + notes + images together under one "Workouts" section
 - Deleting a workout from the catalog moves it (and its log entries) to Trash together — recoverable for 30 days, same as everything else in 3.12
 - Sidebar entry "Training Log" sits between Habits and Coach (see §4)
-- Full Coach + MCP parity: catalog CRUD (including the weekly goal), log/unlog, and a training-history read tool — no app-only exceptions here (image upload is the one MCP/Coach gap, matching task image attachments, which are also app-only for uploads)
+- Full MCP parity: catalog CRUD (including the weekly goal), log/unlog, training-history read (`list_workout_logs`), per-entry edit/delete (`update_workout_log`/`delete_workout_log`), and attachment list/delete with signed viewing URLs (`list_workout_log_attachments`/`delete_workout_log_attachment`). Image **upload** is the one remaining MCP gap, matching task image attachments — MCP tool calls carry JSON, not file bytes, so uploads stay app-only
 
 ### 3.8 Routines *(Phase 2)*
 Ordered sequences of steps (tasks, habits, or notes) tied to a time of day.
@@ -310,7 +310,7 @@ A remote MCP server (`/api/mcp`) so Antoine can talk to Claude on claude.ai or i
 ### 3.12 Trash *(Phase 4)*
 Soft delete with a 30-day recovery window, so an accidental delete is never permanent by mistake.
 
-- Applies to: domains, projects, tasks, habits, workouts, routines, knowledge library items
+- Applies to: domains, projects, tasks, habits, workouts, routines, checklists, knowledge library items, tickler items, and people (the full list lives in `lib/trash.ts`; everything but domain restore/purge is also reachable through the MCP connector)
 - Deleting one of these sets `deleted_at` instead of removing the row; it disappears from normal views but is recoverable
 - Domains and projects cascade: deleting a domain trashes its projects and tasks together (and restoring the domain restores all of them together); deleting a project cascades to its tasks the same way
 - Child records that aren't independently trashable (habit logs, routine steps) aren't given their own trash entry — they simply go with their parent when it's permanently purged

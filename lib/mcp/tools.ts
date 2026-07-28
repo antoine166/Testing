@@ -49,6 +49,7 @@ const RESTORABLE_TRASH_TYPES = [
   "checklist",
   "knowledge-item",
   "tickler-item",
+  "person",
 ] as const satisfies readonly TrashType[];
 
 import {
@@ -60,6 +61,12 @@ const HABIT_FREQUENCIES = ["daily", "specific_days", "times_per_week"] as const;
 const PROJECT_STATUSES = ["active", "someday", "completed", "archived"] as const;
 const TIME_OF_DAY = ["morning", "afternoon", "evening", "custom"] as const;
 const KNOWLEDGE_TYPES = ["note", "article", "book", "quote", "resource"] as const;
+
+// Storage buckets for image attachments — same names the app routes use
+// (app/api/tasks/[id]/attachments, app/api/workout-logs/[id]/attachments).
+const TASK_ATTACHMENTS_BUCKET = "task-attachments";
+const WORKOUT_LOG_ATTACHMENTS_BUCKET = "workout-log-attachments";
+const SIGNED_URL_TTL_SECONDS = 3600;
 
 function ok(data: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -85,9 +92,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     async () => {
       const { data, error } = await admin
         .from("domains")
-        .select("id, name, color, icon")
+        .select("id, name, color, icon, sort_order")
         .eq("user_id", userId)
         .is("deleted_at", null)
+        .order("sort_order")
         .order("name");
       if (error) return fail(error.message);
       return ok(data);
@@ -128,7 +136,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     "update_domain",
     {
       title: "Update domain",
-      description: "Rename or recolor an existing domain.",
+      description:
+        "Rename, recolor, or reorder an existing domain. sort_order controls the sidebar (and every " +
+        "domain-grouped view) — lower numbers sort first.",
       inputSchema: {
         id: z.string().uuid(),
         name: z.string().min(1).optional(),
@@ -138,6 +148,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .optional()
           .describe("Hex color, e.g. #3b82f6"),
         icon: z.string().optional(),
+        sort_order: z.number().int().optional().describe("Position in the sidebar order — lower sorts first."),
       },
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
@@ -535,6 +546,14 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         due_date: z.string().optional().describe("YYYY-MM-DD"),
         scheduled_date: z.string().optional().describe("YYYY-MM-DD"),
         link: z.string().optional().describe("A related URL, e.g. a shared doc or spec."),
+        review_every_days: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "Review cadence in days — how often this project needs a look in the Weekly Review. Omit for due at every review (the default).",
+          ),
       },
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
@@ -551,6 +570,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       due_date,
       scheduled_date,
       link,
+      review_every_days,
     }) => {
       const trimmed = name.trim();
       if (!trimmed) return fail("Name is required");
@@ -576,6 +596,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           due_date,
           scheduled_date,
           link: link && link.trim() ? link.trim() : undefined,
+          review_every_days,
         })
         .select()
         .single();
@@ -730,9 +751,39 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       if (scheduled_on_or_before) {
         query = query.lte("scheduled_date", scheduled_on_or_before).not("scheduled_date", "is", null);
       }
-      const { data, error } = await query.order("created_at", { ascending: false }).limit(limit ?? 50);
+      // Same ordering as the app's task lists (GET /api/tasks), so the order
+      // Claude sees is the order Antoine sees — and the one reorder_tasks edits.
+      const { data, error } = await query
+        .order("sort_order", { ascending: true, nullsFirst: true })
+        .order("created_at", { ascending: false })
+        .limit(limit ?? 50);
       if (error) return fail(error.message);
       return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "reorder_tasks",
+    {
+      title: "Reorder tasks",
+      description:
+        "Manually reorder tasks: pass the full id list of a hand-arranged view in the desired " +
+        "display order, and each task's sort_order is set to its position. Use list_tasks first " +
+        "to see the current order.",
+      inputSchema: {
+        ids: z.array(z.string().uuid()).min(1).max(500).describe("Task ids in the desired display order."),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ ids }) => {
+      const results = await Promise.all(
+        ids.map((id, index) =>
+          admin.from("tasks").update({ sort_order: index }).eq("id", id).eq("user_id", userId),
+        ),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) return fail(failed.error.message);
+      return ok({ reordered: ids.length });
     },
   );
 
@@ -853,7 +904,9 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       const [tasks, projects, knowledgeItems, ticklerItems, agendaItems] = await Promise.all([
         admin
           .from("tasks")
-          .select("id, title, notes, status, someday, waiting_for, scheduled_date, due_date, completed_at")
+          .select(
+            "id, title, notes, status, someday, waiting_for, domain_id, project_id, scheduled_date, due_date, completed_at",
+          )
           .eq("user_id", userId)
           .is("deleted_at", null)
           .or(`title.ilike.${like},notes.ilike.${like}`)
@@ -861,7 +914,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .limit(20),
         admin
           .from("projects")
-          .select("id, name, description, status")
+          .select("id, name, description, status, domain_id")
           .eq("user_id", userId)
           .is("deleted_at", null)
           .or(`name.ilike.${like},description.ilike.${like},purpose.ilike.${like},outcome_vision.ilike.${like},brainstorm.ilike.${like}`)
@@ -869,7 +922,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           .limit(20),
         admin
           .from("knowledge_items")
-          .select("id, title, content, url, type")
+          .select("id, title, content, url, type, folder_id, project_id")
           .eq("user_id", userId)
           .is("deleted_at", null)
           .or(`title.ilike.${like},content.ilike.${like}`)
@@ -944,6 +997,10 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         domain_id: z.string().uuid().optional(),
         person_id: z.string().uuid().optional().describe("Link to a person (list_people)"),
         project_id: z.string().uuid().optional(),
+        status: z
+          .enum(TASK_STATUSES)
+          .optional()
+          .describe("Defaults to todo. Set in_progress for something already underway, or done to backfill a completed task."),
         priority: z.enum(TASK_PRIORITIES).optional(),
         due_date: z.string().optional().describe("YYYY-MM-DD"),
         scheduled_date: z.string().optional().describe("YYYY-MM-DD"),
@@ -1006,6 +1063,7 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       domain_id,
       person_id,
       project_id,
+      status,
       priority,
       due_date,
       scheduled_date,
@@ -1032,6 +1090,8 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
           domain_id: domain_id ?? null,
           person_id: person_id ?? null,
           project_id: project_id ?? null,
+          status,
+          completed_at: status === "done" ? new Date().toISOString() : undefined,
           priority,
           due_date,
           scheduled_date,
@@ -1304,6 +1364,74 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .eq("user_id", userId);
       if (error) return fail(error.message);
       await syncTaskCalendarEvent(userId, id);
+      return ok({ deleted: id });
+    },
+  );
+
+  // --- Task attachments ---
+
+  server.registerTool(
+    "list_task_attachments",
+    {
+      title: "List task attachments",
+      description:
+        "List a task's image attachments, each with a signed URL (valid ~1 hour) for viewing the image.",
+      inputSchema: {
+        task_id: z.string().uuid(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ task_id }) => {
+      const { data, error } = await admin
+        .from("task_attachments")
+        .select("*")
+        .eq("task_id", task_id)
+        .eq("user_id", userId)
+        .order("created_at");
+      if (error) return fail(error.message);
+
+      // One batch call to Storage instead of one round-trip per attachment.
+      const { data: signed } =
+        data.length > 0
+          ? await admin.storage
+              .from(TASK_ATTACHMENTS_BUCKET)
+              .createSignedUrls(
+                data.map((a) => a.storage_path),
+                SIGNED_URL_TTL_SECONDS,
+              )
+          : { data: null };
+      return ok(data.map((attachment, i) => ({ ...attachment, url: signed?.[i]?.signedUrl ?? null })));
+    },
+  );
+
+  server.registerTool(
+    "delete_task_attachment",
+    {
+      title: "Delete task attachment",
+      description:
+        "Permanently delete one image attachment from a task (the file and its record — attachments " +
+        "have no trash/recovery). Get the attachment id from list_task_attachments.",
+      inputSchema: {
+        id: z.string().uuid(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { data: attachment, error: fetchError } = await admin
+        .from("task_attachments")
+        .select("storage_path")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .single();
+      if (fetchError) return fail(fetchError.message);
+
+      const { error: storageError } = await admin.storage
+        .from(TASK_ATTACHMENTS_BUCKET)
+        .remove([attachment.storage_path]);
+      if (storageError) return fail(storageError.message);
+
+      const { error } = await admin.from("task_attachments").delete().eq("id", id).eq("user_id", userId);
+      if (error) return fail(error.message);
       return ok({ deleted: id });
     },
   );
@@ -2120,6 +2248,36 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
     },
   );
 
+  server.registerTool(
+    "list_habit_logs",
+    {
+      title: "List habit logs",
+      description:
+        "Habit log history over a date range (defaults to the last 28 days), oldest first — the raw " +
+        "entries behind the streak counters. Multiple entries on one day are extra credit.",
+      inputSchema: {
+        habit_id: z.string().uuid().optional().describe("Limit to one habit. Omit for all habits."),
+        from: z.string().optional().describe("YYYY-MM-DD, defaults to 28 days ago"),
+        to: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ habit_id, from, to }) => {
+      const toDate = to ?? todayLocal();
+      const start = from ?? new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      let query = admin
+        .from("habit_logs")
+        .select("id, habit_id, logged_date, created_at, habits(name)")
+        .eq("user_id", userId)
+        .gte("logged_date", start)
+        .lte("logged_date", toDate);
+      if (habit_id) query = query.eq("habit_id", habit_id);
+      const { data, error } = await query.order("logged_date");
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
   // --- Training Log ---
 
   server.registerTool(
@@ -2359,6 +2517,127 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .order("logged_date", { ascending: false });
       if (error) return fail(error.message);
       return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "update_workout_log",
+    {
+      title: "Update workout log",
+      description:
+        "Edit a specific workout log entry's duration or notes, by log id (from list_workout_logs). " +
+        "Pass null to clear a field.",
+      inputSchema: {
+        id: z.string().uuid().describe("The workout log entry id, not the workout id."),
+        duration_minutes: z.number().int().min(0).nullable().optional(),
+        notes: z.string().nullable().optional(),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ id, duration_minutes, notes }) => {
+      const updates: Record<string, unknown> = {};
+      if (duration_minutes !== undefined) updates.duration_minutes = duration_minutes;
+      if (notes !== undefined) updates.notes = notes;
+      if (Object.keys(updates).length === 0) return fail("Pass duration_minutes and/or notes to update.");
+
+      const { data, error } = await admin
+        .from("workout_logs")
+        .update(updates)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select("id, workout_id, logged_date, duration_minutes, notes, created_at")
+        .single();
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "delete_workout_log",
+    {
+      title: "Delete workout log",
+      description:
+        "Delete a specific workout log entry by log id (from list_workout_logs) — for cleaning up a " +
+        "wrong-day or duplicate entry. For \"undo today's log\" prefer unlog_workout. Permanent (no trash).",
+      inputSchema: {
+        id: z.string().uuid().describe("The workout log entry id, not the workout id."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { error } = await admin.from("workout_logs").delete().eq("id", id).eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
+    },
+  );
+
+  server.registerTool(
+    "list_workout_log_attachments",
+    {
+      title: "List workout log attachments",
+      description:
+        "List a workout log entry's image attachments (e.g. gym photos), each with a signed URL " +
+        "(valid ~1 hour) for viewing.",
+      inputSchema: {
+        workout_log_id: z.string().uuid(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ workout_log_id }) => {
+      const { data, error } = await admin
+        .from("workout_log_attachments")
+        .select("*")
+        .eq("workout_log_id", workout_log_id)
+        .eq("user_id", userId)
+        .order("created_at");
+      if (error) return fail(error.message);
+
+      const { data: signed } =
+        data.length > 0
+          ? await admin.storage
+              .from(WORKOUT_LOG_ATTACHMENTS_BUCKET)
+              .createSignedUrls(
+                data.map((a) => a.storage_path),
+                SIGNED_URL_TTL_SECONDS,
+              )
+          : { data: null };
+      return ok(data.map((attachment, i) => ({ ...attachment, url: signed?.[i]?.signedUrl ?? null })));
+    },
+  );
+
+  server.registerTool(
+    "delete_workout_log_attachment",
+    {
+      title: "Delete workout log attachment",
+      description:
+        "Permanently delete one image attachment from a workout log entry (the file and its record — " +
+        "attachments have no trash/recovery). Get the id from list_workout_log_attachments.",
+      inputSchema: {
+        id: z.string().uuid(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ id }) => {
+      const { data: attachment, error: fetchError } = await admin
+        .from("workout_log_attachments")
+        .select("storage_path")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .single();
+      if (fetchError) return fail(fetchError.message);
+
+      const { error: storageError } = await admin.storage
+        .from(WORKOUT_LOG_ATTACHMENTS_BUCKET)
+        .remove([attachment.storage_path]);
+      if (storageError) return fail(storageError.message);
+
+      const { error } = await admin
+        .from("workout_log_attachments")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) return fail(error.message);
+      return ok({ deleted: id });
     },
   );
 
@@ -3404,8 +3683,8 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
       title: "Restore from trash",
       description:
         "Restore a soft-deleted item from the Trash. Works for tasks, projects (restoring a project " +
-        "also restores the tasks trashed with it), habits, routines, checklists, and knowledge items. " +
-        "Domain restore and permanent purge are deliberately app-only.",
+        "also restores the tasks trashed with it), habits, workouts, routines, checklists, knowledge " +
+        "items, tickler items, and people. Domain restore and permanent purge are deliberately app-only.",
       inputSchema: {
         type: z.enum(RESTORABLE_TRASH_TYPES),
         id: z.string().uuid(),
@@ -3720,6 +3999,85 @@ export function buildMcpServer(admin: AdminClient, userId: string): McpServer {
         .select()
         .single();
       if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "list_weekly_review_logs",
+    {
+      title: "List Weekly Review history",
+      description:
+        "Completed Weekly Reviews, most recent first, with any stats snapshotted at review time — " +
+        "the record behind the review streak and cadence nudge.",
+      inputSchema: {
+        limit: z.number().int().min(1).max(104).optional().describe("Defaults to 104 (two years of weekly reviews)."),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ limit }) => {
+      const { data, error } = await admin
+        .from("weekly_review_logs")
+        .select("*")
+        .eq("user_id", userId)
+        .order("completed_at", { ascending: false })
+        .limit(limit ?? 104);
+      if (error) return fail(error.message);
+      return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "export_all_data",
+    {
+      title: "Export all data",
+      description:
+        "Full JSON export of every user-content table — the same payload as the app's Settings → " +
+        "Export (GET /api/export). Large: intended for backup/hand-off, not for answering a question " +
+        "about one list (use the specific list_* tools for that). Excludes OAuth token tables and " +
+        "attachment file bytes, same as the app.",
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      // Keep this list in sync with EXPORT_TABLES in app/api/export/route.ts —
+      // same drift risk, same rule: new table, both places, one change.
+      const tables = [
+        "domains",
+        "projects",
+        "project_templates",
+        "project_template_tasks",
+        "tasks",
+        "task_attachments",
+        "recurring_task_templates",
+        "habits",
+        "habit_logs",
+        "daily_checkins",
+        "routines",
+        "routine_items",
+        "checklists",
+        "checklist_items",
+        "knowledge_folders",
+        "knowledge_items",
+        "tickler_items",
+        "agenda_items",
+        "contexts",
+        "people",
+        "workouts",
+        "workout_logs",
+        "workout_log_attachments",
+        "horizons",
+      ] as const;
+
+      const results = await Promise.all(
+        tables.map((table) => admin.from(table).select("*").eq("user_id", userId)),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) return fail(failed.error.message);
+
+      const data: Record<string, unknown> = { exported_at: new Date().toISOString() };
+      tables.forEach((table, i) => {
+        data[table] = results[i].data;
+      });
       return ok(data);
     },
   );
