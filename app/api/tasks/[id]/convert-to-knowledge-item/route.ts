@@ -40,6 +40,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
       content: task.notes,
       url: task.link,
       type: "note",
+      // A project task filed as reference stays attached to its project —
+      // that's what the project card's Reference section reads.
+      project_id: task.project_id ?? null,
     })
     .select()
     .single();
