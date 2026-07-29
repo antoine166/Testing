@@ -253,7 +253,16 @@ export default function TasksPage() {
       />
 
       <RecurringTemplatesSection
-        recurringTemplates={recurringTemplates}
+        // The series list honors the page filter the same way the task
+        // list does: a project view shows only that project's series, a
+        // domain view only that domain's. Unfiltered shows everything.
+        recurringTemplates={
+          projectFilter
+            ? recurringTemplates.filter((t) => t.project_id === projectFilter)
+            : domainFilter
+              ? recurringTemplates.filter((t) => t.domain_id === domainFilter)
+              : recurringTemplates
+        }
         domains={domains}
         projects={projects}
         editTemplateId={editTemplateId}
