@@ -310,8 +310,11 @@ export default function ProjectsPage() {
   }
 
   const topLevelProjects = projects.filter((p) => !p.parent_project_id);
+  // Completed projects can't take new subprojects — out of the parent
+  // picker (same rule as the task pickers), though they keep rendering
+  // fine on any existing subproject.
   const parentOptions = (excludeId?: string) =>
-    topLevelProjects.filter((p) => p.id !== excludeId);
+    topLevelProjects.filter((p) => p.id !== excludeId && p.status !== "completed");
 
   const domainsById = new Map(domains.map((d) => [d.id, d]));
   const grouped = new Map<string, Project[]>();

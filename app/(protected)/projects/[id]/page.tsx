@@ -103,8 +103,12 @@ export default function ProjectDetailPage() {
     .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
   const references = supportItems.filter((i) => i.project_id === id);
 
+  // Completed projects can't take new subprojects, so they leave the
+  // parent picker too (same rule as the task pickers).
   const parentOptions = (excludeId?: string) =>
-    projects.filter((p) => !p.parent_project_id && p.id !== excludeId);
+    projects.filter(
+      (p) => !p.parent_project_id && p.id !== excludeId && p.status !== "completed",
+    );
 
   if (wantsEdit && !autoEditDone && project) {
     setAutoEditDone(true);
