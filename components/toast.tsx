@@ -35,16 +35,15 @@ export function useToast(): ToastContextValue {
  * disappearing. Spread into showToast: showToast(...projectConversionToast(p, domains)).
  */
 export function projectConversionToast(
-  project: { name: string; domain_id: string | null },
+  project: { id: string; name: string; domain_id: string | null },
   domains: Array<{ id: string; name: string }>,
 ): [string, ToastAction] {
   const domainName = domains.find((d) => d.id === project.domain_id)?.name;
   return [
     `“${project.name}” is now a project${domainName ? ` in ${domainName}` : ""}`,
-    {
-      label: "View project",
-      href: project.domain_id ? `/projects?domain=${project.domain_id}` : "/projects",
-    },
+    // Straight into the detail page's planning form — defining purpose /
+    // outcome / next action is the natural step right after converting.
+    { label: "Define it", href: `/projects/${project.id}?edit=1` },
   ];
 }
 

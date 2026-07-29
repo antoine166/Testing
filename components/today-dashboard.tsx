@@ -54,7 +54,7 @@ export default function TodayDashboard() {
     handleUpdate: handleUpdateTask,
     toggleDone: toggleTask,
     handleDelete: handleDeleteTask,
-    handleConvertToProject: handleConvertTaskToProject,
+    handleConvertToProjectAndPlan: handleConvertTaskToProject,
     handleConvertToRecurring: handleConvertTaskToRecurring,
     handleConvertToKnowledgeItem: handleConvertTaskToKnowledgeItem,
     loadAll: refreshTasks,

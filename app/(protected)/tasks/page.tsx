@@ -38,7 +38,7 @@ export default function TasksPage() {
     handleUpdate,
     toggleDone,
     handleDelete,
-    handleConvertToProject,
+    handleConvertToProjectAndPlan,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
     loadAll,
@@ -285,7 +285,7 @@ export default function TasksPage() {
                   onToggleDone={toggleDone}
                   onUpdate={handleUpdate}
                   onDelete={handleDelete}
-                  onConvertToProject={handleConvertToProject}
+                  onConvertToProject={handleConvertToProjectAndPlan}
                   onConvertToRecurring={handleConvertToRecurring}
                   onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
                 />
@@ -296,7 +296,7 @@ export default function TasksPage() {
                   onToggleDone: toggleDone,
                   onUpdate: handleUpdate,
                   onDelete: handleDelete,
-                  onConvertToProject: handleConvertToProject,
+                  onConvertToProject: handleConvertToProjectAndPlan,
                   onConvertToRecurring: handleConvertToRecurring,
                   onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                 })
@@ -437,7 +437,7 @@ export default function TasksPage() {
                         onToggleDone={toggleDone}
                         onUpdate={handleUpdate}
                         onDelete={handleDelete}
-                        onConvertToProject={handleConvertToProject}
+                        onConvertToProject={handleConvertToProjectAndPlan}
                         onConvertToRecurring={handleConvertToRecurring}
                         onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
                         selectable
@@ -451,7 +451,7 @@ export default function TasksPage() {
                       onToggleDone: toggleDone,
                       onUpdate: handleUpdate,
                       onDelete: handleDelete,
-                      onConvertToProject: handleConvertToProject,
+                      onConvertToProject: handleConvertToProjectAndPlan,
                       onConvertToRecurring: handleConvertToRecurring,
                       onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                     })}
@@ -530,7 +530,7 @@ export default function TasksPage() {
                                       onToggleDone: toggleDone,
                                       onUpdate: handleUpdate,
                                       onDelete: handleDelete,
-                                      onConvertToProject: handleConvertToProject,
+                                      onConvertToProject: handleConvertToProjectAndPlan,
                                       onConvertToRecurring: handleConvertToRecurring,
                                       onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                                     })}
@@ -554,7 +554,7 @@ export default function TasksPage() {
                                   onToggleDone: toggleDone,
                                   onUpdate: handleUpdate,
                                   onDelete: handleDelete,
-                                  onConvertToProject: handleConvertToProject,
+                                  onConvertToProject: handleConvertToProjectAndPlan,
                                   onConvertToRecurring: handleConvertToRecurring,
                                   onConvertToKnowledgeItem: handleConvertToKnowledgeItem,
                                 })}

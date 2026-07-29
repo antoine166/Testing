@@ -5,18 +5,24 @@ import { type TaskDomain } from "@/components/task-row";
 import {
   PRIORITIES,
   STATUSES,
-  type Project,
   type ProjectPriority,
   type ProjectStatus,
 } from "@/lib/projects/types";
 
+// Only what the form actually reads — structural, so both the Projects
+// page (full Project rows) and the Domains page (the task hook's lighter
+// project shape) can feed it.
+type CreateFormProject = { id: string; name: string; domain_id: string | null };
+
 type ProjectCreateFormProps = {
   domains: TaskDomain[];
-  projects: Project[];
-  parentOptions: (excludeId?: string) => Project[];
+  projects: CreateFormProject[];
+  parentOptions: (excludeId?: string) => CreateFormProject[];
   domainFilter: string | null;
   setError: (message: string) => void;
   loadAll: () => Promise<void>;
+  /** Called after a successful create (e.g. collapse an inline form). */
+  onCreated?: () => void;
 };
 
 export default function ProjectCreateForm({
@@ -26,6 +32,7 @@ export default function ProjectCreateForm({
   domainFilter,
   setError,
   loadAll,
+  onCreated,
 }: ProjectCreateFormProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -95,7 +102,9 @@ export default function ProjectCreateForm({
     setOutcomeVision("");
     setBrainstorm("");
     setNextAction("");
-    setDomainId("");
+    // Back to the initial state — which, on a domain-scoped form (Domains
+    // page), is that domain preselected rather than empty.
+    setDomainId(domainFilter ?? "");
     setParentProjectId("");
     setStatus("active");
     setPriority("none");
@@ -103,6 +112,7 @@ export default function ProjectCreateForm({
     setScheduledDate("");
     setLink("");
     await loadAll();
+    onCreated?.();
   }
 
   function selectParentProject(id: string) {
