@@ -2,23 +2,35 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { usePageData } from "@/lib/hooks/use-page-data";
 import { useListOrder } from "@/lib/hooks/use-list-order";
 import { applyListOrder } from "@/lib/tasks/list-order";
+import { useConfirmDialog } from "@/components/confirm-dialog";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import TaskRow from "@/components/task-row";
-import { type Project, type SupportItem } from "@/lib/projects/types";
+import ProjectEditForm from "@/components/project-edit-form";
+import ProjectDetailHeader from "@/components/project-detail-header";
+import {
+  type Project,
+  type ProjectPriority,
+  type ProjectStatus,
+  type SupportItem,
+} from "@/lib/projects/types";
 
 /**
  * The project detail page (#139 + #132): one place holding everything a
  * project accumulates — planning fields, open tasks, completed history,
  * and reference material. The Projects page card links here for the
- * pieces that don't belong on a browsing list.
+ * pieces that don't belong on a browsing list. The header toolbar offers
+ * the same actions as the All-Projects card (template / plan / complete /
+ * edit / delete), so nothing requires a round trip back to the list.
  */
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { confirm, prompt } = useConfirmDialog();
 
   const {
     domains,
@@ -26,12 +38,14 @@ export default function ProjectDetailPage() {
     tasks,
     loading,
     error,
+    setError,
     handleUpdate,
     toggleDone,
     handleDelete,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
     createTask,
+    loadAll,
   } = useTaskList<Project>();
 
   const [supportItems, setSupportItems] = useState<SupportItem[]>([]);
@@ -45,6 +59,25 @@ export default function ProjectDetailPage() {
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [addingTask, setAddingTask] = useState(false);
+
+  // Header-toolbar state, mirroring the Projects page (#147 follow-up):
+  // the same edit-field states drive the shared ProjectEditForm, and
+  // celebrating gates the completion overlay over the header card.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPurpose, setEditPurpose] = useState("");
+  const [editOutcomeVision, setEditOutcomeVision] = useState("");
+  const [editBrainstorm, setEditBrainstorm] = useState("");
+  const [editDomainId, setEditDomainId] = useState("");
+  const [editParentProjectId, setEditParentProjectId] = useState("");
+  const [editStatus, setEditStatus] = useState<ProjectStatus>("active");
+  const [editPriority, setEditPriority] = useState<ProjectPriority>("none");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editScheduledDate, setEditScheduledDate] = useState("");
+  const [editLink, setEditLink] = useState("");
+  const [editReviewEveryDays, setEditReviewEveryDays] = useState("");
+  const [celebratingId, setCelebratingId] = useState<string | null>(null);
 
   // Per-page manual order (#142) — the same key as the Tasks page's
   // project-filtered view, so both surfaces share one arrangement.
@@ -65,6 +98,138 @@ export default function ProjectDetailPage() {
     .filter((t) => t.project_id === id && t.status === "done")
     .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
   const references = supportItems.filter((i) => i.project_id === id);
+
+  const parentOptions = (excludeId?: string) =>
+    projects.filter((p) => !p.parent_project_id && p.id !== excludeId);
+
+  function selectEditParentProject(parentId: string) {
+    setEditParentProjectId(parentId);
+    if (parentId) {
+      const parent = projects.find((p) => p.id === parentId);
+      setEditDomainId(parent?.domain_id ?? "");
+    }
+  }
+
+  function startEdit(p: Project) {
+    setEditingId(p.id);
+    setEditName(p.name);
+    setEditDescription(p.description ?? "");
+    setEditPurpose(p.purpose ?? "");
+    setEditOutcomeVision(p.outcome_vision ?? "");
+    setEditBrainstorm(p.brainstorm ?? "");
+    setEditDomainId(p.domain_id ?? "");
+    setEditParentProjectId(p.parent_project_id ?? "");
+    setEditStatus(p.status);
+    setEditPriority(p.priority);
+    setEditDueDate(p.due_date ?? "");
+    setEditScheduledDate(p.scheduled_date ?? "");
+    setEditLink(p.link ?? "");
+    setEditReviewEveryDays(p.review_every_days ? String(p.review_every_days) : "");
+  }
+
+  async function handleUpdateProject(projectId: string) {
+    if (!editName.trim()) return;
+
+    const res = await fetch(`/api/projects/${projectId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editName,
+        description: editDescription,
+        purpose: editPurpose,
+        outcome_vision: editOutcomeVision,
+        brainstorm: editBrainstorm,
+        domain_id: editDomainId || null,
+        parent_project_id: editParentProjectId || null,
+        status: editStatus,
+        priority: editPriority,
+        due_date: editDueDate || null,
+        scheduled_date: editScheduledDate || null,
+        link: editLink || null,
+        review_every_days: editReviewEveryDays ? Number(editReviewEveryDays) : null,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to update project");
+      return;
+    }
+
+    setEditingId(null);
+    await loadAll();
+  }
+
+  async function handleCompleteProject(p: Project) {
+    const openCount = tasks.filter(
+      (t) => t.project_id === p.id && t.status !== "done",
+    ).length;
+    if (
+      !(await confirm({
+        message: `Complete “${p.name}”?${
+          openCount > 0
+            ? ` Its ${openCount} open task${openCount === 1 ? "" : "s"} will stay with the completed project.`
+            : ""
+        }`,
+        confirmLabel: "Complete project",
+      }))
+    )
+      return;
+
+    // Celebration first, save behind it — finishing a project should feel
+    // like a milestone (#125), same as on the Projects page.
+    setCelebratingId(p.id);
+    setTimeout(() => setCelebratingId(null), 1800);
+
+    const res = await fetch(`/api/projects/${p.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "completed" }),
+    });
+    if (!res.ok) {
+      setCelebratingId(null);
+      const body = await res.json();
+      setError(body.error ?? "Failed to complete project");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleSaveAsTemplate(p: Project) {
+    const name = await prompt({ message: "Template name:", defaultValue: p.name });
+    if (name === null) return;
+    const res = await fetch("/api/project-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from_project_id: p.id, name }),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to save template");
+      return;
+    }
+    await loadAll();
+  }
+
+  async function handleDeleteProject(projectId: string) {
+    const hasSubprojects = projects.some((p) => p.parent_project_id === projectId);
+    const message = hasSubprojects
+      ? "Move this project to trash? Its subprojects and all their tasks move with it, and you can restore them together within 30 days."
+      : "Move this project to trash? Its tasks move with it, and you can restore them together within 30 days.";
+    if (!(await confirm({ message, confirmLabel: "Move to Trash", danger: true }))) {
+      return;
+    }
+
+    const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+
+    if (!res.ok) {
+      const body = await res.json();
+      setError(body.error ?? "Failed to delete project");
+      return;
+    }
+
+    router.push("/projects");
+  }
 
   async function handleAddTask(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -116,58 +281,66 @@ export default function ProjectDetailPage() {
         </p>
       )}
 
-      <div className="mt-3 mb-6">
-        <div className="flex items-center gap-2">
-          {domain && (
-            <span
-              className="h-3 w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: domain.color }}
-            />
-          )}
-          <h1 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-            {project.name}
-          </h1>
-        </div>
-        <p className="mt-1 text-xs text-zinc-500">
-          {project.status}
-          {project.priority !== "none" ? ` · ${project.priority} priority` : ""}
-          {project.due_date ? ` · due ${project.due_date}` : ""}
-          {project.scheduled_date ? ` · scheduled ${project.scheduled_date}` : ""}
-          {domain ? ` · ${domain.name}` : ""}
-          {parentProject && (
-            <>
-              {" · part of "}
-              <Link href={`/projects/${parentProject.id}`} className="underline">
-                {parentProject.name}
-              </Link>
-            </>
-          )}
-        </p>
-        {project.description && <p className="mt-2 text-sm text-zinc-500">{project.description}</p>}
-        {project.purpose && (
-          <p className="mt-1 text-xs text-zinc-500">
-            <span className="font-medium">Purpose:</span> {project.purpose}
-          </p>
+      <div
+        className={`relative mt-3 mb-6 ${
+          celebratingId === project.id ? "project-celebrate-card" : ""
+        }`}
+      >
+        {celebratingId === project.id && (
+          <span className="pointer-events-none absolute inset-0 z-10 overflow-visible">
+            <span className="project-celebrate-ring" />
+            <span className="project-celebrate-ring project-celebrate-ring-2" />
+            <span className="project-celebrate-ring project-celebrate-ring-3" />
+            <span className="project-celebrate-emoji absolute inset-0 flex items-center justify-center text-5xl">
+              🎉
+            </span>
+          </span>
         )}
-        {project.outcome_vision && (
-          <p className="mt-1 text-xs text-zinc-500">
-            <span className="font-medium">Done looks like:</span> {project.outcome_vision}
-          </p>
-        )}
-        {project.brainstorm && (
-          <p className="mt-1 text-xs text-zinc-500">
-            <span className="font-medium">Brainstorm:</span> {project.brainstorm}
-          </p>
-        )}
-        {project.link && (
-          <a
-            href={project.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 block truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
-          >
-            {project.link}
-          </a>
+        {editingId === project.id ? (
+          <ProjectEditForm
+            project={project}
+            canBecomeSubproject={subprojects.length === 0}
+            editName={editName}
+            setEditName={setEditName}
+            editDescription={editDescription}
+            setEditDescription={setEditDescription}
+            editPurpose={editPurpose}
+            setEditPurpose={setEditPurpose}
+            editOutcomeVision={editOutcomeVision}
+            setEditOutcomeVision={setEditOutcomeVision}
+            editBrainstorm={editBrainstorm}
+            setEditBrainstorm={setEditBrainstorm}
+            editDomainId={editDomainId}
+            setEditDomainId={setEditDomainId}
+            editParentProjectId={editParentProjectId}
+            selectEditParentProject={selectEditParentProject}
+            editStatus={editStatus}
+            setEditStatus={setEditStatus}
+            editPriority={editPriority}
+            setEditPriority={setEditPriority}
+            editDueDate={editDueDate}
+            setEditDueDate={setEditDueDate}
+            editScheduledDate={editScheduledDate}
+            setEditScheduledDate={setEditScheduledDate}
+            editLink={editLink}
+            setEditLink={setEditLink}
+            editReviewEveryDays={editReviewEveryDays}
+            setEditReviewEveryDays={setEditReviewEveryDays}
+            parentOptions={parentOptions}
+            domains={domains}
+            handleUpdate={handleUpdateProject}
+            setEditingId={setEditingId}
+          />
+        ) : (
+          <ProjectDetailHeader
+            project={project}
+            domain={domain}
+            parentProject={parentProject}
+            onSaveAsTemplate={handleSaveAsTemplate}
+            onCompleteProject={handleCompleteProject}
+            onStartEdit={startEdit}
+            onDeleteProject={handleDeleteProject}
+          />
         )}
       </div>
 

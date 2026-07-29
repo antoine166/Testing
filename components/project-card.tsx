@@ -3,11 +3,10 @@
 import { Fragment, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import Link from "next/link";
 import ReorderableTaskList from "@/components/reorderable-task-list";
+import ProjectEditForm from "@/components/project-edit-form";
 import { type Task, type TaskDomain } from "@/components/task-row";
 import { type RecurrencePatternDraft } from "@/components/recurrence-fields";
 import {
-  PRIORITIES,
-  STATUSES,
   type Project,
   type ProjectPriority,
   type ProjectStatus,
@@ -121,159 +120,40 @@ export default function ProjectCard(props: ProjectCardProps) {
           </span>
         )}
         {editingId === project.id ? (
-          <div className="space-y-2">
-            <input
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <textarea
-              value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value)}
-              rows={2}
-              className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <details className="group">
-              <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-                GTD Natural Planning
-              </summary>
-              <div className="mt-2 space-y-2 pl-4">
-                <textarea
-                  value={editPurpose}
-                  onChange={(e) => setEditPurpose(e.target.value)}
-                  placeholder="Purpose — why does this matter?"
-                  rows={2}
-                  className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-                <textarea
-                  value={editOutcomeVision}
-                  onChange={(e) => setEditOutcomeVision(e.target.value)}
-                  placeholder="Outcome vision — what does &quot;done&quot; look like?"
-                  rows={2}
-                  className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-                <textarea
-                  value={editBrainstorm}
-                  onChange={(e) => setEditBrainstorm(e.target.value)}
-                  placeholder="Brainstorm — ideas, approaches, things to consider"
-                  rows={3}
-                  className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-              </div>
-            </details>
-            <input
-              type="url"
-              value={editLink}
-              onChange={(e) => setEditLink(e.target.value)}
-              placeholder="Link (optional)"
-              className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={editParentProjectId}
-                disabled={!canBecomeSubproject}
-                onChange={(e) => selectEditParentProject(e.target.value)}
-                title={
-                  canBecomeSubproject
-                    ? undefined
-                    : "This project has its own subprojects, so it can't become a subproject itself."
-                }
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="">None (top-level project)</option>
-                {parentOptions(project.id).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={editDomainId}
-                disabled={!!editParentProjectId}
-                onChange={(e) => setEditDomainId(e.target.value)}
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="">No domain</option>
-                {domains.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={editStatus}
-                onChange={(e) =>
-                  setEditStatus(e.target.value as ProjectStatus)
-                }
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={editPriority}
-                onChange={(e) => setEditPriority(e.target.value as ProjectPriority)}
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="date"
-                value={editDueDate}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setEditDueDate(value);
-                }}
-                title="Due date"
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <input
-                type="date"
-                value={editScheduledDate}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setEditScheduledDate(value);
-                }}
-                title="Scheduled date"
-                className="rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <label
-                className="flex items-center gap-1 text-xs text-zinc-500"
-                title="How often this project needs a look in the Weekly Review. Blank = every review."
-              >
-                Review every
-                <input
-                  type="number"
-                  min="1"
-                  value={editReviewEveryDays}
-                  onChange={(e) => setEditReviewEveryDays(e.target.value)}
-                  placeholder="—"
-                  className="w-14 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-                days
-              </label>
-              <button
-                onClick={() => handleUpdate(project.id)}
-                className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setEditingId(null)}
-                className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+          <ProjectEditForm
+            project={project}
+            canBecomeSubproject={canBecomeSubproject}
+            editName={editName}
+            setEditName={setEditName}
+            editDescription={editDescription}
+            setEditDescription={setEditDescription}
+            editPurpose={editPurpose}
+            setEditPurpose={setEditPurpose}
+            editOutcomeVision={editOutcomeVision}
+            setEditOutcomeVision={setEditOutcomeVision}
+            editBrainstorm={editBrainstorm}
+            setEditBrainstorm={setEditBrainstorm}
+            editDomainId={editDomainId}
+            setEditDomainId={setEditDomainId}
+            editParentProjectId={editParentProjectId}
+            selectEditParentProject={selectEditParentProject}
+            editStatus={editStatus}
+            setEditStatus={setEditStatus}
+            editPriority={editPriority}
+            setEditPriority={setEditPriority}
+            editDueDate={editDueDate}
+            setEditDueDate={setEditDueDate}
+            editScheduledDate={editScheduledDate}
+            setEditScheduledDate={setEditScheduledDate}
+            editLink={editLink}
+            setEditLink={setEditLink}
+            editReviewEveryDays={editReviewEveryDays}
+            setEditReviewEveryDays={setEditReviewEveryDays}
+            parentOptions={parentOptions}
+            domains={domains}
+            handleUpdate={handleUpdate}
+            setEditingId={setEditingId}
+          />
         ) : (
           <>
           <div className="flex items-start justify-between gap-3">
