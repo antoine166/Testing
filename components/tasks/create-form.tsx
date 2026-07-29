@@ -10,6 +10,8 @@ import RecurrenceFields, {
 import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
 import ContextFields from "@/components/context-fields";
+import CaptureModeToggle from "@/components/capture-mode-toggle";
+import ImageAttachButton from "@/components/image-attach-button";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { PRIORITIES } from "@/lib/tasks/constants";
 import { todayLocal } from "@/lib/date";
@@ -253,30 +255,7 @@ export default function TaskCreateForm({
       onSubmit={handleCreate}
       className="mb-8 space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
     >
-      <div className="inline-flex rounded-md border border-zinc-300 p-0.5 text-xs dark:border-zinc-700">
-        <button
-          type="button"
-          onClick={() => setCaptureMode("task")}
-          className={`rounded px-2 py-1 font-medium ${
-            captureMode === "task"
-              ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
-              : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-          }`}
-        >
-          Task
-        </button>
-        <button
-          type="button"
-          onClick={() => setCaptureMode("project")}
-          className={`rounded px-2 py-1 font-medium ${
-            captureMode === "project"
-              ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
-              : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-          }`}
-        >
-          Project
-        </button>
-      </div>
+      <CaptureModeToggle mode={captureMode} onChange={setCaptureMode} />
       <div>
         <label
           htmlFor="title"
@@ -468,42 +447,7 @@ export default function TaskCreateForm({
               />
             )}
             {captureMode === "task" && (
-            <label
-              aria-label="Add image"
-              title={image ? image.name : "Add image"}
-              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <circle cx="9" cy="10.5" r="1.5" />
-                <path d="M3 16l5-4 4 3 4-3 5 4" />
-                <path d="M15 6h4M17 4v4" />
-              </svg>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-                className="hidden"
-              />
-            </label>
-            )}
-            {image && (
-              <button
-                type="button"
-                onClick={() => setImage(null)}
-                title="Remove image"
-                className="flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:hover:text-zinc-300"
-              >
-                {image.name} ✕
-              </button>
+              <ImageAttachButton image={image} onChange={setImage} />
             )}
           </>
         )}
