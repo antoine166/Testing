@@ -303,14 +303,31 @@ export default function SidebarNav({
         </button>
       </div>
 
-      {mobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
-          <div className="material-chrome absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-[var(--hairline)]">
-            {sidebarContent}
-          </div>
+      {/* #141: kept mounted so open/close are CSS transitions (interruptible
+          — a tap mid-slide just reverses from wherever it is) instead of a
+          mount/unmount snap. `inert` + pointer-events-none keep the closed
+          panel untabbable and unclickable, like not being mounted. */}
+      <div
+        className={`fixed inset-0 z-40 md:hidden ${mobileOpen ? "" : "pointer-events-none"}`}
+        aria-hidden={!mobileOpen}
+        inert={!mobileOpen}
+      >
+        <div
+          className={`absolute inset-0 bg-black/40 motion-safe:transition-opacity motion-safe:duration-200 ${
+            mobileOpen ? "opacity-100 motion-safe:ease-out" : "opacity-0 motion-safe:ease-in"
+          }`}
+          onClick={() => setMobileOpen(false)}
+        />
+        <div
+          className={`material-chrome absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-[var(--hairline)] motion-safe:transition-transform motion-safe:duration-250 ${
+            mobileOpen
+              ? "translate-x-0 motion-safe:ease-out"
+              : "-translate-x-full motion-safe:ease-in"
+          }`}
+        >
+          {sidebarContent}
         </div>
-      )}
+      </div>
 
       {/* Desktop sidebar */}
       <div className="material-chrome sticky top-0 hidden h-screen w-64 shrink-0 border-r border-[var(--hairline)] md:block">

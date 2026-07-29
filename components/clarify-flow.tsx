@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { prefersReducedMotion } from "@/lib/motion";
 import type { Task, TaskDomain, TaskProject, TaskPriority, TaskEnergy } from "@/components/task-row";
 import { looksLikeTopic, TOPIC_NUDGE } from "@/lib/tasks/next-action-shape";
 import { useContexts } from "@/lib/hooks/use-contexts";
@@ -22,6 +23,8 @@ type Panel =
   | "project"; // converted; capture the very next action
 
 const TWO_MINUTES = 120;
+/** How long the finished card's slide-out plays before the next card mounts (#141). */
+const CARD_LEAVE_MS = 180;
 
 type Props = {
   queue: string[]; // inbox task ids, snapshotted when the flow starts
@@ -55,6 +58,9 @@ export default function ClarifyFlow({
   const [index, setIndex] = useState(0);
   const [panel, setPanel] = useState<Panel>("decide");
   const [busy, setBusy] = useState(false);
+  // #141: the current card is sliding out (about to be replaced). Blocks
+  // input for the ~180ms window the same way busy does.
+  const [cardLeaving, setCardLeaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [processed, setProcessed] = useState(0);
   const locations = useContexts();
@@ -88,6 +94,9 @@ export default function ClarifyFlow({
   const currentId = queue[index];
   const task = currentId ? tasks.find((t) => t.id === currentId) : undefined;
   const remaining = queue.length - index;
+  // Double-clicks must stay blocked through both the action AND the
+  // card's exit animation window.
+  const blocked = busy || cardLeaving;
 
   // The item may have been processed elsewhere (another tab, the Coach)
   // while the flow was open — adjust during render, not in an effect.
@@ -134,17 +143,36 @@ export default function ClarifyFlow({
     resetPanelState(task);
   }
 
+  // #141: play the card's slide-out, then swap to the next item (whose
+  // keyed wrapper slides in from the right). The save itself has already
+  // happened by the time this runs — only the visual swap is delayed.
+  function transitionCard(step: () => void) {
+    if (prefersReducedMotion()) {
+      step();
+      return;
+    }
+    setCardLeaving(true);
+    setTimeout(() => {
+      setCardLeaving(false);
+      step();
+    }, CARD_LEAVE_MS);
+  }
+
   function advance() {
-    setProcessed((n) => n + 1);
-    setIndex((i) => i + 1);
-    setPanel("decide");
-    setActionError(null);
+    transitionCard(() => {
+      setProcessed((n) => n + 1);
+      setIndex((i) => i + 1);
+      setPanel("decide");
+      setActionError(null);
+    });
   }
 
   function skip() {
-    setIndex((i) => i + 1);
-    setPanel("decide");
-    setActionError(null);
+    transitionCard(() => {
+      setIndex((i) => i + 1);
+      setPanel("decide");
+      setActionError(null);
+    });
   }
 
   async function act(action: () => Promise<unknown>) {
@@ -214,19 +242,37 @@ export default function ClarifyFlow({
 
   return (
     <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-      <div className="mb-3 flex items-center justify-between text-xs text-zinc-500">
-        <span>
-          Clarifying · {remaining} left
-        </span>
-        <div className="flex gap-2">
-          <button onClick={skip} disabled={busy} className="underline">
+      <div className="mb-3 flex items-center gap-4 text-xs text-zinc-500">
+        {/* #141: the "N left" line is now a thin filling progress bar. */}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={queue.length}
+            aria-valuenow={processed}
+            aria-label="Inbox items clarified"
+            className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+          >
+            <div
+              className="h-full rounded-full bg-emerald-500 motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-out"
+              style={{ width: `${(processed / queue.length) * 100}%` }}
+            />
+          </div>
+          <span className="shrink-0">{remaining} left</span>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button onClick={skip} disabled={blocked} className="underline">
             Skip for now
           </button>
-          <button onClick={onExit} disabled={busy} className="underline">
+          <button onClick={onExit} disabled={blocked} className="underline">
             Exit
           </button>
         </div>
       </div>
+
+      {/* #141: keyed on the task id so each card mounts sliding in from the
+          right; transitionCard flags the old one to slide out left first. */}
+      <div key={task.id} className={cardLeaving ? "clarify-card-leave" : "clarify-card-enter"}>
 
       {actionError && (
         <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
@@ -321,17 +367,17 @@ export default function ClarifyFlow({
             <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
               Actionable?
             </p>
-            <button disabled={busy} onClick={() => setPanel("timer")} className={`${neutralButton} block w-full`}>
+            <button disabled={blocked} onClick={() => setPanel("timer")} className={`${neutralButton} block w-full`}>
               ⚡ Do it now <span className="text-zinc-500">— under 2 minutes</span>
             </button>
-            <button disabled={busy} onClick={() => setPanel("defer")} className={`${neutralButton} block w-full`}>
+            <button disabled={blocked} onClick={() => setPanel("defer")} className={`${neutralButton} block w-full`}>
               📋 Defer it <span className="text-zinc-500">— decide the next action</span>
             </button>
-            <button disabled={busy} onClick={() => setPanel("delegate")} className={`${neutralButton} block w-full`}>
+            <button disabled={blocked} onClick={() => setPanel("delegate")} className={`${neutralButton} block w-full`}>
               🤝 Delegate it <span className="text-zinc-500">— hand off, track in Waiting For</span>
             </button>
             <button
-              disabled={busy}
+              disabled={blocked}
               onClick={() => setPanel("projdomain")}
               className={`${neutralButton} block w-full`}
             >
@@ -343,24 +389,24 @@ export default function ClarifyFlow({
               Not actionable?
             </p>
             <button
-              disabled={busy}
+              disabled={blocked}
               onClick={() => act(() => onTrash(task.id))}
               className={`${neutralButton} block w-full`}
             >
               🗑️ Trash it <span className="text-zinc-500">— recoverable for 30 days</span>
             </button>
             <button
-              disabled={busy}
+              disabled={blocked}
               onClick={() => act(() => onUpdate(task.id, { ...edited(), someday: true }))}
               className={`${neutralButton} block w-full`}
             >
               📦 Someday / Maybe <span className="text-zinc-500">— might do it, not now</span>
             </button>
-            <button disabled={busy} onClick={() => setPanel("tickler")} className={`${neutralButton} block w-full`}>
+            <button disabled={blocked} onClick={() => setPanel("tickler")} className={`${neutralButton} block w-full`}>
               🔔 Tickler <span className="text-zinc-500">— resurface on a date</span>
             </button>
             <button
-              disabled={busy}
+              disabled={blocked}
               onClick={() =>
                 act(async () => {
                   if (!(await onUpdate(task.id, edited()))) return false;
@@ -389,7 +435,7 @@ export default function ClarifyFlow({
           </p>
           <div className="mt-3 flex justify-center gap-2">
             <button
-              disabled={busy}
+              disabled={blocked}
               onClick={() =>
                 act(async () => {
                   if (!(await onUpdate(task.id, edited()))) return false;
@@ -401,13 +447,13 @@ export default function ClarifyFlow({
               ✓ Did it
             </button>
             <button
-              disabled={busy}
+              disabled={blocked}
               onClick={() => setPanel("defer")}
               className={neutralButton}
             >
               Longer than I thought — defer
             </button>
-            <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
+            <button disabled={blocked} onClick={() => setPanel("decide")} className={neutralButton}>
               Back
             </button>
           </div>
@@ -509,7 +555,7 @@ export default function ClarifyFlow({
           )}
           <div className="flex gap-2">
             <button
-              disabled={busy || !deferTitle.trim()}
+              disabled={blocked || !deferTitle.trim()}
               onClick={() =>
                 act(() =>
                   onUpdate(task.id, {
@@ -527,7 +573,7 @@ export default function ClarifyFlow({
             >
               Save & next
             </button>
-            <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
+            <button disabled={blocked} onClick={() => setPanel("decide")} className={neutralButton}>
               Back
             </button>
           </div>
@@ -561,7 +607,7 @@ export default function ClarifyFlow({
           </p>
           <div className="flex gap-2">
             <button
-              disabled={busy}
+              disabled={blocked}
               onClick={() =>
                 act(() =>
                   onUpdate(task.id, {
@@ -576,7 +622,7 @@ export default function ClarifyFlow({
             >
               Save & next
             </button>
-            <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
+            <button disabled={blocked} onClick={() => setPanel("decide")} className={neutralButton}>
               Back
             </button>
           </div>
@@ -599,13 +645,13 @@ export default function ClarifyFlow({
           </p>
           <div className="flex gap-2">
             <button
-              disabled={busy || !ticklerDate}
+              disabled={blocked || !ticklerDate}
               onClick={() => act(() => onUpdate(task.id, { ...edited(), someday: true, revisit_date: ticklerDate }))}
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
             >
               Save & next
             </button>
-            <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
+            <button disabled={blocked} onClick={() => setPanel("decide")} className={neutralButton}>
               Back
             </button>
           </div>
@@ -634,7 +680,7 @@ export default function ClarifyFlow({
           </p>
           <div className="flex gap-2">
             <button
-              disabled={busy || !projectDomain}
+              disabled={blocked || !projectDomain}
               onClick={async () => {
                 setBusy(true);
                 try {
@@ -655,7 +701,7 @@ export default function ClarifyFlow({
             >
               Create project
             </button>
-            <button disabled={busy} onClick={() => setPanel("decide")} className={neutralButton}>
+            <button disabled={blocked} onClick={() => setPanel("decide")} className={neutralButton}>
               Back
             </button>
           </div>
@@ -678,7 +724,7 @@ export default function ClarifyFlow({
           )}
           <div className="flex gap-2">
             <button
-              disabled={busy || !nextAction.trim()}
+              disabled={blocked || !nextAction.trim()}
               onClick={() =>
                 act(async () => {
                   if (!newProject) return true;
@@ -693,12 +739,13 @@ export default function ClarifyFlow({
             >
               Add & next
             </button>
-            <button disabled={busy} onClick={advance} className={neutralButton}>
+            <button disabled={blocked} onClick={advance} className={neutralButton}>
               Skip — I&apos;ll plan it later
             </button>
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

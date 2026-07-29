@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/toast";
 import { useConfirmDialog } from "@/components/confirm-dialog";
-import { markRemovalKind, useLeaveTransition, withLeaving } from "@/components/leave-transition";
+import {
+  collapseLeavingRow,
+  markRemovalKind,
+  useLeaveTransition,
+  withLeaving,
+} from "@/components/leave-transition";
 
 type TrashItem = {
   id: string;
@@ -135,6 +140,7 @@ export default function TrashPage() {
             return (
               <li
                 key={`${leaving ? "leaving-" : ""}${item.type}-${item.id}`}
+                ref={leaving ? collapseLeavingRow : undefined}
                 aria-hidden={leaving ? true : undefined}
                 className={`flex items-center gap-3 rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800 ${
                   leaving ? `row-leaving row-leaving-${leaving}` : ""

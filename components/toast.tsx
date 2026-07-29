@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import Link from "next/link";
+import { prefersReducedMotion } from "@/lib/motion";
 
 /** Either a navigation ("View project") or a callback ("Undo") — not both. */
 type ToastAction = { label: string; href: string; onClick?: never } | { label: string; onClick: () => void; href?: never };
@@ -10,6 +11,8 @@ type Toast = {
   id: number;
   message: string;
   action?: ToastAction;
+  /** Exit animation window (#141): still rendered, sliding out, about to be removed. */
+  leaving?: boolean;
 };
 
 type ToastContextValue = {
@@ -72,13 +75,27 @@ export function taskTrashedToast(undo: () => void): [string, ToastAction] {
 }
 
 const DISMISS_AFTER_MS = 6000;
+/** How long the slide-out (globals.css .toast-leaving) plays before removal (#141). */
+const LEAVE_MS = 180;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);
 
+  // #141: dismissal (manual ✕, action click, or the auto-dismiss timer)
+  // first flags the toast `leaving` so the slide-out can play, then really
+  // removes it. Double-dismissal just schedules a second no-op removal.
   const dismiss = useCallback((id: number) => {
-    setToasts((current) => current.filter((t) => t.id !== id));
+    if (prefersReducedMotion()) {
+      setToasts((current) => current.filter((t) => t.id !== id));
+      return;
+    }
+    setToasts((current) =>
+      current.map((t) => (t.id === id ? { ...t, leaving: true } : t)),
+    );
+    setTimeout(() => {
+      setToasts((current) => current.filter((t) => t.id !== id));
+    }, LEAVE_MS);
   }, []);
 
   const showToast = useCallback(
@@ -99,7 +116,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div
               key={toast.id}
               role="status"
-              className="pointer-events-auto flex max-w-md items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm text-zinc-800 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              className={`${
+                toast.leaving ? "toast-leaving" : "toast-enter pointer-events-auto"
+              } flex max-w-md items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm text-zinc-800 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100`}
             >
               <span className="min-w-0">{toast.message}</span>
               {toast.action &&
