@@ -164,6 +164,20 @@ export default function LibraryPage() {
   const allTags = [...new Set(items.flatMap((item) => item.tags ?? []))].sort();
   const isBrowsingAll = search.trim() !== "" || activeTag !== null;
 
+  // Completed projects keep their reference material here, grouped under the
+  // project (folder-style, at the Library root). Their items leave the root's
+  // flat list so they only appear once — search and tag filters still find them.
+  const completedProjectIds = new Set(
+    projects.filter((p) => p.status === "completed").map((p) => p.id),
+  );
+  const completedGroups = projects
+    .filter((p) => p.status === "completed")
+    .map((project) => ({
+      project,
+      items: items.filter((item) => item.project_id === project.id),
+    }))
+    .filter((group) => group.items.length > 0);
+
   const filtered = items.filter((item) => {
     const matchesSearch =
       !search ||
@@ -171,8 +185,18 @@ export default function LibraryPage() {
       (item.content ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesTag = !activeTag || (item.tags ?? []).includes(activeTag);
     const matchesFolder = isBrowsingAll || (item.folder_id ?? null) === currentFolderId;
-    return matchesSearch && matchesTag && matchesFolder;
+    const groupedUnderCompletedProject =
+      !isBrowsingAll &&
+      currentFolderId === null &&
+      item.project_id !== null &&
+      completedProjectIds.has(item.project_id);
+    return matchesSearch && matchesTag && matchesFolder && !groupedUnderCompletedProject;
   });
+
+  // The completed-project groups render at the Library root only — inside a
+  // folder or a search they'd be duplicate noise.
+  const showCompletedSection =
+    !isBrowsingAll && currentFolderId === null && completedGroups.length > 0;
 
   const foldersById = new Map(folders.map((f) => [f.id, f]));
   const subfolders = folders
@@ -437,25 +461,71 @@ export default function LibraryPage() {
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-sm text-zinc-500">
-          {items.length === 0
-            ? "Nothing saved yet. Add your first item above."
-            : "No items match your search."}
-        </p>
       ) : (
-        <ul className="space-y-3">
-          {filtered.map((item) => (
-            <KnowledgeItemRow
-              key={item.id}
-              item={item}
-              folders={folders}
-              projects={projects}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-            />
-          ))}
-        </ul>
+        <>
+          {filtered.length === 0 ? (
+            showCompletedSection ? null : (
+              <p className="text-sm text-zinc-500">
+                {items.length === 0
+                  ? "Nothing saved yet. Add your first item above."
+                  : "No items match your search."}
+              </p>
+            )
+          ) : (
+            <ul className="space-y-3">
+              {filtered.map((item) => (
+                <KnowledgeItemRow
+                  key={item.id}
+                  item={item}
+                  folders={folders}
+                  projects={projects}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </ul>
+          )}
+
+          {showCompletedSection && (
+            <div className="mt-8">
+              <h2 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                Completed projects
+              </h2>
+              <ul className="space-y-1">
+                {completedGroups.map(({ project, items: groupItems }) => (
+                  <li
+                    key={project.id}
+                    className="rounded-md border border-zinc-200 px-3 py-2 dark:border-zinc-800"
+                  >
+                    <details className="group">
+                      <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                          ›
+                        </span>
+                        📁 {project.name}
+                        <span className="text-xs font-normal text-zinc-400">
+                          ({groupItems.length})
+                        </span>
+                      </summary>
+                      <ul className="mt-2 space-y-3">
+                        {groupItems.map((item) => (
+                          <KnowledgeItemRow
+                            key={item.id}
+                            item={item}
+                            folders={folders}
+                            projects={projects}
+                            onUpdate={handleUpdate}
+                            onDelete={handleDelete}
+                          />
+                        ))}
+                      </ul>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

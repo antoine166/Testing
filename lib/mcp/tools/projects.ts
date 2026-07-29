@@ -16,7 +16,7 @@ export function registerProjectTools(server: McpServer, admin: AdminClient, user
       let query = admin
         .from("projects")
         .select(
-          "id, name, description, domain_id, parent_project_id, status, priority, due_date, scheduled_date, link",
+          "id, name, description, domain_id, parent_project_id, status, priority, due_date, scheduled_date, link, completed_at",
         )
         .eq("user_id", userId)
         .is("deleted_at", null);
@@ -419,6 +419,25 @@ export function registerProjectTools(server: McpServer, admin: AdminClient, user
       }
       if (mark_reviewed === true) {
         updates.last_reviewed_at = new Date().toISOString();
+      }
+
+      // Same completed_at stamping as the app's PUT /api/projects/[id]:
+      // status → completed stamps it (if not already completed); any other
+      // status clears it. Keep the two in sync.
+      if (typeof updates.status === "string") {
+        if (updates.status === "completed") {
+          const { data: existing } = await admin
+            .from("projects")
+            .select("status")
+            .eq("id", id)
+            .eq("user_id", userId)
+            .single();
+          if (existing?.status !== "completed") {
+            updates.completed_at = new Date().toISOString();
+          }
+        } else {
+          updates.completed_at = null;
+        }
       }
 
       const { data, error } = await admin

@@ -96,6 +96,24 @@ export async function PUT(request: Request, { params }: RouteParams) {
     updates.last_reviewed_at = new Date().toISOString();
   }
 
+  // Completed-project lifecycle: the server stamps completed_at centrally so
+  // every client (app pages, MCP) gets it for free — clients just PUT status.
+  if (typeof updates.status === "string") {
+    if (updates.status === "completed") {
+      const { data: existing } = await supabase
+        .from("projects")
+        .select("status")
+        .eq("id", id)
+        .single();
+      if (existing?.status !== "completed") {
+        updates.completed_at = new Date().toISOString();
+      }
+    } else {
+      // Reopening (any non-completed status) clears the stamp.
+      updates.completed_at = null;
+    }
+  }
+
   const { data, error } = await supabase
     .from("projects")
     .update(updates)
