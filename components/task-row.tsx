@@ -10,6 +10,7 @@ import {
 } from "@/components/leave-transition";
 import { daysSince, todayLocal } from "@/lib/date";
 import { tapHaptic } from "@/lib/haptics";
+import NotesText from "@/components/notes-text";
 import RecurrenceFields, {
   DEFAULT_RECURRENCE_PATTERN,
   type RecurrencePatternDraft,
@@ -100,8 +101,6 @@ type Attachment = {
 };
 
 
-const NOTES_PREVIEW_LENGTH = 200;
-
 function linkLabel(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -117,25 +116,6 @@ function formatTime(time: string): string {
   const period = hours >= 12 ? "PM" : "AM";
   const hours12 = hours % 12 === 0 ? 12 : hours % 12;
   return `${hours12}:${minutes} ${period}`;
-}
-
-function NotesText({ notes }: { notes: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = notes.length > NOTES_PREVIEW_LENGTH;
-
-  return (
-    <p className="mt-0.5 text-sm whitespace-pre-wrap text-zinc-500">
-      {expanded || !isLong ? notes : `${notes.slice(0, NOTES_PREVIEW_LENGTH)}…`}
-      {isLong && (
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="ml-1 font-medium text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-zinc-50"
-        >
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      )}
-    </p>
-  );
 }
 
 export type AttachmentStripHandle = { openPicker: () => void };
