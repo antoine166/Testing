@@ -13,6 +13,14 @@ import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { PRIORITIES } from "@/lib/tasks/constants";
 import { projectConversionToast, useToast } from "@/components/toast";
+import {
+  EMPTY_PROJECT_EXTRAS,
+  ProjectPlanningFields,
+  ProjectParentStatusFields,
+  createFirstTask,
+  projectExtrasPayload,
+  type ProjectExtrasDraft,
+} from "@/components/project-capture-extras";
 
 type TodayCaptureFormProps = {
   today: string;
@@ -20,6 +28,11 @@ type TodayCaptureFormProps = {
   projects: TaskProject[];
   setError: (message: string | null) => void;
   refreshTasks: () => Promise<void>;
+  /** Domains page reuse: preselect this domain (tasks and projects alike). */
+  initialDomainId?: string;
+  /** Domains page reuse: "" = don't date-claim captured tasks. Defaults to `today`. */
+  defaultScheduledDate?: string;
+  taskPlaceholder?: string;
 };
 
 export default function TodayCaptureForm({
@@ -28,8 +41,12 @@ export default function TodayCaptureForm({
   projects,
   setError,
   refreshTasks,
+  initialDomainId,
+  defaultScheduledDate,
+  taskPlaceholder,
 }: TodayCaptureFormProps) {
   const { showToast } = useToast();
+  const scheduledDefault = defaultScheduledDate ?? today;
 
   const [captureMode, setCaptureMode] = useState<"task" | "project">("task");
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -42,10 +59,15 @@ export default function TodayCaptureForm({
     setProjectId: setNewTaskProjectId,
     filteredProjects: newTaskFilteredProjects,
     reset: resetNewTaskDomainProject,
-  } = useDomainProjectCascade(projects);
+  } = useDomainProjectCascade(projects, initialDomainId ?? "");
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("none");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
-  const [newTaskScheduledDate, setNewTaskScheduledDate] = useState(today);
+  const [newTaskScheduledDate, setNewTaskScheduledDate] = useState(scheduledDefault);
+  // Project mode's full shape (#161): the same planning / parent / status
+  // inputs as the All Projects form, via the shared extras component.
+  const [projectExtras, setProjectExtras] = useState<ProjectExtrasDraft>(EMPTY_PROJECT_EXTRAS);
+  const patchProjectExtras = (patch: Partial<ProjectExtrasDraft>) =>
+    setProjectExtras((prev) => ({ ...prev, ...patch }));
   const [newTaskImage, setNewTaskImage] = useState<File | null>(null);
   const [newTaskWaitingFor, setNewTaskWaitingFor] = useState(false);
   const [newTaskWaitingOn, setNewTaskWaitingOn] = useState("");
@@ -63,10 +85,11 @@ export default function TodayCaptureForm({
     setNewTaskTitle("");
     setNewTaskLink("");
     setNewTaskNotes("");
-    resetNewTaskDomainProject();
+    resetNewTaskDomainProject(initialDomainId ?? "");
     setNewTaskPriority("none");
     setNewTaskDueDate("");
-    setNewTaskScheduledDate(today);
+    setNewTaskScheduledDate(scheduledDefault);
+    setProjectExtras(EMPTY_PROJECT_EXTRAS);
     setNewTaskImage(null);
     setNewTaskWaitingFor(false);
     setNewTaskWaitingOn("");
@@ -122,7 +145,10 @@ export default function TodayCaptureForm({
     }
 
     if (captureMode === "project") {
-      if (!newTaskDomainId) {
+      // Subprojects inherit their parent's domain; only top-level ones
+      // need an explicit pick.
+      if (!newTaskDomainId && !projectExtras.parent_project_id) {
+        setAddingTask(false);
         setError("Pick a domain for the project — it needs one to show in your sidebar.");
         return;
       }
@@ -137,6 +163,7 @@ export default function TodayCaptureForm({
           priority: newTaskPriority,
           due_date: newTaskDueDate || undefined,
           scheduled_date: newTaskScheduledDate || undefined,
+          ...projectExtrasPayload(projectExtras),
         }),
       });
       setAddingTask(false);
@@ -145,9 +172,11 @@ export default function TodayCaptureForm({
         setError(body.error ?? "Failed to create project");
         return;
       }
+      const project = await res.json();
+      await createFirstTask(projectExtras.next_action, project.id, newTaskDomainId || null);
       // Projects don't show on Today — without this the capture looks like
       // it did nothing.
-      showToast(...projectConversionToast(await res.json(), domains));
+      showToast(...projectConversionToast(project, domains));
       resetCreateForm();
       await refreshTasks();
       return;
@@ -238,7 +267,9 @@ export default function TodayCaptureForm({
           id="today-title"
           value={newTaskTitle}
           onChange={(e) => setNewTaskTitle(e.target.value)}
-          placeholder={captureMode === "task" ? "Add a task for today" : "New project name"}
+          placeholder={
+            captureMode === "task" ? (taskPlaceholder ?? "Add a task for today") : "New project name"
+          }
           disabled={addingTask}
           required
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
@@ -274,6 +305,13 @@ export default function TodayCaptureForm({
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
       </div>
+      {captureMode === "project" && (
+        <ProjectPlanningFields
+          idPrefix="today-proj"
+          draft={projectExtras}
+          onChange={patchProjectExtras}
+        />
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label
@@ -285,8 +323,9 @@ export default function TodayCaptureForm({
           <select
             id="today-domain"
             value={newTaskDomainId}
+            disabled={captureMode === "project" && !!projectExtras.parent_project_id}
             onChange={(e) => setNewTaskDomainId(e.target.value)}
-            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
           >
             <option value="">{captureMode === "project" ? "Choose a domain…" : "Inbox"}</option>
             {domains.map((d) => (
@@ -296,6 +335,15 @@ export default function TodayCaptureForm({
             ))}
           </select>
         </div>
+        {captureMode === "project" && (
+          <ProjectParentStatusFields
+            idPrefix="today-proj"
+            draft={projectExtras}
+            onChange={patchProjectExtras}
+            projects={projects}
+            onParentPicked={(domainId) => setNewTaskDomainId(domainId ?? "")}
+          />
+        )}
         {captureMode === "task" && (
           <div>
             <label

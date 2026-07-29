@@ -12,6 +12,14 @@ import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { PRIORITIES } from "@/lib/tasks/constants";
 import { projectConversionToast, useToast } from "@/components/toast";
+import {
+  EMPTY_PROJECT_EXTRAS,
+  ProjectPlanningFields,
+  ProjectParentStatusFields,
+  createFirstTask,
+  projectExtrasPayload,
+  type ProjectExtrasDraft,
+} from "@/components/project-capture-extras";
 
 type InboxCaptureFormProps = {
   domains: TaskDomain[];
@@ -55,6 +63,10 @@ export default function InboxCaptureForm({
   const [estimatedMinutes, setEstimatedMinutes] = useState("");
   const [energyLevel, setEnergyLevel] = useState<TaskEnergy | "">("");
   const [submitting, setSubmitting] = useState(false);
+  // Project mode's full shape (#161) — same shared extras as Today/Domains.
+  const [projectExtras, setProjectExtras] = useState<ProjectExtrasDraft>(EMPTY_PROJECT_EXTRAS);
+  const patchProjectExtras = (patch: Partial<ProjectExtrasDraft>) =>
+    setProjectExtras((prev) => ({ ...prev, ...patch }));
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePatternDraft>(DEFAULT_RECURRENCE_PATTERN);
 
@@ -75,6 +87,7 @@ export default function InboxCaptureForm({
     setContext("");
     setEstimatedMinutes("");
     setEnergyLevel("");
+    setProjectExtras(EMPTY_PROJECT_EXTRAS);
     setIsRecurring(false);
     setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
@@ -122,6 +135,13 @@ export default function InboxCaptureForm({
     }
 
     if (captureMode === "project") {
+      // Same rule as the other project forms: a top-level project needs a
+      // domain to show in the sidebar (subprojects inherit the parent's).
+      if (!domainId && !projectExtras.parent_project_id) {
+        setSubmitting(false);
+        setCreateError("Pick a domain for the project — it needs one to show in your sidebar.");
+        return;
+      }
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -133,6 +153,7 @@ export default function InboxCaptureForm({
           priority,
           due_date: dueDate || undefined,
           scheduled_date: scheduledDate || undefined,
+          ...projectExtrasPayload(projectExtras),
         }),
       });
       setSubmitting(false);
@@ -141,9 +162,11 @@ export default function InboxCaptureForm({
         setCreateError(body.error ?? "Failed to create project");
         return;
       }
+      const project = await res.json();
+      await createFirstTask(projectExtras.next_action, project.id, domainId || null);
       // Projects never show in the Inbox list — without this, creating one
       // from here looks like nothing happened.
-      showToast(...projectConversionToast(await res.json(), domains));
+      showToast(...projectConversionToast(project, domains));
       resetForm();
       return;
     }
@@ -257,6 +280,13 @@ export default function InboxCaptureForm({
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
       </div>
+      {captureMode === "project" && (
+        <ProjectPlanningFields
+          idPrefix="inbox-proj"
+          draft={projectExtras}
+          onChange={patchProjectExtras}
+        />
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label
@@ -268,10 +298,11 @@ export default function InboxCaptureForm({
           <select
             id="domain"
             value={domainId}
+            disabled={captureMode === "project" && !!projectExtras.parent_project_id}
             onChange={(e) => setDomainId(e.target.value)}
-            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
           >
-            <option value="">Inbox</option>
+            <option value="">{captureMode === "project" ? "Choose a domain…" : "Inbox"}</option>
             {domains.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -279,6 +310,15 @@ export default function InboxCaptureForm({
             ))}
           </select>
         </div>
+        {captureMode === "project" && (
+          <ProjectParentStatusFields
+            idPrefix="inbox-proj"
+            draft={projectExtras}
+            onChange={patchProjectExtras}
+            projects={projects}
+            onParentPicked={(pickedDomainId) => setDomainId(pickedDomainId ?? "")}
+          />
+        )}
         {captureMode === "task" && (
           <div>
             <label

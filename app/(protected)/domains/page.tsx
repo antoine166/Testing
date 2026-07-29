@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
-import ProjectCreateForm from "@/components/project-create-form";
+import TodayCaptureForm from "@/components/today/capture-form";
+import { todayLocal } from "@/lib/date";
 import { type TaskDomain } from "@/components/task-row";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
@@ -40,8 +41,8 @@ export default function DomainsPage() {
   const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
   const [addingTaskId, setAddingTaskId] = useState<string | null>(null);
 
-  // Inline project creation, scoped to one domain — the same create a project
-  // can be done from Today, without leaving the Domains page.
+  // Which domain has its capture box open — the same Task|Project capture
+  // as Today/Inbox, preset to that domain (#161).
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
 
 
@@ -72,11 +73,6 @@ export default function DomainsPage() {
     setEditColor(domain.color);
   }
 
-  // Project creation here is the same full form (GTD Natural Planning
-  // fields and all) as the Projects page — ProjectCreateForm, scoped to
-  // this domain — instead of the old name-only mini form.
-  const parentProjectOptions = () =>
-    projects.filter((p) => !p.parent_project_id && p.status !== "completed");
 
   async function handleUpdate(id: string) {
     if (!editName.trim()) return;
@@ -263,8 +259,8 @@ export default function DomainsPage() {
                     </Link>
                     <button
                       onClick={() => setCreatingFor(creatingFor === domain.id ? null : domain.id)}
-                      aria-label="Add project"
-                      title="Add project"
+                      aria-label="Add task or project here"
+                      title="Add task or project here"
                       className={`flex h-7 w-7 items-center justify-center rounded-md hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300 ${
                         creatingFor === domain.id
                           ? "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
@@ -329,21 +325,26 @@ export default function DomainsPage() {
 
               {creatingFor === domain.id && editingId !== domain.id && (
                 <div className="mt-3 ml-7 edit-swap-in">
-                  <ProjectCreateForm
+                  {/* The same Task|Project capture box as Today/Inbox (#161,
+                      Antoine's option A): task capture first, and the
+                      Project side of the slider carries the full planning
+                      inputs — all preset to this domain. */}
+                  <TodayCaptureForm
+                    today={todayLocal()}
                     domains={domains}
                     projects={projects}
-                    parentOptions={parentProjectOptions}
-                    domainFilter={domain.id}
                     setError={setError}
-                    loadAll={loadAll}
-                    onCreated={() => setCreatingFor(null)}
+                    refreshTasks={loadAll}
+                    initialDomainId={domain.id}
+                    defaultScheduledDate=""
+                    taskPlaceholder={`Add a task in ${domain.name}`}
                   />
                   <button
                     type="button"
                     onClick={() => setCreatingFor(null)}
-                    className="-mt-6 mb-2 text-sm text-zinc-500 underline"
+                    className="-mt-2 mb-2 text-sm text-zinc-500 underline"
                   >
-                    Cancel
+                    Close
                   </button>
                 </div>
               )}
