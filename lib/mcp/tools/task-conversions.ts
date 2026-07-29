@@ -100,6 +100,9 @@ export function registerTaskConversionTools(server: McpServer, admin: AdminClien
           content: task.notes,
           url: task.link,
           type: "note",
+          // Same fix as the app route: a project task filed as reference
+          // keeps its project link for the Reference section.
+          project_id: task.project_id ?? null,
         })
         .select()
         .single();
