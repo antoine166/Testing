@@ -98,7 +98,9 @@ export default function InboxCaptureForm({
     setSubmitting(true);
     setCreateError(null);
 
-    if (isRecurring) {
+    // Recurring is a task-mode concept; a leftover checkbox from before a
+    // slider flip must never hijack a project submit.
+    if (captureMode === "task" && isRecurring) {
       if (recurrencePattern.recurrence_type === "weekly" && recurrencePattern.days_of_week.length === 0) {
         setSubmitting(false);
         setCreateError("Pick at least one day for a weekly recurring task.");

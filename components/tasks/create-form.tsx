@@ -13,6 +13,15 @@ import ContextFields from "@/components/context-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
 import { PRIORITIES } from "@/lib/tasks/constants";
 import { todayLocal } from "@/lib/date";
+import { projectConversionToast, useToast } from "@/components/toast";
+import {
+  EMPTY_PROJECT_EXTRAS,
+  ProjectPlanningFields,
+  ProjectParentStatusFields,
+  createFirstTask,
+  projectExtrasPayload,
+  type ProjectExtrasDraft,
+} from "@/components/project-capture-extras";
 
 type TaskCreateFormProps = {
   domains: TaskDomain[];
@@ -33,9 +42,17 @@ export default function TaskCreateForm({
   loadRecurringTemplates,
   loadAll,
 }: TaskCreateFormProps) {
+  const { showToast } = useToast();
+  const [captureMode, setCaptureMode] = useState<"task" | "project">("task");
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
   const [notes, setNotes] = useState("");
+  // Project mode's full shape (#161) — the same shared extras as the
+  // Today/Inbox/Domains capture boxes, so a domain page ("Health",
+  // "Life OS", …) creates projects exactly like the All Projects page.
+  const [projectExtras, setProjectExtras] = useState<ProjectExtrasDraft>(EMPTY_PROJECT_EXTRAS);
+  const patchProjectExtras = (patch: Partial<ProjectExtrasDraft>) =>
+    setProjectExtras((prev) => ({ ...prev, ...patch }));
   const {
     domainId,
     projectId,
@@ -98,6 +115,7 @@ export default function TaskCreateForm({
     setContext("");
     setEstimatedMinutes("");
     setEnergyLevel("");
+    setProjectExtras(EMPTY_PROJECT_EXTRAS);
     setIsRecurring(false);
     setRecurrencePattern(DEFAULT_RECURRENCE_PATTERN);
   }
@@ -107,7 +125,9 @@ export default function TaskCreateForm({
     if (!title.trim() || creating) return;
     setCreating(true);
 
-    if (isRecurring) {
+    // Recurring is a task-mode concept; a leftover checkbox from before a
+    // slider flip must never hijack a project submit.
+    if (captureMode === "task" && isRecurring) {
       if (recurrencePattern.recurrence_type === "weekly" && recurrencePattern.days_of_week.length === 0) {
         setCreating(false);
         setError("Pick at least one day for a weekly recurring task.");
@@ -141,6 +161,44 @@ export default function TaskCreateForm({
       setCreating(false);
       resetCreateForm();
       await loadRecurringTemplates();
+      await loadAll();
+      return;
+    }
+
+    if (captureMode === "project") {
+      // Same rule as the other project forms: a top-level project needs a
+      // domain to show in the sidebar (subprojects inherit the parent's).
+      if (!domainId && !projectExtras.parent_project_id) {
+        setCreating(false);
+        setError("Pick a domain for the project — it needs one to show in your sidebar.");
+        return;
+      }
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: title,
+          description: notes || undefined,
+          link: link || undefined,
+          domain_id: domainId || null,
+          priority,
+          due_date: dueDate || undefined,
+          scheduled_date: scheduledDate || undefined,
+          ...projectExtrasPayload(projectExtras),
+        }),
+      });
+      setCreating(false);
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? "Failed to create project");
+        return;
+      }
+      const project = await res.json();
+      await createFirstTask(projectExtras.next_action, project.id, domainId || null);
+      // New projects don't appear in this task list — the toast is the
+      // receipt, and its action deep-links to the planning form.
+      showToast(...projectConversionToast(project, domains));
+      resetCreateForm();
       await loadAll();
       return;
     }
@@ -195,18 +253,42 @@ export default function TaskCreateForm({
       onSubmit={handleCreate}
       className="mb-8 space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
     >
+      <div className="inline-flex rounded-md border border-zinc-300 p-0.5 text-xs dark:border-zinc-700">
+        <button
+          type="button"
+          onClick={() => setCaptureMode("task")}
+          className={`rounded px-2 py-1 font-medium ${
+            captureMode === "task"
+              ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
+              : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+          }`}
+        >
+          Task
+        </button>
+        <button
+          type="button"
+          onClick={() => setCaptureMode("project")}
+          className={`rounded px-2 py-1 font-medium ${
+            captureMode === "project"
+              ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
+              : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+          }`}
+        >
+          Project
+        </button>
+      </div>
       <div>
         <label
           htmlFor="title"
           className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
-          New task
+          {captureMode === "task" ? "New task" : "New project"}
         </label>
         <input
           id="title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. Call the dentist"
+          placeholder={captureMode === "task" ? "e.g. Call the dentist" : "New project name"}
           required
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
@@ -241,6 +323,13 @@ export default function TaskCreateForm({
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
       </div>
+      {captureMode === "project" && (
+        <ProjectPlanningFields
+          idPrefix="tasks-proj"
+          draft={projectExtras}
+          onChange={patchProjectExtras}
+        />
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label
@@ -252,10 +341,11 @@ export default function TaskCreateForm({
           <select
             id="domain"
             value={domainId}
+            disabled={captureMode === "project" && !!projectExtras.parent_project_id}
             onChange={(e) => setDomainId(e.target.value)}
-            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
           >
-            <option value="">Inbox</option>
+            <option value="">{captureMode === "project" ? "Choose a domain…" : "Inbox"}</option>
             {domains.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -263,27 +353,38 @@ export default function TaskCreateForm({
             ))}
           </select>
         </div>
-        <div>
-          <label
-            htmlFor="project"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Project
-          </label>
-          <select
-            id="project"
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="">No project</option>
-            {filteredProjects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {captureMode === "project" && (
+          <ProjectParentStatusFields
+            idPrefix="tasks-proj"
+            draft={projectExtras}
+            onChange={patchProjectExtras}
+            projects={projects}
+            onParentPicked={(pickedDomainId) => setDomainId(pickedDomainId ?? "")}
+          />
+        )}
+        {captureMode === "task" && (
+          <div>
+            <label
+              htmlFor="project"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Project
+            </label>
+            <select
+              id="project"
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">No project</option>
+              {filteredProjects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label
             htmlFor="priority"
@@ -342,26 +443,31 @@ export default function TaskCreateForm({
                 className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
             </div>
-            <WaitingForFields
-              waitingFor={waitingFor}
-              onWaitingForChange={setWaitingFor}
-              waitingOn={waitingOn}
-              onWaitingOnChange={setWaitingOn}
-              followUpDate={followUpDate}
-              onFollowUpDateChange={setFollowUpDate}
-            />
-            <TaskExtraFields
-              someday={someday}
-              onSomedayChange={setSomeday}
-              revisitDate={revisitDate}
-              onRevisitDateChange={setRevisitDate}
-              context={context}
-              onContextChange={setContext}
-              estimatedMinutes={estimatedMinutes}
-              onEstimatedMinutesChange={setEstimatedMinutes}
-              energyLevel={energyLevel}
-              onEnergyLevelChange={setEnergyLevel}
-            />
+            {captureMode === "task" && (
+              <WaitingForFields
+                waitingFor={waitingFor}
+                onWaitingForChange={setWaitingFor}
+                waitingOn={waitingOn}
+                onWaitingOnChange={setWaitingOn}
+                followUpDate={followUpDate}
+                onFollowUpDateChange={setFollowUpDate}
+              />
+            )}
+            {captureMode === "task" && (
+              <TaskExtraFields
+                someday={someday}
+                onSomedayChange={setSomeday}
+                revisitDate={revisitDate}
+                onRevisitDateChange={setRevisitDate}
+                context={context}
+                onContextChange={setContext}
+                estimatedMinutes={estimatedMinutes}
+                onEstimatedMinutesChange={setEstimatedMinutes}
+                energyLevel={energyLevel}
+                onEnergyLevelChange={setEnergyLevel}
+              />
+            )}
+            {captureMode === "task" && (
             <label
               aria-label="Add image"
               title={image ? image.name : "Add image"}
@@ -388,6 +494,7 @@ export default function TaskCreateForm({
                 className="hidden"
               />
             </label>
+            )}
             {image && (
               <button
                 type="button"
@@ -409,6 +516,7 @@ export default function TaskCreateForm({
         </button>
       </div>
 
+      {captureMode === "task" && (
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
           <input
@@ -438,6 +546,7 @@ export default function TaskCreateForm({
           </>
         )}
       </div>
+      )}
     </form>
   );
 }
