@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { Fragment, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import Link from "next/link";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import { type Task, type TaskDomain } from "@/components/task-row";
@@ -98,6 +98,9 @@ export default function ProjectCard(props: ProjectCardProps) {
   const isSub = !!project.parent_project_id;
   const children = childrenByParent.get(project.id) ?? [];
   const canBecomeSubproject = editingId !== project.id || children.length === 0;
+  // #147: cards start collapsed (header only) so the browsing pages scan
+  // fast; one tap opens this project's tasks + reference in place.
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <Fragment>
@@ -274,12 +277,24 @@ export default function ProjectCard(props: ProjectCardProps) {
         ) : (
           <>
           <div className="flex items-start justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-label={expanded ? "Collapse project" : "Expand project"}
+              title={expanded ? "Collapse" : "Expand tasks & reference"}
+              className="mt-0.5 shrink-0 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+            >
+              <span className={`inline-block transition-transform ${expanded ? "rotate-90" : ""}`}>›</span>
+            </button>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 <Link href={`/projects/${project.id}`} className="hover:underline">
                   {project.name}
                 </Link>
               </p>
+              {expanded && (
+              <>
               {project.description && (
                 <p className="mt-0.5 text-sm text-zinc-500">
                   {project.description}
@@ -309,6 +324,8 @@ export default function ProjectCard(props: ProjectCardProps) {
                 >
                   {linkLabel(project.link)}
                 </a>
+              )}
+              </>
               )}
               <p className="mt-1 text-xs text-zinc-500">
                 {project.status}
@@ -430,6 +447,8 @@ export default function ProjectCard(props: ProjectCardProps) {
               </button>
             </div>
           </div>
+          {expanded && (
+          <div className="edit-swap-in">
           {supportItems.some((item) => item.project_id === project.id) && (
             <div className="mt-2 rounded-md bg-zinc-50 px-3 py-2 dark:bg-zinc-900/60">
               <p className="text-xs font-semibold tracking-wide text-zinc-400 uppercase">
@@ -532,6 +551,8 @@ export default function ProjectCard(props: ProjectCardProps) {
               {addingTaskId === project.id ? "Adding..." : "Add"}
             </button>
           </form>
+          </div>
+          )}
           </>
         )}
       </div>
