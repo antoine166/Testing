@@ -365,7 +365,9 @@ export function registerProjectTools(server: McpServer, admin: AdminClient, user
         "Update a project's name, description, status, domain, or parent project. Use " +
         "parent_project_id to file it as a subproject of another top-level project; pass null " +
         "to clear it and promote it back to top-level (an empty string is not accepted — it's " +
-        "not a valid UUID). Subprojects always take on their parent's domain.",
+        "not a valid UUID). Subprojects always take on their parent's domain. Setting status " +
+        "to 'completed' also completes all of the project's remaining open tasks (they stay " +
+        "tagged to it and appear in the Logbook together); un-completing does NOT reopen them.",
       inputSchema: {
         id: z.string().uuid(),
         name: z.string().min(1).optional(),
@@ -448,6 +450,22 @@ export function registerProjectTools(server: McpServer, admin: AdminClient, user
         .select()
         .single();
       if (error) return fail(error.message);
+
+      // Twin of the app route's cascade: completing a project completes its
+      // remaining open (direct) tasks with the same timestamp, so the
+      // project and its tasks land in the Logbook together.
+      if (typeof updates.completed_at === "string") {
+        const affected = await findCalendarAffectedTaskIds(userId, { projectId: id });
+        const { error: tasksError } = await admin
+          .from("tasks")
+          .update({ status: "done", completed_at: updates.completed_at })
+          .eq("project_id", id)
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .neq("status", "done");
+        if (tasksError) return fail(tasksError.message);
+        await syncTaskCalendarEvents(userId, affected);
+      }
       return ok(data);
     },
   );

@@ -177,7 +177,7 @@ export default function ProjectDetailPage() {
       !(await confirm({
         message: `Complete “${p.name}”?${
           openCount > 0
-            ? ` Its ${openCount} open task${openCount === 1 ? "" : "s"} will stay with the completed project.`
+            ? ` Its ${openCount} open task${openCount === 1 ? "" : "s"} will be completed with it.`
             : ""
         }`,
         confirmLabel: "Complete project",

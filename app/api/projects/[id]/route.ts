@@ -125,6 +125,29 @@ export async function PUT(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Completing a project completes its remaining open tasks (Antoine's
+  // rule: a done project has no open work — the tasks stay tagged to it
+  // and land in the Logbook alongside it). Direct tasks only; subprojects
+  // are their own projects and complete on their own. Runs after the
+  // project update so a failed update can't half-complete the list. The
+  // per-task PUT's recurring "spawn next occurrence" step is deliberately
+  // skipped — a finished project shouldn't generate new work.
+  if (typeof updates.completed_at === "string") {
+    const affected = await findCalendarAffectedTaskIds(user.id, { projectId: id });
+    const { error: tasksError } = await supabase
+      .from("tasks")
+      .update({ status: "done", completed_at: updates.completed_at })
+      .eq("project_id", id)
+      .is("deleted_at", null)
+      .neq("status", "done");
+    if (tasksError) {
+      return NextResponse.json({ error: tasksError.message }, { status: 500 });
+    }
+    // Time-blocked tasks may have pushed Google Calendar events — completing
+    // them changes what should be on the calendar, same as the delete path.
+    await syncTaskCalendarEvents(user.id, affected);
+  }
+
   return NextResponse.json(data);
 }
 
