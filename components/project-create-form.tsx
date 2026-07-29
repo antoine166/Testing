@@ -246,28 +246,9 @@ export default function ProjectCreateForm({
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
       </div>
+      {/* Domain before parent (Antoine's call): the domain is the primary
+          filing decision; a parent project is the exception. */}
       <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label
-            htmlFor="parent_project"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Parent project
-          </label>
-          <select
-            id="parent_project"
-            value={parentProjectId}
-            onChange={(e) => selectParentProject(e.target.value)}
-            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="">None (top-level project)</option>
-            {parentOptions().map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
         <div>
           <label
             htmlFor="domain"
@@ -292,6 +273,27 @@ export default function ProjectCreateForm({
           {parentProjectId && (
             <p className="mt-1 text-xs text-zinc-500">Inherits the parent&apos;s domain.</p>
           )}
+        </div>
+        <div>
+          <label
+            htmlFor="parent_project"
+            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Parent project
+          </label>
+          <select
+            id="parent_project"
+            value={parentProjectId}
+            onChange={(e) => selectParentProject(e.target.value)}
+            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <option value="">None (top-level project)</option>
+            {parentOptions().map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label

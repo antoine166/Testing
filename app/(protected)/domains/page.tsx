@@ -75,7 +75,8 @@ export default function DomainsPage() {
   // Project creation here is the same full form (GTD Natural Planning
   // fields and all) as the Projects page — ProjectCreateForm, scoped to
   // this domain — instead of the old name-only mini form.
-  const parentProjectOptions = () => projects.filter((p) => !p.parent_project_id);
+  const parentProjectOptions = () =>
+    projects.filter((p) => !p.parent_project_id && p.status !== "completed");
 
   async function handleUpdate(id: string) {
     if (!editName.trim()) return;

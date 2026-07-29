@@ -109,7 +109,21 @@ export default function ProjectEditForm(props: ProjectEditFormProps) {
         placeholder="Link (optional)"
         className="w-full rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       />
+      {/* Domain before parent, matching the create form (Antoine's call). */}
       <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={editDomainId}
+          disabled={!!editParentProjectId}
+          onChange={(e) => setEditDomainId(e.target.value)}
+          className="rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+        >
+          <option value="">No domain</option>
+          {domains.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
         <select
           value={editParentProjectId}
           disabled={!canBecomeSubproject}
@@ -125,19 +139,6 @@ export default function ProjectEditForm(props: ProjectEditFormProps) {
           {parentOptions(project.id).map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={editDomainId}
-          disabled={!!editParentProjectId}
-          onChange={(e) => setEditDomainId(e.target.value)}
-          className="rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-        >
-          <option value="">No domain</option>
-          {domains.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
             </option>
           ))}
         </select>
