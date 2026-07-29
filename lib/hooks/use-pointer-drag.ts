@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { prefersReducedMotion } from "@/lib/motion";
 
 export type PointerDragHandleProps = {
   onPointerDown: (e: React.PointerEvent) => void;
@@ -8,6 +9,11 @@ export type PointerDragHandleProps = {
   onPointerUp: (e: React.PointerEvent) => void;
   onPointerCancel: (e: React.PointerEvent) => void;
 };
+
+/** Find a row element by its data-drag-id tag. Ids are uuids, but escape anyway. */
+function rowById(id: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-drag-id="${CSS.escape(id)}"]`);
+}
 
 /**
  * Touch drag-to-reorder (#142, motion audit item 5). HTML5 drag events
@@ -17,6 +23,17 @@ export type PointerDragHandleProps = {
  * data-drag-id attribute), lifting commits. Mouse pointers are ignored —
  * desktop keeps the existing HTML5 drag on the whole row, so the two
  * mechanisms never double-fire.
+ *
+ * #154: the dragged row now FOLLOWS THE FINGER. While armed, the hook
+ * drives an inline translateY on the row (the row stays in flow — its slot
+ * is the ghost). Because the row's own layout slot jumps when a swap
+ * reorders the list, the translate is offset-compensated: visual delta =
+ * (pointer travel) − (how far the row's slot itself moved), read off
+ * offsetTop, which ignores transforms. The row also gets
+ * pointer-events: none while in hand so elementFromPoint hit-tests the row
+ * *under* the finger instead of the one glued to it. On release the row
+ * springs back to its slot. All of it no-ops under reduced motion (drag
+ * still works, rows just swap in place as before).
  *
  * The handle must have `touch-action: none` (the .drag-handle class) so
  * the browser doesn't claim the gesture for scrolling — on the handle
@@ -40,10 +57,33 @@ export function usePointerDrag({
     started: boolean;
     startX: number;
     startY: number;
+    /** The dragged row element, grabbed at pointerdown (handle's closest [data-drag-id]). */
+    row: HTMLElement | null;
+    /** The row's untransformed offsetTop when the drag armed — swap compensation baseline. */
+    baseOffsetTop: number;
   } | null>(null);
 
+  /** Let go of the row: settle it back to its slot on a short spring. */
+  function releaseRow(row: HTMLElement | null) {
+    if (!row) return;
+    row.style.pointerEvents = "";
+    if (!row.style.transform) return;
+    row.style.transition = "transform 200ms var(--spring-settle)";
+    row.style.transform = "";
+    const clear = () => {
+      row.style.transition = "";
+      row.removeEventListener("transitionend", clear);
+    };
+    row.addEventListener("transitionend", clear);
+    // Fallback in case transitionend never fires (row re-rendered mid-settle).
+    setTimeout(clear, 300);
+  }
+
   function reset() {
-    if (stateRef.current) clearTimeout(stateRef.current.timer);
+    if (stateRef.current) {
+      clearTimeout(stateRef.current.timer);
+      releaseRow(stateRef.current.row);
+    }
     stateRef.current = null;
     setDraggingId(null);
   }
@@ -55,13 +95,22 @@ export function usePointerDrag({
     // Capture on the handle: every subsequent move/up lands on it even as
     // the finger travels over other rows.
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const row = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-drag-id]");
     const state = {
       id,
       started: false,
       startX: e.clientX,
       startY: e.clientY,
+      row,
+      baseOffsetTop: 0,
       timer: setTimeout(() => {
         state.started = true;
+        if (row && !prefersReducedMotion()) {
+          state.baseOffsetTop = row.offsetTop;
+          // The row rides with the finger from here — take it out of
+          // hit-testing so elementFromPoint sees what's underneath it.
+          row.style.pointerEvents = "none";
+        }
         setDraggingId(id);
       }, holdMs),
     };
@@ -77,11 +126,18 @@ export function usePointerDrag({
       if (Math.hypot(e.clientX - state.startX, e.clientY - state.startY) > 10) reset();
       return;
     }
+    // Follow the finger: pointer travel minus how far the row's own layout
+    // slot moved (swaps re-slot it), so the row tracks the touch point.
+    const { row } = state;
+    if (row && !prefersReducedMotion()) {
+      const dy = e.clientY - state.startY - (row.offsetTop - state.baseOffsetTop);
+      row.style.transform = `translateY(${dy}px) scale(1.02)`;
+    }
     // The handle has pointer capture, so hit-test manually for the row
     // (tagged with data-drag-id) currently under the finger.
     const under = document.elementFromPoint(e.clientX, e.clientY);
-    const row = under?.closest<HTMLElement>("[data-drag-id]");
-    const overId = row?.dataset.dragId;
+    const overRow = under?.closest<HTMLElement>("[data-drag-id]");
+    const overId = overRow?.dataset.dragId;
     if (overId && overId !== state.id) onOver(state.id, overId);
   }
 
@@ -104,4 +160,65 @@ export function usePointerDrag({
       onPointerCancel: reset,
     }),
   };
+}
+
+/**
+ * FLIP slides for reorder swaps (#154): when a touch drag swaps the order
+ * array, the rows that got displaced glide to their new slot instead of
+ * teleporting. First: the list calls `capture(ids)` just before the swap's
+ * setState, recording each row's on-screen top (getBoundingClientRect, so
+ * a row caught mid-glide is measured where it visually is). Last + Invert +
+ * Play: after React commits the new order, the layout effect measures each
+ * row's new top, applies the inverted delta as an inline transform with
+ * transitions off, forces a reflow, then transitions to zero on the settle
+ * spring. The dragged row is skipped — it's finger-driven. Inline
+ * transition styles are cleaned up on transitionend so they can't shadow
+ * other transitions (e.g. the leave-collapse) later.
+ *
+ * Deliberately scoped to touch drags: the HTML5 desktop path never calls
+ * `capture`, so desktop behavior is unchanged. No-ops under reduced motion.
+ */
+export function useRowFlip(order: string[], draggingId: string | null) {
+  const prevTopsRef = useRef<Map<string, number> | null>(null);
+
+  const capture = useCallback((ids: string[]) => {
+    if (prefersReducedMotion()) return;
+    const tops = new Map<string, number>();
+    for (const id of ids) {
+      const el = rowById(id);
+      if (el) tops.set(id, el.getBoundingClientRect().top);
+    }
+    prevTopsRef.current = tops;
+  }, []);
+
+  useLayoutEffect(() => {
+    const prev = prevTopsRef.current;
+    if (!prev) return;
+    prevTopsRef.current = null;
+    for (const [id, prevTop] of prev) {
+      if (id === draggingId) continue;
+      const el = rowById(id);
+      if (!el) continue;
+      // Measure the row's true new slot with any in-flight glide cleared.
+      el.style.transition = "none";
+      el.style.transform = "";
+      const delta = prevTop - el.getBoundingClientRect().top;
+      if (Math.abs(delta) < 0.5) {
+        el.style.transition = "";
+        continue;
+      }
+      el.style.transform = `translateY(${delta}px)`;
+      void el.offsetHeight; // commit the inverted position before playing
+      el.style.transition = "transform 220ms var(--spring-settle)";
+      el.style.transform = "";
+      const clear = () => {
+        el.style.transition = "";
+        el.removeEventListener("transitionend", clear);
+      };
+      el.addEventListener("transitionend", clear);
+      setTimeout(clear, 320); // fallback if transitionend is swallowed
+    }
+  }, [order, draggingId]);
+
+  return { capture };
 }

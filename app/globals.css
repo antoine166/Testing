@@ -10,6 +10,15 @@
   --surface: #ffffff;
   --hairline: rgba(60, 60, 67, 0.18);
   --material: rgba(246, 246, 248, 0.72);
+  /* Motion vocabulary (#154): two spring easings, used by every celebration
+     and settle below. Plain cubic-beziers on purpose — linear()-based
+     springs need iOS 17.2+, and a bezier overshoot (y > 1) reads the same
+     at these durations. Durations stay 200–450ms (celebrations to 600ms).
+     --spring-bouncy: playful overshoot (rewards: check pop, punch, flex).
+     --spring-settle: soft overshoot that settles (bursts, FLIP slides,
+     drag release). */
+  --spring-bouncy: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-settle: cubic-bezier(0.22, 1.36, 0.36, 1);
 }
 
 @theme inline {
@@ -63,17 +72,20 @@ body {
 }
 
 /* Task completion: checkmark pop + strikethrough draw, used by TaskRow's
-   "satisfying" completion animation before the row fades out. */
+   "satisfying" completion animation before the row exits. The pop's
+   overshoot now comes from the spring easing itself (scale runs 0→1 and
+   the bezier carries it past 1 before settling) instead of hand-tuned
+   keyframe percentages. */
 @keyframes task-check-pop {
-  0% {
+  from {
     transform: scale(0);
   }
-  60% {
-    transform: scale(1.2);
-  }
-  100% {
+  to {
     transform: scale(1);
   }
+}
+.task-check-pop {
+  animation: task-check-pop 300ms var(--spring-bouncy) both;
 }
 
 @keyframes task-strike {
@@ -93,18 +105,33 @@ body {
    immediately so there's no first-frame flash of a full-width line. */
 .task-strike-line {
   transform-origin: left;
-  animation: task-strike 250ms ease-out both;
+  animation: task-strike 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Task completion, final beat: after the check + strikethrough, the row
-   flicks off to the right like dealing a card off a deck (replaces the old
-   fade-and-shrink). ease-in accelerates it away. */
-.task-swipe-out {
-  transition:
-    transform 550ms cubic-bezier(0.4, 0, 1, 1),
-    opacity 550ms ease-in;
-  transform: translateX(110%);
-  opacity: 0;
+/* Task completion, final beat (#154): the card is *set down* rather than
+   dealt away — a barely-there 2px lift with a breath at the top, then it
+   drops down-and-away under gravity (ease-in) while fading. Runs entirely
+   inside the same 450→1150ms fade window as the old flick-right, so
+   TaskRow's deferred-save timing is untouched. */
+@keyframes task-set-down {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); /* the lift eases out */
+  }
+  24% {
+    transform: translateY(-2px) scale(1.01);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.36); /* gravity takes it */
+  }
+  100% {
+    transform: translateY(26px) scale(0.97);
+    opacity: 0;
+  }
+}
+.task-set-down {
+  animation: task-set-down 500ms both;
+  pointer-events: none;
 }
 
 /* Habit log: a progress ring sweeps to its new fill. Any change to the
@@ -118,18 +145,30 @@ body {
    Three synchronized beats: the fist flies in and impacts (~scale 1.6 at
    landing), an emerald burst ring radiates from the point of contact, and
    the whole row flashes green. */
+/* #154: the impact now lands on a spring — the fist accelerates in
+   (ease-in), overshoots big at contact, recoils, and settles, with each
+   segment's physics in its own timing function instead of one curve
+   stretched over hand-tuned percentages. */
 @keyframes habit-punch {
   0% {
-    transform: translateX(-70%) scale(0.2) rotate(-30deg);
+    transform: translateX(-70%) scale(0.3) rotate(-30deg);
     opacity: 0;
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45); /* winds up, accelerates in */
   }
-  50% {
-    transform: translateX(0) scale(1.65) rotate(10deg);
+  35% {
+    transform: translateX(0) scale(1.8) rotate(10deg);
     opacity: 1;
-  } /* impact */
-  68% {
-    transform: translateX(0) scale(1.2) rotate(-6deg);
+    animation-timing-function: var(--spring-settle); /* impact */
+  }
+  62% {
+    transform: translateX(0) scale(1.26) rotate(-4deg);
     opacity: 1;
+    animation-timing-function: var(--spring-settle); /* recoil */
+  }
+  85% {
+    transform: translateX(0) scale(1.44) rotate(0deg);
+    opacity: 1;
+    animation-timing-function: ease-in; /* settled; fade off */
   }
   100% {
     transform: translateX(0) scale(1.4) rotate(0deg);
@@ -137,7 +176,7 @@ body {
   }
 }
 .habit-punch {
-  animation: habit-punch 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: habit-punch 600ms both;
 }
 
 @keyframes habit-burst {
@@ -154,7 +193,8 @@ body {
   }
 }
 .habit-burst {
-  animation: habit-burst 520ms ease-out 130ms both;
+  /* spring-settle carries the ring just past full size, a touch of settle. */
+  animation: habit-burst 520ms var(--spring-settle) 130ms both;
 }
 
 @keyframes habit-row-flash {
@@ -169,7 +209,59 @@ body {
   }
 }
 .habit-row-flash {
-  animation: habit-row-flash 650ms ease-out;
+  animation: habit-row-flash 450ms ease-out;
+}
+
+/* Workout logged (#154): the Training Log's own reward — same weight as
+   the habit punch, distinct gesture. A 💪 flexes in on a spring (scale up,
+   slight rotate, settle), an amber + emerald double burst radiates from
+   the log control, and the row flashes amber. Unlogging gets nothing. */
+@keyframes workout-flex {
+  0% {
+    transform: scale(0.2) rotate(-28deg);
+    opacity: 0;
+    animation-timing-function: var(--spring-bouncy); /* flexes up */
+  }
+  40% {
+    transform: scale(1.7) rotate(12deg);
+    opacity: 1;
+    animation-timing-function: var(--spring-settle); /* peak flex */
+  }
+  70% {
+    transform: scale(1.3) rotate(-4deg);
+    opacity: 1;
+    animation-timing-function: ease-out;
+  }
+  88% {
+    transform: scale(1.45) rotate(0deg);
+    opacity: 1;
+    animation-timing-function: ease-in; /* settled; fade off */
+  }
+  100% {
+    transform: scale(1.4) rotate(0deg);
+    opacity: 0;
+  }
+}
+.workout-flex {
+  animation: workout-flex 600ms both;
+}
+.workout-burst {
+  animation: habit-burst 480ms var(--spring-settle) 120ms both;
+}
+.workout-burst-2 {
+  animation-delay: 240ms;
+}
+@keyframes workout-row-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  30% {
+    background-color: rgb(245 158 11 / 0.16);
+  } /* amber flash at the flex */
+}
+.workout-row-flash {
+  animation: workout-row-flash 600ms ease-out;
 }
 
 /* Drag-to-reorder (#142, motion audit item 5): the grab handle owns the
@@ -186,8 +278,11 @@ body {
 }
 
 /* The row being dragged lifts off the list: slight scale + shadow, above
-   its neighbors. (Neighbors reorder instantly rather than sliding — true
-   sliding needs FLIP position bookkeeping, deliberately skipped.) */
+   its neighbors. On touch it also *follows the finger* — use-pointer-drag
+   drives an inline translateY on the row — and neighbors slide out of the
+   way via FLIP (useRowFlip in the same file measures each row's top before
+   a swap and transitions the inverted delta to zero). Both no-op under
+   reduced motion. */
 @keyframes row-lift {
   from {
     transform: scale(1);
@@ -253,9 +348,9 @@ body {
   animation: row-enter 320ms ease backwards;
 }
 
-/* Why the row left: 🗑️ trashed, ↩️ un-completed back to life. Plain
-   completions keep TaskRow's own check/strike/swipe celebration and just
-   collapse. */
+/* Why the row left: ↩️ badge for un-completed / restored. Plain
+   completions keep TaskRow's own check/strike/set-down celebration and
+   just collapse. */
 @keyframes leave-badge-pop {
   0% {
     transform: scale(0);
@@ -271,7 +366,6 @@ body {
   }
 }
 
-.row-leaving-trash::after,
 .row-leaving-undone::after,
 .row-leaving-restore::after {
   position: absolute;
@@ -281,20 +375,24 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 1.25rem;
+  content: "↩️";
   animation: leave-badge-pop 420ms ease-out both;
 }
 
-.row-leaving-trash::after {
-  content: "🗑️";
+/* Trash (#154, replaces the 🗑️ badge + dim): physical — the row's content
+   crushes toward the delete corner it was tapped in (scales down, tips
+   -2deg, drifts toward the top-right where the trash button lives) and
+   fades, then the measured height-collapse above closes the space. Fill
+   forwards keeps it invisible while the collapse finishes. */
+@keyframes row-trash-crush {
+  to {
+    transform: translate(5%, -4px) scale(0.85) rotate(-2deg);
+    opacity: 0;
+  }
 }
-
-.row-leaving-undone::after,
-.row-leaving-restore::after {
-  content: "↩️";
-}
-
 .row-leaving-trash > * {
-  opacity: 0.45;
+  transform-origin: 92% 25%;
+  animation: row-trash-crush 280ms cubic-bezier(0.32, 0, 0.67, 0) both;
 }
 
 /* Project completion (#125): a multi-week effort ending deserves ~3× the
@@ -555,22 +653,30 @@ details[open] > *:not(summary) {
   .skeleton {
     animation: none;
   }
-  .row-leaving-trash::after,
   .row-leaving-undone::after,
   .row-leaving-restore::after {
     animation: none;
     content: none;
   }
-  .task-swipe-out {
-    transition: opacity 200ms ease;
-    transform: none;
+  .row-leaving-trash > * {
+    animation: none;
+  }
+  /* Exit becomes a plain fade (reusing the modal fade-out keyframe). */
+  .task-set-down {
+    animation: modal-fade-out 200ms ease both;
+  }
+  .task-check-pop {
+    animation: none;
   }
   .habit-ring-progress {
     transition: none;
   }
   .habit-punch,
   .habit-burst,
-  .habit-row-flash {
+  .habit-row-flash,
+  .workout-flex,
+  .workout-burst,
+  .workout-row-flash {
     animation: none;
   }
   /* Drag still works; the lift theatrics no-op. A hairline outline keeps
