@@ -129,10 +129,15 @@ export function usePointerDrag({
       row.style.transform = `translateY(${dy}px) scale(1.02)`;
     }
     // The handle has pointer capture, so hit-test manually for the row
-    // (tagged with data-drag-id) currently under the finger.
+    // under the finger. data-drag-id marks draggable rows; data-drop-id
+    // marks rows that can't be dragged but can be dragged PAST — a
+    // recurring group's face row and its "+N more" stub announce the
+    // group's first occurrence id, so the swap treats hovering the group
+    // like hovering that occurrence (#154 round 2 — without this, a list
+    // topped by groups was a wall a drag could never cross).
     const under = document.elementFromPoint(e.clientX, e.clientY);
-    const overRow = under?.closest<HTMLElement>("[data-drag-id]");
-    const overId = overRow?.dataset.dragId;
+    const overRow = under?.closest<HTMLElement>("[data-drag-id], [data-drop-id]");
+    const overId = overRow?.dataset.dragId ?? overRow?.dataset.dropId;
     if (overId && overId !== state.id) onOver(state.id, overId);
   }
 

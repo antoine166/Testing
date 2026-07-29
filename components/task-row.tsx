@@ -275,6 +275,7 @@ export default function TaskRow({
   selected = false,
   onSelectChange,
   dragProps,
+  dropTargetId,
   leaving,
 }: {
   task: Task;
@@ -294,6 +295,8 @@ export default function TaskRow({
   onSelectChange?: (checked: boolean) => void;
   /** Present when the list supports drag-to-reorder (ReorderableTaskList). */
   dragProps?: TaskDragProps;
+  /** Makes a non-draggable row a valid drag-over target (touch reorder): a recurring group's face row announces its first occurrence's id so tasks can be dragged past/onto the group (#154 round 2). */
+  dropTargetId?: string;
   /** Set on the short-lived snapshot row rendered while a removed task's space collapses (#121/#138) — styles the leave animation and disables interaction. */
   leaving?: RemovalKind;
 }) {
@@ -700,6 +703,7 @@ export default function TaskRow({
       // Non-draggable rows (a collapsed recurring group's face row) still
       // FLIP-glide when a drag displaces them (#154 round 2).
       data-flip-key={!leaving ? task.id : undefined}
+      data-drop-id={dropTargetId}
       onDragStart={dragProps ? () => dragProps.onDragStart() : undefined}
       onDragOver={dragProps ? (e) => dragProps.onDragOver(e) : undefined}
       onDrop={dragProps ? (e) => e.preventDefault() : undefined}
