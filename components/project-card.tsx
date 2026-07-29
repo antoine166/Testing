@@ -276,7 +276,9 @@ export default function ProjectCard(props: ProjectCardProps) {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                {project.name}
+                <Link href={`/projects/${project.id}`} className="hover:underline">
+                  {project.name}
+                </Link>
               </p>
               {project.description && (
                 <p className="mt-0.5 text-sm text-zinc-500">
@@ -485,11 +487,26 @@ export default function ProjectCard(props: ProjectCardProps) {
                   </ul>
                 ) : (
                   <p className="text-xs text-zinc-500">
-                    No open tasks{doneCount > 0 ? ` — ${doneCount} done` : ""}.
+                    No open tasks
+                    {doneCount > 0 ? (
+                      <>
+                        {" — "}
+                        <Link href={`/projects/${project.id}`} className="underline">
+                          {doneCount} done
+                        </Link>
+                      </>
+                    ) : (
+                      ""
+                    )}
+                    .
                   </p>
                 )}
                 {openTasks.length > 0 && doneCount > 0 && (
-                  <p className="mt-1 text-xs text-zinc-400">{doneCount} done</p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    <Link href={`/projects/${project.id}`} className="underline">
+                      {doneCount} done
+                    </Link>
+                  </p>
                 )}
               </div>
             );
