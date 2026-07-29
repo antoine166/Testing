@@ -5,7 +5,7 @@ import { todayLocal } from "@/lib/date";
 import { postHabitLog, deleteHabitLog } from "@/lib/habits/api";
 import { isAtRisk, isPendingToday } from "@/lib/habits/streaks";
 import { usePageData } from "@/lib/hooks/use-page-data";
-import HabitRow, {
+import {
   FrequencyFields,
   FREQUENCIES,
   type Habit,
@@ -13,6 +13,7 @@ import HabitRow, {
   type HabitLogRow,
   type HabitFrequency,
 } from "@/components/habit-row";
+import ReorderableHabitList from "@/components/reorderable-habit-list";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 
 export default function HabitsPage() {
@@ -142,6 +143,62 @@ export default function HabitsPage() {
     }
   }
 
+  // Sections, in render order. The API already serves habits in the global
+  // manual order (sort_order nulls-first, then name — #142); each section
+  // preserves that, with the pending one layering its at-risk safety sort
+  // on top (stable, so the manual order survives within each group).
+  const pendingHabits = habits
+    .filter((h) => h.active && isPendingToday(h, logs.filter((l) => l.habit_id === h.id), today))
+    .sort((a, b) => {
+      const aRisk = isAtRisk(a, logs.filter((l) => l.habit_id === a.id), today);
+      const bRisk = isAtRisk(b, logs.filter((l) => l.habit_id === b.id), today);
+      return aRisk === bRisk ? 0 : aRisk ? -1 : 1;
+    });
+  const pendingIds = new Set(pendingHabits.map((h) => h.id));
+  const unfiledHabits = habits.filter((h) => !h.domain_id && !pendingIds.has(h.id));
+  const domainSections = domains
+    .map((domain) => ({
+      domain,
+      habits: habits.filter((h) => h.domain_id === domain.id && !pendingIds.has(h.id)),
+    }))
+    .filter((s) => s.habits.length > 0);
+
+  // Habits keep ONE global order (the approved cut): a drag inside any one
+  // section commits the whole page's current display order — with that
+  // section's new arrangement spliced in — so every list agrees afterwards.
+  async function handleReorder(sectionKey: string, orderedIds: string[]) {
+    const sections: { key: string; ids: string[] }[] = [
+      { key: "pending", ids: pendingHabits.map((h) => h.id) },
+      { key: "unfiled", ids: unfiledHabits.map((h) => h.id) },
+      ...domainSections.map((s) => ({ key: s.domain.id, ids: s.habits.map((h) => h.id) })),
+    ];
+    const ids = sections.flatMap((s) => (s.key === sectionKey ? orderedIds : s.ids));
+
+    const res = await fetch("/api/habits/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "Couldn't save the new order — try again.");
+      return;
+    }
+    await loadAll();
+  }
+
+  // Shared row wiring for every section's ReorderableHabitList.
+  const listProps = {
+    logs,
+    today,
+    domains,
+    onToggle: toggleDate,
+    onAddLog: addLog,
+    onRemoveLog: removeLog,
+    onUpdate: handleUpdate,
+    onDelete: handleDelete,
+  };
+
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
       <h1 className="mb-6 text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
@@ -243,118 +300,63 @@ export default function HabitsPage() {
         </p>
       ) : (
         <div className="space-y-6">
-          {(() => {
-            const pending = habits
-              .filter(
-                (h) => h.active && isPendingToday(h, logs.filter((l) => l.habit_id === h.id), today),
-              )
-              .sort((a, b) => {
-                const aRisk = isAtRisk(a, logs.filter((l) => l.habit_id === a.id), today);
-                const bRisk = isAtRisk(b, logs.filter((l) => l.habit_id === b.id), today);
-                return aRisk === bRisk ? 0 : aRisk ? -1 : 1;
-              });
-            if (pending.length === 0) return null;
-            return (
-              <details open className="group">
-                <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                  <span className="text-zinc-400 transition-transform group-open:rotate-90">
-                    ›
-                  </span>
-                  Still To Do ({pending.length})
-                </summary>
-                <ul className="space-y-2">
-                  {pending.map((habit) => (
-                    <HabitRow
-                      key={habit.id}
-                      habit={habit}
-                      logs={logs.filter((l) => l.habit_id === habit.id)}
-                      today={today}
-                      domains={domains}
-                      onToggle={toggleDate}
-                      onAddLog={addLog}
-                      onRemoveLog={removeLog}
-                      onUpdate={handleUpdate}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </ul>
-              </details>
-            );
-          })()}
+          {pendingHabits.length > 0 && (
+            <details open className="group">
+              <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                  ›
+                </span>
+                Still To Do ({pendingHabits.length})
+              </summary>
+              <ul className="space-y-2">
+                <ReorderableHabitList
+                  habits={pendingHabits}
+                  onCommitOrder={(ids) => handleReorder("pending", ids)}
+                  {...listProps}
+                />
+              </ul>
+            </details>
+          )}
 
-          {(() => {
-            const unfiled = habits.filter(
-              (h) =>
-                !h.domain_id &&
-                !(h.active && isPendingToday(h, logs.filter((l) => l.habit_id === h.id), today)),
-            );
-            if (unfiled.length === 0) return null;
-            return (
-              <details open className="group">
-                <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                  <span className="text-zinc-400 transition-transform group-open:rotate-90">
-                    ›
-                  </span>
-                  No domain
-                </summary>
-                <ul className="space-y-2">
-                  {unfiled.map((habit) => (
-                    <HabitRow
-                      key={habit.id}
-                      habit={habit}
-                      logs={logs.filter((l) => l.habit_id === habit.id)}
-                      today={today}
-                      domains={domains}
-                      onToggle={toggleDate}
-                      onAddLog={addLog}
-                      onRemoveLog={removeLog}
-                      onUpdate={handleUpdate}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </ul>
-              </details>
-            );
-          })()}
+          {unfiledHabits.length > 0 && (
+            <details open className="group">
+              <summary className="mb-2 flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                  ›
+                </span>
+                No domain
+              </summary>
+              <ul className="space-y-2">
+                <ReorderableHabitList
+                  habits={unfiledHabits}
+                  onCommitOrder={(ids) => handleReorder("unfiled", ids)}
+                  {...listProps}
+                />
+              </ul>
+            </details>
+          )}
 
-          {domains.map((domain) => {
-            const domainHabits = habits.filter(
-              (h) =>
-                h.domain_id === domain.id &&
-                !(h.active && isPendingToday(h, logs.filter((l) => l.habit_id === h.id), today)),
-            );
-            if (domainHabits.length === 0) return null;
-            return (
-              <details key={domain.id} open className="group">
-                <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                  <span className="text-zinc-400 transition-transform group-open:rotate-90">
-                    ›
-                  </span>
-                  <span
-                    className="h-3.5 w-3.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: domain.color }}
-                  />
-                  {domain.name}
-                </summary>
-                <ul className="space-y-2">
-                  {domainHabits.map((habit) => (
-                    <HabitRow
-                      key={habit.id}
-                      habit={habit}
-                      logs={logs.filter((l) => l.habit_id === habit.id)}
-                      today={today}
-                      domains={domains}
-                      onToggle={toggleDate}
-                      onAddLog={addLog}
-                      onRemoveLog={removeLog}
-                      onUpdate={handleUpdate}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </ul>
-              </details>
-            );
-          })}
+          {domainSections.map(({ domain, habits: domainHabits }) => (
+            <details key={domain.id} open className="group">
+              <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-400 transition-transform group-open:rotate-90">
+                  ›
+                </span>
+                <span
+                  className="h-3.5 w-3.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: domain.color }}
+                />
+                {domain.name}
+              </summary>
+              <ul className="space-y-2">
+                <ReorderableHabitList
+                  habits={domainHabits}
+                  onCommitOrder={(ids) => handleReorder(domain.id, ids)}
+                  {...listProps}
+                />
+              </ul>
+            </details>
+          ))}
         </div>
       )}
     </div>

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TaskRow, { type Task, type TaskDomain, type TaskProject } from "@/components/task-row";
 import RecurringTaskGroup from "@/components/recurring-task-group";
 import { groupRecurringTasks } from "@/lib/recurring-tasks/group";
 import { useLeaveTransition } from "@/components/leave-transition";
+import { usePointerDrag } from "@/lib/hooks/use-pointer-drag";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 
 type CommonRowProps = {
@@ -19,22 +20,29 @@ type CommonRowProps = {
 };
 
 /**
- * A task list you can drag into any order. Same HTML5 drag pattern as the
- * Domains page reorder: drag over a row swaps positions locally, drop
- * commits the whole list's order in one POST /api/tasks/reorder (which
- * stamps sort_order = index). Recurring-series groups still render, but
- * aren't draggable — a group is a synthetic row over several tasks, and
- * ordering happens between real rows.
+ * A task list you can drag into any order. Two mechanisms share the same
+ * order state: HTML5 drag on the row for desktop mice (same pattern as the
+ * Domains page reorder), and pointer-event drag on the grab handle for
+ * touch (press-and-hold, via usePointerDrag — HTML5 drag events never fire
+ * on touch). Drop commits the whole list's order in one POST
+ * /api/tasks/reorder: with a `listKey` (#142) that saves per-page
+ * positions in list_orders; without one it stamps the legacy global
+ * sort_order. Recurring-series groups still render, but aren't draggable —
+ * a group is a synthetic row over several tasks, and ordering happens
+ * between real rows.
  */
 export default function ReorderableTaskList({
   tasks,
   onReordered,
+  listKey,
   ...rowProps
 }: CommonRowProps & {
   /** Tasks in current display order. */
   tasks: Task[];
   /** Called after a successful order commit — refetch here. */
   onReordered: () => Promise<void> | void;
+  /** Save positions per page under this key instead of the global sort_order. */
+  listKey?: string;
 }) {
   // Local order (ids) while dragging; resynced whenever the incoming task
   // set changes (render-adjust, keyed on the joined id list).
@@ -49,12 +57,15 @@ export default function ReorderableTaskList({
     setOrder(tasks.map((t) => t.id));
   }
 
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const ordered = order.map((id) => byId.get(id)).filter((t): t is Task => !!t);
+  // Commits read the ref, not the state — the touch path's drop fires from
+  // an event handler whose closure may predate the last onOver swap.
+  // Synced in an effect (not during render), per the react-hooks rules.
+  const orderRef = useRef(order);
+  useEffect(() => {
+    orderRef.current = order;
+  });
 
-  function handleDragOver(e: React.DragEvent, targetId: string) {
-    e.preventDefault();
-    if (!draggedId || draggedId === targetId) return;
+  function moveInOrder(draggedId: string, targetId: string) {
     setOrder((prev) => {
       const from = prev.indexOf(draggedId);
       const to = prev.indexOf(targetId);
@@ -66,14 +77,12 @@ export default function ReorderableTaskList({
     });
   }
 
-  async function handleDragEnd() {
-    if (!draggedId) return;
-    setDraggedId(null);
-
+  async function commitOrder() {
+    const ids = orderRef.current;
     const res = await fetch("/api/tasks/reorder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: order }),
+      body: JSON.stringify(listKey ? { ids, list_key: listKey } : { ids }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -83,6 +92,24 @@ export default function ReorderableTaskList({
     setError(null);
     await onReordered();
   }
+
+  // Touch/pen path — long-press the handle, move to swap, lift to commit.
+  const pointer = usePointerDrag({ onOver: moveInOrder, onDrop: () => void commitOrder() });
+
+  function handleDragOver(e: React.DragEvent, targetId: string) {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) return;
+    moveInOrder(draggedId, targetId);
+  }
+
+  async function handleDragEnd() {
+    if (!draggedId) return;
+    setDraggedId(null);
+    await commitOrder();
+  }
+
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const ordered = order.map((id) => byId.get(id)).filter((t): t is Task => !!t);
 
   const entries = groupRecurringTasks(ordered);
 
@@ -128,7 +155,8 @@ export default function ReorderableTaskList({
               onDragStart: () => setDraggedId(entry.task.id),
               onDragOver: (e) => handleDragOver(e, entry.task.id),
               onDragEnd: handleDragEnd,
-              dragging: draggedId === entry.task.id,
+              dragging: draggedId === entry.task.id || pointer.draggingId === entry.task.id,
+              handleProps: pointer.handleProps(entry.task.id),
             }}
           />
         ),

@@ -63,6 +63,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
     updates.target_count = targetCount;
   }
   if (typeof body.active === "boolean") updates.active = body.active;
+  if ("sort_order" in body) {
+    const sortOrder = body.sort_order;
+    if (sortOrder !== null && !Number.isInteger(sortOrder)) {
+      return NextResponse.json({ error: "sort_order must be an integer or null" }, { status: 400 });
+    }
+    updates.sort_order = sortOrder;
+  }
   if ("domain_id" in body) {
     updates.domain_id = typeof body.domain_id === "string" ? body.domain_id : null;
   }

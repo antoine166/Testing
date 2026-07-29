@@ -22,6 +22,9 @@ export function registerHabitTools(server: McpServer, admin: AdminClient, userId
         .select("*")
         .eq("user_id", userId)
         .is("deleted_at", null)
+        // Same ordering as the app (#142): the global manual order first,
+        // nulls (never-dragged) on top, then name as the stable fallback.
+        .order("sort_order", { ascending: true, nullsFirst: true })
         .order("name");
       if (error) return fail(error.message);
       if (habits.length === 0) return ok([]);
@@ -115,6 +118,12 @@ export function registerHabitTools(server: McpServer, admin: AdminClient, userId
         target_count: z.number().int().min(1).nullable().optional(),
         icon: z.string().optional(),
         active: z.boolean().optional(),
+        sort_order: z
+          .number()
+          .int()
+          .nullable()
+          .optional()
+          .describe("Global manual position (lower = higher). Prefer reorder_habits for rearranging the whole list."),
         domain_id: z
           .string()
           .uuid()
@@ -141,6 +150,32 @@ export function registerHabitTools(server: McpServer, admin: AdminClient, userId
         .single();
       if (error) return fail(error.message);
       return ok(data);
+    },
+  );
+
+  server.registerTool(
+    "reorder_habits",
+    {
+      title: "Reorder habits",
+      description:
+        "Manually reorder habits: pass the full habit id list in the desired display order, and " +
+        "each habit's global sort_order is set to its position (habits keep ONE order everywhere " +
+        "— the app's pages only layer an at-risk-first grouping on top). Use list_habits first " +
+        "to see the current order.",
+      inputSchema: {
+        ids: z.array(z.string().uuid()).min(1).max(200).describe("Habit ids in the desired display order."),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ ids }) => {
+      const results = await Promise.all(
+        ids.map((id, index) =>
+          admin.from("habits").update({ sort_order: index }).eq("id", id).eq("user_id", userId),
+        ),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) return fail(failed.error.message);
+      return ok({ reordered: ids.length });
     },
   );
 

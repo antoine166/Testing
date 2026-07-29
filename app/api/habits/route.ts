@@ -12,6 +12,9 @@ export async function GET() {
     .from("habits")
     .select("*")
     .is("deleted_at", null)
+    // Manual order first (#142); nulls first so never-dragged habits stay
+    // on top, then the old name order as the stable fallback.
+    .order("sort_order", { ascending: true, nullsFirst: true })
     .order("name");
 
   if (error) {

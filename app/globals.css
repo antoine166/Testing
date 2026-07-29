@@ -172,6 +172,37 @@ body {
   animation: habit-row-flash 650ms ease-out;
 }
 
+/* Drag-to-reorder (#142, motion audit item 5): the grab handle owns the
+   touch gesture — touch-action: none here (and only here) stops the
+   browser claiming it for scrolling, so the rest of the row still scrolls
+   the list; the callout/select suppression stops iOS's long-press menu
+   from hijacking the press-and-hold that starts a drag. */
+.drag-handle {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: grab;
+}
+
+/* The row being dragged lifts off the list: slight scale + shadow, above
+   its neighbors. (Neighbors reorder instantly rather than sliding — true
+   sliding needs FLIP position bookkeeping, deliberately skipped.) */
+@keyframes row-lift {
+  from {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgb(0 0 0 / 0);
+  }
+}
+
+.row-dragging {
+  position: relative;
+  z-index: 10;
+  transform: scale(1.02);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  animation: row-lift 150ms ease;
+}
+
 /* Calmer days / accessibility: keep the state change, drop the motion. */
 /* Leave transitions (#121 + #138): a row leaving its list collapses
    instead of the rows below jumping up in one frame. max-height keyframe
@@ -365,5 +396,13 @@ body {
   .habit-burst,
   .habit-row-flash {
     animation: none;
+  }
+  /* Drag still works; the lift theatrics no-op. A hairline outline keeps
+     the "this row is in hand" state visible without any motion. */
+  .row-dragging {
+    animation: none;
+    transform: none;
+    box-shadow: none;
+    outline: 1px solid var(--hairline);
   }
 }

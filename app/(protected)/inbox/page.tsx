@@ -7,6 +7,8 @@ import ClarifyFlow from "@/components/clarify-flow";
 import MindSweepFlow from "@/components/mind-sweep-flow";
 import InboxCaptureForm from "@/components/inbox/capture-form";
 import { useTaskList } from "@/lib/hooks/use-task-list";
+import { useListOrder } from "@/lib/hooks/use-list-order";
+import { applyListOrder } from "@/lib/tasks/list-order";
 import { isInInbox } from "@/lib/tasks/inbox";
 import { todayLocal } from "@/lib/date";
 
@@ -29,7 +31,13 @@ export default function InboxPage() {
 
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const inboxTasks = tasks.filter((t) => isInInbox(t, todayLocal()));
+  // Per-page manual order (#142): hand-dragged rows keep their place;
+  // fresh captures (no saved position) stay on top, newest first.
+  const { positions, refresh: refreshOrder } = useListOrder("inbox");
+  const inboxTasks = applyListOrder(
+    tasks.filter((t) => isInInbox(t, todayLocal())),
+    positions,
+  );
 
   // Snapshot of ids when Clarify starts, so the flow's order and progress
   // count stay stable while individual actions reshuffle the live list.
@@ -116,7 +124,8 @@ export default function InboxPage() {
           <ul className="space-y-2">
             <ReorderableTaskList
               tasks={inboxTasks}
-              onReordered={loadAll}
+              listKey="inbox"
+              onReordered={refreshOrder}
               domains={domains}
               projects={projects}
               onToggleDone={toggleDone}

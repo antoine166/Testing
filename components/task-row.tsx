@@ -11,6 +11,7 @@ import RecurrenceFields, {
   type RecurrencePatternDraft,
 } from "@/components/recurrence-fields";
 import { useDomainProjectCascade } from "@/lib/hooks/use-domain-project-cascade";
+import type { PointerDragHandleProps } from "@/lib/hooks/use-pointer-drag";
 import WaitingForFields from "@/components/waiting-for-fields";
 import TaskExtraFields from "@/components/task-extra-fields";
 import {
@@ -56,12 +57,14 @@ export type Task = {
 };
 
 /** Drag-to-reorder wiring, passed by ReorderableTaskList. When present the
- *  row becomes draggable and shows a grab handle. */
+ *  row becomes draggable (HTML5, for desktop mice) and shows a grab handle
+ *  that takes pointer events (touch drag — see lib/hooks/use-pointer-drag). */
 export type TaskDragProps = {
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   dragging: boolean;
+  handleProps: PointerDragHandleProps;
 };
 
 // These mirror rows from GET /api/domains and /api/projects; fields beyond
@@ -701,6 +704,7 @@ export default function TaskRow({
   return (
     <li
       draggable={!!dragProps}
+      data-drag-id={dragProps ? task.id : undefined}
       onDragStart={dragProps ? () => dragProps.onDragStart() : undefined}
       onDragOver={dragProps ? (e) => dragProps.onDragOver(e) : undefined}
       onDrop={dragProps ? (e) => e.preventDefault() : undefined}
@@ -709,12 +713,18 @@ export default function TaskRow({
       className={`flex items-start justify-between gap-3 rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
         leaving ? `row-leaving row-leaving-${leaving}` : ""
       } ${entering && !leaving ? "row-entering" : ""} ${fadingOut ? "task-swipe-out" : ""} ${dragProps ? "cursor-grab active:cursor-grabbing" : ""} ${
-        dragProps?.dragging ? "opacity-40" : ""
+        dragProps?.dragging ? "row-dragging" : ""
       }`}
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
         {dragProps && (
-          <span className="mt-0.5 select-none text-zinc-300 dark:text-zinc-600" aria-hidden>
+          <span
+            {...dragProps.handleProps}
+            // Padding + negative margin: a finger-sized touch target
+            // without shifting the visual layout.
+            className="drag-handle -m-2 mt-[-0.375rem] p-2 text-zinc-300 dark:text-zinc-600"
+            aria-hidden
+          >
             ⠿
           </span>
         )}

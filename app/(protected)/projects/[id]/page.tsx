@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { usePageData } from "@/lib/hooks/use-page-data";
+import { useListOrder } from "@/lib/hooks/use-list-order";
+import { applyListOrder } from "@/lib/tasks/list-order";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import TaskRow from "@/components/task-row";
 import { type Project, type SupportItem } from "@/lib/projects/types";
@@ -30,7 +32,6 @@ export default function ProjectDetailPage() {
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
     createTask,
-    loadAll,
   } = useTaskList<Project>();
 
   const [supportItems, setSupportItems] = useState<SupportItem[]>([]);
@@ -45,13 +46,21 @@ export default function ProjectDetailPage() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [addingTask, setAddingTask] = useState(false);
 
+  // Per-page manual order (#142) — the same key as the Tasks page's
+  // project-filtered view, so both surfaces share one arrangement.
+  const listKey = `project:${id}`;
+  const { positions, refresh: refreshOrder } = useListOrder(listKey);
+
   const project = projects.find((p) => p.id === id);
   const domain = project?.domain_id ? domains.find((d) => d.id === project.domain_id) : undefined;
   const parentProject = project?.parent_project_id
     ? projects.find((p) => p.id === project.parent_project_id)
     : undefined;
   const subprojects = projects.filter((p) => p.parent_project_id === id);
-  const openTasks = tasks.filter((t) => t.project_id === id && t.status !== "done");
+  const openTasks = applyListOrder(
+    tasks.filter((t) => t.project_id === id && t.status !== "done"),
+    positions,
+  );
   const doneTasks = tasks
     .filter((t) => t.project_id === id && t.status === "done")
     .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
@@ -193,7 +202,8 @@ export default function ProjectDetailPage() {
           <ul className="space-y-2">
             <ReorderableTaskList
               tasks={openTasks}
-              onReordered={loadAll}
+              listKey={listKey}
+              onReordered={refreshOrder}
               domains={domains}
               projects={projects}
               onToggleDone={toggleDone}

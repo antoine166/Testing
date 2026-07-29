@@ -10,6 +10,7 @@ import {
 } from "@/lib/habits/streaks";
 import { lastSevenDays } from "@/lib/date";
 import type { RemovalKind } from "@/components/leave-transition";
+import type { PointerDragHandleProps } from "@/lib/hooks/use-pointer-drag";
 import { tapHaptic } from "@/lib/haptics";
 
 const RING_R = 9;
@@ -108,6 +109,17 @@ export type Habit = StreakHabit & {
 
 export type HabitDomain = { id: string; name: string; color: string };
 
+/** Drag-to-reorder wiring, passed by ReorderableHabitList (Habits page
+ *  only). Same shape as TaskRow's: HTML5 drag on the row for desktop,
+ *  pointer events on the grab handle for touch. */
+export type HabitDragProps = {
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  dragging: boolean;
+  handleProps: PointerDragHandleProps;
+};
+
 export type HabitLogRow = {
   id: string;
   habit_id: string;
@@ -189,11 +201,14 @@ export default function HabitRow({
   onUpdate,
   onDelete,
   leaving,
+  dragProps,
 }: {
   habit: Habit;
   logs: HabitLogRow[];
   today: string;
   domains?: HabitDomain[];
+  /** Present when the list supports drag-to-reorder (Habits page). */
+  dragProps?: HabitDragProps;
   /** Set on the snapshot row rendered while a cleared habit's space collapses out of the Today list (#121) — see components/leave-transition.tsx. */
   leaving?: RemovalKind;
   /** `date` defaults to today from callers, but any date lets the week's checkbox row log/unlog past days too. */
@@ -434,15 +449,32 @@ export default function HabitRow({
 
   return (
     <li
+      draggable={!!dragProps}
+      data-drag-id={dragProps ? habit.id : undefined}
+      onDragStart={dragProps ? () => dragProps.onDragStart() : undefined}
+      onDragOver={dragProps ? (e) => dragProps.onDragOver(e) : undefined}
+      onDrop={dragProps ? (e) => e.preventDefault() : undefined}
+      onDragEnd={dragProps ? () => dragProps.onDragEnd() : undefined}
       aria-hidden={leaving ? true : undefined}
       className={`flex items-center gap-3 rounded-md border px-4 py-3 ${
         leaving ? `row-leaving row-leaving-${leaving} ` : ""
       }${celebrate ? "habit-row-flash " : ""}${
+        dragProps ? "cursor-grab active:cursor-grabbing " : ""
+      }${dragProps?.dragging ? "row-dragging " : ""}${
         atRisk
           ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40"
           : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
+      {dragProps && (
+        <span
+          {...dragProps.handleProps}
+          className="drag-handle -m-2 p-2 text-zinc-300 dark:text-zinc-600"
+          aria-hidden
+        >
+          ⠿
+        </span>
+      )}
       <HabitRing
         fraction={ringFraction}
         celebrate={celebrate}
