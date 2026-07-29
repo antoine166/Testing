@@ -131,7 +131,10 @@ export default function TrashPage() {
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>
-      ) : items.length === 0 ? (
+      ) : display.length === 0 ? (
+        // display, not items: the last restored/purged row's snapshot still
+        // needs its mount to finish the leave animation before the empty
+        // state takes over (same last-row fix as the Today sections).
         <p className="text-sm text-zinc-500">Trash is empty.</p>
       ) : (
         <ul className="space-y-2">

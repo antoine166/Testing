@@ -289,7 +289,9 @@ export default function HabitRow({
     return () => clearTimeout(timeout);
   }, [tallyPopIndex]);
 
-  const tallyPopClass = "motion-safe:animate-[task-check-pop_300ms_ease-out]";
+  // The shared class carries the spring easing and no-ops under reduced
+  // motion in globals.css, so no motion-safe: variant is needed here.
+  const tallyPopClass = "task-check-pop";
 
   const committedFraction =
     habit.frequency === "times_per_week"

@@ -704,7 +704,7 @@ export default function TaskRow({
       aria-hidden={leaving ? true : undefined}
       className={`flex items-start justify-between gap-3 rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
         leaving ? `row-leaving row-leaving-${leaving}` : ""
-      } ${entering && !leaving ? "row-entering" : ""} ${fadingOut ? "task-swipe-out" : ""} ${dragProps ? "cursor-grab active:cursor-grabbing" : ""} ${
+      } ${entering && !leaving ? "row-entering" : ""} ${fadingOut ? "task-set-down" : ""} ${dragProps ? "cursor-grab active:cursor-grabbing" : ""} ${
         dragProps?.dragging ? "row-dragging" : ""
       }`}
     >
@@ -746,7 +746,7 @@ export default function TaskRow({
           {(task.status === "done" || completing) && (
             <svg
               viewBox="0 0 12 12"
-              className={`h-3 w-3 ${completing ? "animate-[task-check-pop_300ms_ease-out]" : ""}`}
+              className={`h-3 w-3 ${completing ? "task-check-pop" : ""}`}
               fill="none"
               stroke="currentColor"
               strokeWidth="2"

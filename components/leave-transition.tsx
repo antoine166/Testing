@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from "react";
 /**
  * Leave transitions for list rows (#121 + #138): when a task disappears
  * from a list (trashed, completed, un-completed, converted), the row
- * collapses smoothly — and shows *why* it left (🗑️ for trash, ↩️ for
- * un-complete) — instead of the rows below jumping up in one frame.
+ * collapses smoothly — styled per reason (trashed content crushes toward
+ * the delete corner, un-complete/restore show an ↩️ badge) — instead of
+ * the rows below jumping up in one frame.
  *
  * Mechanism: mutations register the removal reason by id (markRemovalKind)
  * just before the row leaves state; useLeaveTransition watches a list,
