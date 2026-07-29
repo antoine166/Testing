@@ -55,6 +55,26 @@ export async function GET(request: Request) {
     attachment_count: task_attachments?.[0]?.count ?? 0,
   }));
 
+  // Per-page ordering (#142): with a list_key, each task also carries its
+  // saved position in that list (null = never hand-placed there). A second
+  // query merged in code rather than a join — list_orders is keyed by
+  // item_id, not a real FK the embedded-select syntax could follow.
+  const listKey = params.get("list_key");
+  if (listKey) {
+    const { data: orders, error: ordersError } = await supabase
+      .from("list_orders")
+      .select("item_id, position")
+      .eq("list_key", listKey)
+      .eq("item_type", "task");
+    if (ordersError) {
+      return NextResponse.json({ error: ordersError.message }, { status: 500 });
+    }
+    const positions = new Map(orders.map((o) => [o.item_id, o.position]));
+    return NextResponse.json(
+      withCounts.map((task) => ({ ...task, position: positions.get(task.id) ?? null })),
+    );
+  }
+
   return NextResponse.json(withCounts);
 }
 

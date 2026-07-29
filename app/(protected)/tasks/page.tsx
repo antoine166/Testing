@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import TaskRow from "@/components/task-row";
 import { usePageData } from "@/lib/hooks/use-page-data";
 import { useTaskList } from "@/lib/hooks/use-task-list";
+import { useListOrder } from "@/lib/hooks/use-list-order";
+import { applyListOrder } from "@/lib/tasks/list-order";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import { isInInbox } from "@/lib/tasks/inbox";
 import { todayLocal } from "@/lib/date";
@@ -166,6 +168,13 @@ export default function TasksPage() {
     );
   }
 
+  // Per-page manual order (#142) — only the project-filtered view is
+  // hand-orderable here, under the same key as the project detail page so
+  // both surfaces share one arrangement.
+  const { positions, refresh: refreshOrder } = useListOrder(
+    projectFilter ? `project:${projectFilter}` : undefined,
+  );
+
   const inboxTasks = tasks.filter((t) => isInInbox(t, todayLocal()));
   const processedTasks = tasks.filter((t) => t.domain_id && t.status !== "done");
 
@@ -176,7 +185,10 @@ export default function TasksPage() {
     : domainFilter
       ? tasks.filter((t) => t.domain_id === domainFilter && t.status !== "done")
       : projectFilter
-        ? tasks.filter((t) => t.project_id === projectFilter && t.status !== "done")
+        ? applyListOrder(
+            tasks.filter((t) => t.project_id === projectFilter && t.status !== "done"),
+            positions,
+          )
         : null;
   const filterLabel = searchQuery
     ? `"${searchQuery}"`
@@ -243,7 +255,8 @@ export default function TasksPage() {
                 // standard ordering.
                 <ReorderableTaskList
                   tasks={filteredTasks}
-                  onReordered={loadAll}
+                  listKey={`project:${projectFilter}`}
+                  onReordered={refreshOrder}
                   domains={domains}
                   projects={projects}
                   onToggleDone={toggleDone}

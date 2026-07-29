@@ -3,6 +3,8 @@
 import SmartListHeader from "@/components/smart-list-header";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import { useTaskList } from "@/lib/hooks/use-task-list";
+import { useListOrder } from "@/lib/hooks/use-list-order";
+import { applyListOrder } from "@/lib/tasks/list-order";
 
 export default function AnytimePage() {
   const {
@@ -17,12 +19,14 @@ export default function AnytimePage() {
     handleConvertToProject,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
-    loadAll,
   } = useTaskList({ done: false });
 
+  // Per-page manual order (#142); unordered tasks stay on top, newest first.
+  const { positions, refresh: refreshOrder } = useListOrder("anytime");
   // Filed under a domain, no specific date, not deferred to Someday — actionable whenever.
-  const anytimeTasks = tasks.filter(
-    (t) => t.domain_id && !t.scheduled_date && !t.someday && t.status !== "done",
+  const anytimeTasks = applyListOrder(
+    tasks.filter((t) => t.domain_id && !t.scheduled_date && !t.someday && t.status !== "done"),
+    positions,
   );
 
   return (
@@ -43,7 +47,8 @@ export default function AnytimePage() {
         <ul className="space-y-2">
           <ReorderableTaskList
             tasks={anytimeTasks}
-            onReordered={loadAll}
+            listKey="anytime"
+            onReordered={refreshOrder}
             domains={domains}
             projects={projects}
             onToggleDone={toggleDone}
