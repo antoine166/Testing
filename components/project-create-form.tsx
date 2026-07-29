@@ -2,40 +2,53 @@
 
 import { useState, type FormEvent } from "react";
 import { type TaskDomain } from "@/components/task-row";
+import { PRIORITIES, type ProjectPriority } from "@/lib/projects/types";
 import {
-  PRIORITIES,
-  STATUSES,
-  type Project,
-  type ProjectPriority,
-  type ProjectStatus,
-} from "@/lib/projects/types";
+  EMPTY_PROJECT_EXTRAS,
+  ProjectPlanningFields,
+  ProjectParentStatusFields,
+  createFirstTask,
+  projectExtrasPayload,
+  type ProjectExtrasDraft,
+} from "@/components/project-capture-extras";
+
+// Only what the form actually reads — structural, so both the Projects
+// page (full Project rows) and lighter project shapes can feed it.
+type CreateFormProject = {
+  id: string;
+  name: string;
+  domain_id: string | null;
+  status?: string;
+  parent_project_id?: string | null;
+};
 
 type ProjectCreateFormProps = {
   domains: TaskDomain[];
-  projects: Project[];
-  parentOptions: (excludeId?: string) => Project[];
+  projects: CreateFormProject[];
   domainFilter: string | null;
   setError: (message: string) => void;
   loadAll: () => Promise<void>;
+  /** Called after a successful create (e.g. collapse an inline form). */
+  onCreated?: () => void;
 };
 
 export default function ProjectCreateForm({
   domains,
   projects,
-  parentOptions,
   domainFilter,
   setError,
   loadAll,
+  onCreated,
 }: ProjectCreateFormProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [purpose, setPurpose] = useState("");
-  const [outcomeVision, setOutcomeVision] = useState("");
-  const [brainstorm, setBrainstorm] = useState("");
-  const [nextAction, setNextAction] = useState("");
   const [domainId, setDomainId] = useState(domainFilter ?? "");
-  const [parentProjectId, setParentProjectId] = useState("");
-  const [status, setStatus] = useState<ProjectStatus>("active");
+  // Planning + parent + status live in the shared extras draft — the same
+  // component the Today/Inbox/Domains capture sliders render, so all four
+  // project-creation surfaces stay identical.
+  const [extras, setExtras] = useState<ProjectExtrasDraft>(EMPTY_PROJECT_EXTRAS);
+  const patchExtras = (patch: Partial<ProjectExtrasDraft>) =>
+    setExtras((prev) => ({ ...prev, ...patch }));
   const [priority, setPriority] = useState<ProjectPriority>("none");
   const [dueDate, setDueDate] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
@@ -45,7 +58,7 @@ export default function ProjectCreateForm({
     e.preventDefault();
     if (!name.trim()) return;
     // A top-level project needs a domain (subprojects inherit their parent's).
-    if (!domainId && !parentProjectId) {
+    if (!domainId && !extras.parent_project_id) {
       setError("Pick a domain for the project — it needs one to show in your sidebar.");
       return;
     }
@@ -56,16 +69,12 @@ export default function ProjectCreateForm({
       body: JSON.stringify({
         name,
         description: description || undefined,
-        purpose: purpose || undefined,
-        outcome_vision: outcomeVision || undefined,
-        brainstorm: brainstorm || undefined,
         domain_id: domainId || null,
-        parent_project_id: parentProjectId || null,
-        status,
         priority,
         due_date: dueDate || undefined,
         scheduled_date: scheduledDate || undefined,
         link: link || undefined,
+        ...projectExtrasPayload(extras),
       }),
     });
 
@@ -76,41 +85,20 @@ export default function ProjectCreateForm({
     }
 
     const project = await res.json();
-
-    if (nextAction.trim()) {
-      await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: nextAction,
-          project_id: project.id,
-          domain_id: domainId || null,
-        }),
-      });
-    }
+    await createFirstTask(extras.next_action, project.id, domainId || null);
 
     setName("");
     setDescription("");
-    setPurpose("");
-    setOutcomeVision("");
-    setBrainstorm("");
-    setNextAction("");
-    setDomainId("");
-    setParentProjectId("");
-    setStatus("active");
+    // Back to the initial state — which, on a domain-scoped form (Domains
+    // page), is that domain preselected rather than empty.
+    setDomainId(domainFilter ?? "");
+    setExtras(EMPTY_PROJECT_EXTRAS);
     setPriority("none");
     setDueDate("");
     setScheduledDate("");
     setLink("");
     await loadAll();
-  }
-
-  function selectParentProject(id: string) {
-    setParentProjectId(id);
-    if (id) {
-      const parent = projects.find((p) => p.id === id);
-      setDomainId(parent?.domain_id ?? "");
-    }
+    onCreated?.();
   }
 
   return (
@@ -149,77 +137,7 @@ export default function ProjectCreateForm({
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
       </div>
-      <details className="group">
-        <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          <span className="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-          Define this project (GTD Natural Planning)
-        </summary>
-        <div className="mt-2 space-y-3 pl-4">
-          <div>
-            <label
-              htmlFor="purpose"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Purpose — why does this matter?
-            </label>
-            <textarea
-              id="purpose"
-              value={purpose}
-              onChange={(e) => setPurpose(e.target.value)}
-              rows={2}
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="outcome_vision"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Outcome vision — what does &ldquo;done&rdquo; look like?
-            </label>
-            <textarea
-              id="outcome_vision"
-              value={outcomeVision}
-              onChange={(e) => setOutcomeVision(e.target.value)}
-              rows={2}
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="brainstorm"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Brainstorm — ideas, approaches, things to consider
-            </label>
-            <textarea
-              id="brainstorm"
-              value={brainstorm}
-              onChange={(e) => setBrainstorm(e.target.value)}
-              rows={3}
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="next_action"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Next action — the very next physical step
-            </label>
-            <input
-              id="next_action"
-              value={nextAction}
-              onChange={(e) => setNextAction(e.target.value)}
-              placeholder="e.g. Draft the outline"
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <p className="mt-1 text-xs text-zinc-500">
-              If filled in, creates this as the first task in the project.
-            </p>
-          </div>
-        </div>
-      </details>
+      <ProjectPlanningFields idPrefix="proj-create" draft={extras} onChange={patchExtras} />
       <div>
         <label
           htmlFor="link"
@@ -236,28 +154,9 @@ export default function ProjectCreateForm({
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
         />
       </div>
+      {/* Domain before parent (Antoine's call): the domain is the primary
+          filing decision; a parent project is the exception. */}
       <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label
-            htmlFor="parent_project"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Parent project
-          </label>
-          <select
-            id="parent_project"
-            value={parentProjectId}
-            onChange={(e) => selectParentProject(e.target.value)}
-            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="">None (top-level project)</option>
-            {parentOptions().map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
         <div>
           <label
             htmlFor="domain"
@@ -268,41 +167,30 @@ export default function ProjectCreateForm({
           <select
             id="domain"
             value={domainId}
-            disabled={!!parentProjectId}
+            disabled={!!extras.parent_project_id}
             onChange={(e) => setDomainId(e.target.value)}
             className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
           >
-            <option value="">{parentProjectId ? "No domain" : "Choose a domain…"}</option>
+            <option value="">
+              {extras.parent_project_id ? "No domain" : "Choose a domain…"}
+            </option>
             {domains.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
               </option>
             ))}
           </select>
-          {parentProjectId && (
+          {extras.parent_project_id && (
             <p className="mt-1 text-xs text-zinc-500">Inherits the parent&apos;s domain.</p>
           )}
         </div>
-        <div>
-          <label
-            htmlFor="status"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-          >
-            Status
-          </label>
-          <select
-            id="status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-            className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
+        <ProjectParentStatusFields
+          idPrefix="proj-create"
+          draft={extras}
+          onChange={patchExtras}
+          projects={projects}
+          onParentPicked={(pickedDomainId) => setDomainId(pickedDomainId ?? "")}
+        />
         <div>
           <label
             htmlFor="priority"
@@ -334,10 +222,7 @@ export default function ProjectCreateForm({
             id="due_date"
             type="date"
             value={dueDate}
-            onChange={(e) => {
-              const value = e.target.value;
-              setDueDate(value);
-            }}
+            onChange={(e) => setDueDate(e.target.value)}
             className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
@@ -352,10 +237,7 @@ export default function ProjectCreateForm({
             id="scheduled_date"
             type="date"
             value={scheduledDate}
-            onChange={(e) => {
-              const value = e.target.value;
-              setScheduledDate(value);
-            }}
+            onChange={(e) => setScheduledDate(e.target.value)}
             className="mt-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>

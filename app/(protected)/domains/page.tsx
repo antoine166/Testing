@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import ColorPicker from "@/components/color-picker";
+import TodayCaptureForm from "@/components/today/capture-form";
+import { todayLocal } from "@/lib/date";
 import { type TaskDomain } from "@/components/task-row";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
@@ -22,7 +24,7 @@ export default function DomainsPage() {
     handleUpdate: handleTaskUpdate,
     toggleDone: toggleTaskDone,
     handleDelete: handleTaskDelete,
-    handleConvertToProject: handleTaskConvertToProject,
+    handleConvertToProjectAndPlan: handleTaskConvertToProject,
     handleConvertToRecurring: handleTaskConvertToRecurring,
     handleConvertToKnowledgeItem: handleTaskConvertToKnowledgeItem,
     loadAll,
@@ -39,14 +41,9 @@ export default function DomainsPage() {
   const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
   const [addingTaskId, setAddingTaskId] = useState<string | null>(null);
 
-  // Inline project creation, scoped to one domain — the same create a project
-  // can be done from Today, without leaving the Domains page.
+  // Which domain has its capture box open — the same Task|Project capture
+  // as Today/Inbox, preset to that domain (#161).
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
-  const [pName, setPName] = useState("");
-  const [pDescription, setPDescription] = useState("");
-  const [pPriority, setPPriority] = useState("none");
-  const [pDue, setPDue] = useState("");
-  const [pScheduled, setPScheduled] = useState("");
 
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -76,41 +73,6 @@ export default function DomainsPage() {
     setEditColor(domain.color);
   }
 
-  function startProject(domainId: string) {
-    setCreatingFor(domainId);
-    setPName("");
-    setPDescription("");
-    setPPriority("none");
-    setPDue("");
-    setPScheduled("");
-  }
-
-  async function handleCreateProject(e: FormEvent<HTMLFormElement>, domainId: string) {
-    e.preventDefault();
-    if (!pName.trim()) return;
-
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: pName.trim(),
-        description: pDescription.trim() || undefined,
-        domain_id: domainId,
-        priority: pPriority,
-        due_date: pDue || undefined,
-        scheduled_date: pScheduled || undefined,
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Failed to create project");
-      return;
-    }
-
-    setCreatingFor(null);
-    await loadAll();
-  }
 
   async function handleUpdate(id: string) {
     if (!editName.trim()) return;
@@ -296,9 +258,9 @@ export default function DomainsPage() {
                       </svg>
                     </Link>
                     <button
-                      onClick={() => (creatingFor === domain.id ? setCreatingFor(null) : startProject(domain.id))}
-                      aria-label="Add project"
-                      title="Add project"
+                      onClick={() => setCreatingFor(creatingFor === domain.id ? null : domain.id)}
+                      aria-label="Add task or project here"
+                      title="Add task or project here"
                       className={`flex h-7 w-7 items-center justify-center rounded-md hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-300 ${
                         creatingFor === domain.id
                           ? "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
@@ -362,78 +324,29 @@ export default function DomainsPage() {
               </div>
 
               {creatingFor === domain.id && editingId !== domain.id && (
-                <form
-                  onSubmit={(e) => handleCreateProject(e, domain.id)}
-                  className="mt-3 ml-7 space-y-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
-                >
-                  <input
-                    value={pName}
-                    onChange={(e) => setPName(e.target.value)}
-                    placeholder="New project name"
-                    autoFocus
-                    required
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                <div className="mt-3 ml-7 edit-swap-in">
+                  {/* The same Task|Project capture box as Today/Inbox (#161,
+                      Antoine's option A): task capture first, and the
+                      Project side of the slider carries the full planning
+                      inputs — all preset to this domain. */}
+                  <TodayCaptureForm
+                    today={todayLocal()}
+                    domains={domains}
+                    projects={projects}
+                    setError={setError}
+                    refreshTasks={loadAll}
+                    initialDomainId={domain.id}
+                    defaultScheduledDate=""
+                    taskPlaceholder={`Add a task in ${domain.name}`}
                   />
-                  <textarea
-                    value={pDescription}
-                    onChange={(e) => setPDescription(e.target.value)}
-                    placeholder="Description (optional)"
-                    rows={2}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="text-xs text-zinc-500">
-                      Priority
-                      <select
-                        value={pPriority}
-                        onChange={(e) => setPPriority(e.target.value)}
-                        className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                      >
-                        {["none", "low", "medium", "high"].map((p) => (
-                          <option key={p} value={p}>
-                            {p}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs text-zinc-500">
-                      Due
-                      <input
-                        type="date"
-                        value={pDue}
-                        onChange={(e) => setPDue(e.target.value)}
-                        title="Deadline"
-                        className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                      />
-                    </label>
-                    <label className="text-xs text-zinc-500">
-                      Scheduled
-                      <input
-                        type="date"
-                        value={pScheduled}
-                        onChange={(e) => setPScheduled(e.target.value)}
-                        title="Day you plan to work on it"
-                        className="ml-1 rounded-md border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                      />
-                    </label>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={!pName.trim()}
-                      className="rounded-md bg-zinc-950 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950"
-                    >
-                      Create project
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCreatingFor(null)}
-                      className="text-sm text-zinc-500 underline"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
+                  <button
+                    type="button"
+                    onClick={() => setCreatingFor(null)}
+                    className="-mt-2 mb-2 text-sm text-zinc-500 underline"
+                  >
+                    Close
+                  </button>
+                </div>
               )}
 
               {editingId !== domain.id &&

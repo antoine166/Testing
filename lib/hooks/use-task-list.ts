@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Task, TaskDomain, TaskProject } from "@/components/task-row";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 import { todayLocal } from "@/lib/date";
@@ -49,6 +50,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
   const { confirm } = useConfirmDialog();
+  const router = useRouter();
 
   // Filter server-side: every smart list except the Logbook only ever shows
   // not-done tasks, and the Logbook only done ones — no reason to download
@@ -313,6 +315,21 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     return project;
   }
 
+  // Converting from a task list is a decision to take on real, multi-step
+  // work — so after the one-tap convert, land on the new project's page
+  // with the planning form open (GTD: clarify → organize in one motion).
+  // The Clarify flow keeps the plain handleConvertToProject: it has its own
+  // next-action step and shouldn't be yanked out of its queue mid-session.
+  async function handleConvertToProjectAndPlan(
+    id: string,
+    skipConfirm = false,
+    domainId?: string,
+  ) {
+    const project = await handleConvertToProject(id, skipConfirm, domainId);
+    if (project) router.push(`/projects/${project.id}?edit=1`);
+    return project;
+  }
+
   async function handleConvertToRecurring(
     id: string,
     pattern: RecurrencePatternDraft,
@@ -398,6 +415,7 @@ export function useTaskList<P extends TaskProject = TaskProject>(options?: {
     handleDelete,
     createTask,
     handleConvertToProject,
+    handleConvertToProjectAndPlan,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
     loadAll,

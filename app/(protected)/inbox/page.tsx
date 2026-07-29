@@ -24,6 +24,7 @@ export default function InboxPage() {
     handleDelete,
     createTask,
     handleConvertToProject,
+    handleConvertToProjectAndPlan,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
     loadAll,
@@ -131,7 +132,7 @@ export default function InboxPage() {
               onToggleDone={toggleDone}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
-              onConvertToProject={handleConvertToProject}
+              onConvertToProject={handleConvertToProjectAndPlan}
               onConvertToRecurring={handleConvertToRecurring}
               onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
             />

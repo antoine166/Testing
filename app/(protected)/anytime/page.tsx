@@ -16,7 +16,7 @@ export default function AnytimePage() {
     handleUpdate,
     toggleDone,
     handleDelete,
-    handleConvertToProject,
+    handleConvertToProjectAndPlan,
     handleConvertToRecurring,
     handleConvertToKnowledgeItem,
   } = useTaskList({ done: false });
@@ -54,7 +54,7 @@ export default function AnytimePage() {
             onToggleDone={toggleDone}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
-            onConvertToProject={handleConvertToProject}
+            onConvertToProject={handleConvertToProjectAndPlan}
             onConvertToRecurring={handleConvertToRecurring}
             onConvertToKnowledgeItem={handleConvertToKnowledgeItem}
           />

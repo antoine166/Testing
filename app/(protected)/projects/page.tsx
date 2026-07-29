@@ -343,7 +343,6 @@ export default function ProjectsPage() {
       <ProjectCreateForm
         domains={domains}
         projects={projects}
-        parentOptions={parentOptions}
         domainFilter={domainFilter}
         setError={setError}
         loadAll={loadAll}
