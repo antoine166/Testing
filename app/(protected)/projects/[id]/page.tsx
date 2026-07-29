@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTaskList } from "@/lib/hooks/use-task-list";
 import { usePageData } from "@/lib/hooks/use-page-data";
 import { useListOrder } from "@/lib/hooks/use-list-order";
@@ -29,6 +29,10 @@ import {
  */
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
+  // ?edit=1 (from other surfaces' Edit buttons) opens the inline form on
+  // arrival — one-shot, render-adjust like the repo's other URL seeds.
+  const wantsEdit = useSearchParams().get("edit") === "1";
+  const [autoEditDone, setAutoEditDone] = useState(false);
   const router = useRouter();
   const { confirm, prompt } = useConfirmDialog();
 
@@ -101,6 +105,11 @@ export default function ProjectDetailPage() {
 
   const parentOptions = (excludeId?: string) =>
     projects.filter((p) => !p.parent_project_id && p.id !== excludeId);
+
+  if (wantsEdit && !autoEditDone && project) {
+    setAutoEditDone(true);
+    startEdit(project);
+  }
 
   function selectEditParentProject(parentId: string) {
     setEditParentProjectId(parentId);

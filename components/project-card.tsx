@@ -219,6 +219,7 @@ export default function ProjectCard(props: ProjectCardProps) {
                 </p>
               )}
             </div>
+            {expanded && (
             <div className="flex shrink-0 items-center gap-1">
               <Link
                 href={`/tasks?project=${project.id}`}
@@ -326,6 +327,7 @@ export default function ProjectCard(props: ProjectCardProps) {
                 </svg>
               </button>
             </div>
+            )}
           </div>
           {expanded && (
           <div className="edit-swap-in">
