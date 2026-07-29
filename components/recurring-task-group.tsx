@@ -74,9 +74,13 @@ export default function RecurringTaskGroup({
     return (
       <>
         {tasks.map((task) => (
-          <TaskRow key={task.id} task={task} {...rowProps} />
+          <TaskRow key={task.id} task={task} {...rowProps} dropTargetId={task.id} />
         ))}
-        <li>
+        {/* data-flip-key: the stub glides with its group when a drag
+            displaces them; data-drop-id: hovering it counts as hovering
+            the group, so drags can pass it (#154 round 2). Keyed off the
+            first occurrence — stable across expand/collapse. */}
+        <li data-flip-key={`group-more-${first.id}`} data-drop-id={first.id}>
           <button
             type="button"
             onClick={() => setExpanded(false)}
@@ -91,8 +95,8 @@ export default function RecurringTaskGroup({
 
   return (
     <>
-      <TaskRow key={first.id} task={first} {...rowProps} />
-      <li>
+      <TaskRow key={first.id} task={first} {...rowProps} dropTargetId={first.id} />
+      <li data-flip-key={`group-more-${first.id}`} data-drop-id={first.id}>
         <button
           type="button"
           onClick={() => setExpanded(true)}
