@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { todayLocal } from "@/lib/date";
-import { ok, fail, type AdminClient } from "@/lib/mcp/shared";
+import { ok, fail, type AdminClient, todayHome } from "@/lib/mcp/shared";
 
 export function registerCheckinTools(server: McpServer, admin: AdminClient, userId: string) {
   // --- Daily check-in ---
@@ -19,7 +18,7 @@ export function registerCheckinTools(server: McpServer, admin: AdminClient, user
         .from("daily_checkins")
         .select("*")
         .eq("user_id", userId)
-        .eq("date", date ?? todayLocal())
+        .eq("date", date ?? todayHome())
         .maybeSingle();
       if (error) return fail(error.message);
       return ok(data);
@@ -43,7 +42,7 @@ export function registerCheckinTools(server: McpServer, admin: AdminClient, user
       const { data, error } = await admin
         .from("daily_checkins")
         .upsert(
-          { user_id: userId, date: date ?? todayLocal(), energy_level, focus_level, notes },
+          { user_id: userId, date: date ?? todayHome(), energy_level, focus_level, notes },
           { onConflict: "user_id,date" },
         )
         .select()

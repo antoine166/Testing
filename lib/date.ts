@@ -43,6 +43,17 @@ export function monthLabel(dateStr: string): string {
   });
 }
 
+/**
+ * "Today" in a specific IANA timezone. For server-side code (the MCP
+ * connector) where the process clock is UTC but Antoine's calendar day is
+ * what matters — todayLocal() below is only correct where the process
+ * runs in the user's timezone (i.e. the browser).
+ */
+export function todayInZone(timeZone: string): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Date().toLocaleDateString("en-CA", { timeZone });
+}
+
 export function todayLocal(): string {
   const now = new Date();
   const offsetMs = now.getTimezoneOffset() * 60000;

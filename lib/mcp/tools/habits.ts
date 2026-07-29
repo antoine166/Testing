@@ -1,8 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { todayLocal } from "@/lib/date";
 import { computeStreak, isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
-import { ok, fail, HABIT_FREQUENCIES, type AdminClient } from "@/lib/mcp/shared";
+import { ok, fail, HABIT_FREQUENCIES, type AdminClient, todayHome } from "@/lib/mcp/shared";
 
 export function registerHabitTools(server: McpServer, admin: AdminClient, userId: string) {
   // --- Habits ---
@@ -16,7 +15,7 @@ export function registerHabitTools(server: McpServer, admin: AdminClient, userId
       annotations: { readOnlyHint: true },
     },
     async ({ date }) => {
-      const today = date ?? todayLocal();
+      const today = date ?? todayHome();
       const { data: habits, error } = await admin
         .from("habits")
         .select("*")
@@ -213,7 +212,7 @@ export function registerHabitTools(server: McpServer, admin: AdminClient, userId
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
     async ({ habit_id, date }) => {
-      const loggedDate = date ?? todayLocal();
+      const loggedDate = date ?? todayHome();
       // The daily cap (7/day) is enforced by a DB trigger
       // (20260715060000_habit_log_daily_cap.sql), whose message is already
       // fit to surface as-is.
@@ -241,7 +240,7 @@ export function registerHabitTools(server: McpServer, admin: AdminClient, userId
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
     async ({ habit_id, date }) => {
-      const loggedDate = date ?? todayLocal();
+      const loggedDate = date ?? todayHome();
       const { data: mostRecent, error: findError } = await admin
         .from("habit_logs")
         .select("id")
@@ -275,7 +274,7 @@ export function registerHabitTools(server: McpServer, admin: AdminClient, userId
       annotations: { readOnlyHint: true },
     },
     async ({ habit_id, from, to }) => {
-      const toDate = to ?? todayLocal();
+      const toDate = to ?? todayHome();
       const start = from ?? new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       let query = admin
         .from("habit_logs")

@@ -1,10 +1,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { todayLocal } from "@/lib/date";
 import { syncTaskCalendarEvent } from "@/lib/google-calendar/sync";
 import { seedCompletionTemplate, topUpTemplate, type StoredTemplate } from "@/lib/recurring-tasks/topup";
 import { COMPLETION_OFFSET_UNITS, ENDS_TYPES, MONTH_CLAMPS, RECURRENCE_TYPES, parseEnds, parseRecurrencePattern } from "@/lib/recurring-tasks/validate";
-import { ok, fail, TASK_ENERGY_LEVELS, TASK_PRIORITIES, type AdminClient } from "@/lib/mcp/shared";
+import { ok, fail, TASK_ENERGY_LEVELS, TASK_PRIORITIES, type AdminClient, todayHome } from "@/lib/mcp/shared";
 
 export function registerRecurringTaskTools(server: McpServer, admin: AdminClient, userId: string) {
   server.registerTool(
@@ -328,7 +327,7 @@ export function registerRecurringTaskTools(server: McpServer, admin: AdminClient
           .eq("recurring_template_id", id)
           .is("deleted_at", null)
           .neq("status", "done")
-          .gte("scheduled_date", todayLocal());
+          .gte("scheduled_date", todayHome());
         if (detachError) {
           return fail(`Pattern updated, but detaching old occurrences failed: ${detachError.message}`);
         }
