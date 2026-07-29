@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { todayLocal } from "@/lib/date";
+import { prefersReducedMotion } from "@/lib/motion";
 import { enqueueCapture } from "@/lib/offline-queue";
 import { projectConversionToast, useToast } from "@/components/toast";
 import { PRIORITIES, type TaskPriority } from "@/lib/tasks/constants";
@@ -34,9 +35,19 @@ type Domain = {
 };
 
 
+/** How long the modal's out-animation (globals.css .modal-closing) plays
+ *  before the component actually unmounts. */
+const MODAL_CLOSE_MS = 180;
+
 export default function QuickCapture() {
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
+  // #141: exit animation. Closing sets this for MODAL_CLOSE_MS so the
+  // backdrop/panel can animate out, then really unmounts. Every close
+  // path (Escape, backdrop, Cancel, successful capture) goes through
+  // requestClose so none of them snap shut.
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
   const [mode, setMode] = useState<"task" | "project">("task");
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
@@ -102,6 +113,26 @@ export default function QuickCapture() {
     if (!open) recognitionRef.current?.stop();
   }, [open]);
 
+  // Play the out-animation, then unmount (and run any afterClose work,
+  // e.g. resetting the form — deferred so cleared fields aren't visible
+  // during the fade). Reduced motion closes instantly instead of idling.
+  const requestClose = useCallback((afterClose?: () => void) => {
+    if (closingRef.current) return;
+    if (prefersReducedMotion()) {
+      setOpen(false);
+      afterClose?.();
+      return;
+    }
+    closingRef.current = true;
+    setClosing(true);
+    setTimeout(() => {
+      closingRef.current = false;
+      setClosing(false);
+      setOpen(false);
+      afterClose?.();
+    }, MODAL_CLOSE_MS);
+  }, []);
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
@@ -121,13 +152,13 @@ export default function QuickCapture() {
         e.preventDefault();
         setOpen(true);
       } else if (open && e.key === "Escape") {
-        setOpen(false);
+        requestClose();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  }, [open, requestClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -165,7 +196,9 @@ export default function QuickCapture() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!title.trim() || submitting) return;
+    // closingRef: the exit animation blocks clicks via CSS, but Enter in a
+    // still-focused field could otherwise re-submit during the 180ms exit.
+    if (!title.trim() || submitting || closingRef.current) return;
 
     setSubmitting(true);
     setError(null);
@@ -218,8 +251,9 @@ export default function QuickCapture() {
       resetForm();
       setQueuedNotice(true);
       setTimeout(() => {
-        setQueuedNotice(false);
-        setOpen(false);
+        // Clear the notice only once the modal is gone, so it doesn't
+        // blink out mid-exit-animation.
+        requestClose(() => setQueuedNotice(false));
       }, 1400);
       return;
     }
@@ -254,8 +288,9 @@ export default function QuickCapture() {
     }
 
     setSubmitting(false);
-    resetForm();
-    setOpen(false);
+    // Reset after the exit animation, so the fields don't visibly blank
+    // out while the panel is still fading.
+    requestClose(resetForm);
   }
 
   return (
@@ -264,18 +299,18 @@ export default function QuickCapture() {
         onClick={() => setOpen(true)}
         aria-label="Quick capture"
         title="Quick capture"
-        className="fixed right-6 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-2xl text-white shadow-lg hover:bg-blue-600"
+        className="fixed right-6 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-2xl text-white shadow-lg hover:bg-blue-600 motion-safe:transition-transform motion-safe:active:scale-90"
       >
         +
       </button>
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8 sm:pt-24"
-          onClick={() => setOpen(false)}
+          className={`modal-overlay ${closing ? "modal-closing" : ""} fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8 sm:pt-24`}
+          onClick={() => requestClose()}
         >
           <div
-            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+            className="modal-panel max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -529,7 +564,7 @@ export default function QuickCapture() {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={() => requestClose()}
                   className="text-sm font-medium text-zinc-500 hover:text-zinc-700"
                 >
                   Cancel

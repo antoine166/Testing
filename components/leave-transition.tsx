@@ -28,6 +28,26 @@ export function markRemovalKind(id: string, kind: RemovalKind) {
 
 export const LEAVE_MS = 420;
 
+/**
+ * Ref callback for the leaving snapshot row (#141 item 9): measure the
+ * row's real height on mount, commit it as the transition's start value
+ * (the forced reflow), then collapse to 0 — replacing the old
+ * max-height:200px keyframe guess so tall rows close smoothly instead of
+ * snapping through the guessed height. The 120ms delay before the space
+ * closes (badge beat) and the 340ms close live in .row-leaving's CSS
+ * transition. Synchronous on purpose: no rAF, so total timing still fits
+ * inside the LEAVE_MS + 40 unmount window.
+ */
+export function collapseLeavingRow(el: HTMLLIElement | null) {
+  if (!el) return;
+  el.style.maxHeight = `${el.scrollHeight}px`;
+  // Force the start value into the computed style before switching to the
+  // target, so the change transitions instead of jumping straight to 0.
+  void el.offsetHeight;
+  el.classList.add("row-collapsing");
+  el.style.maxHeight = "0px";
+}
+
 // Enter animation (#138 feedback round): rows created by a local add grow
 // in instead of blinking in. Same registry idea as removals — only ids
 // registered here animate, so refetches and realtime inserts stay instant.

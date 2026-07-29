@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { prefersReducedMotion } from "@/lib/motion";
 
 /**
  * In-app replacement for window.confirm()/prompt() (#118). In the
@@ -58,30 +59,50 @@ export function useConfirmDialog(): ConfirmDialogContextValue {
   return ctx;
 }
 
+/** How long the dialog's out-animation plays before unmount (#141). */
+const DIALOG_CLOSE_MS = 180;
+
 export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
-  const [dialog, setDialog] = useState<DialogState | null>(null);
+  // `id` keys the shell so a re-entrant dialog (opened from a resolution
+  // callback) remounts fresh — focus and enter animation both replay.
+  const [dialog, setDialog] = useState<(DialogState & { id: number }) | null>(null);
+  const [closing, setClosing] = useState(false);
   const [promptValue, setPromptValue] = useState("");
+  const nextId = useRef(0);
 
   const confirm = useCallback((options: ConfirmOptions) => {
     return new Promise<boolean>((resolve) => {
-      setDialog({ kind: "confirm", resolve, ...options });
+      setClosing(false);
+      setDialog({ kind: "confirm", resolve, id: nextId.current++, ...options });
     });
   }, []);
 
   const prompt = useCallback((options: PromptOptions) => {
     return new Promise<string | null>((resolve) => {
       setPromptValue(options.defaultValue ?? "");
-      setDialog({ kind: "prompt", resolve, ...options });
+      setClosing(false);
+      setDialog({ kind: "prompt", resolve, id: nextId.current++, ...options });
     });
   }, []);
 
   function close(result: boolean | string | null) {
-    if (!dialog) return;
-    // Resolve after clearing so a re-entrant confirm from the resolution
-    // callback doesn't race the old dialog's teardown.
-    setDialog(null);
-    if (dialog.kind === "confirm") dialog.resolve(result === true);
-    else dialog.resolve(typeof result === "string" ? result : null);
+    if (!dialog || closing) return;
+    const d = dialog;
+    // Resolve immediately — the caller's action keeps its exact timing;
+    // only the visual teardown is delayed for the exit animation. The
+    // identity check below keeps a re-entrant dialog opened from the
+    // resolution callback from being clobbered by this one's teardown.
+    if (d.kind === "confirm") d.resolve(result === true);
+    else d.resolve(typeof result === "string" ? result : null);
+    if (prefersReducedMotion()) {
+      setDialog((prev) => (prev === d ? null : prev));
+      return;
+    }
+    setClosing(true);
+    setTimeout(() => {
+      setClosing(false);
+      setDialog((prev) => (prev === d ? null : prev));
+    }, DIALOG_CLOSE_MS);
   }
 
   return (
@@ -89,7 +110,9 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
       {children}
       {dialog && (
         <DialogShell
+          key={dialog.id}
           dialog={dialog}
+          closing={closing}
           promptValue={promptValue}
           setPromptValue={setPromptValue}
           onClose={close}
@@ -101,11 +124,14 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
 
 function DialogShell({
   dialog,
+  closing,
   promptValue,
   setPromptValue,
   onClose,
 }: {
   dialog: DialogState;
+  /** Exit animation window (#141): the dialog has resolved and is animating out. */
+  closing: boolean;
   promptValue: string;
   setPromptValue: (v: string) => void;
   onClose: (result: boolean | string | null) => void;
@@ -140,7 +166,7 @@ function DialogShell({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      className={`modal-overlay ${closing ? "modal-closing" : ""} fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4`}
       onClick={() => onClose(null)}
       role="presentation"
     >
@@ -148,7 +174,7 @@ function DialogShell({
         role={dialog.kind === "confirm" ? "alertdialog" : "dialog"}
         aria-modal="true"
         aria-label={dialog.message}
-        className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+        className="modal-panel w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-sm whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">

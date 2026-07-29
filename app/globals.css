@@ -203,30 +203,32 @@ body {
   animation: row-lift 150ms ease;
 }
 
-/* Calmer days / accessibility: keep the state change, drop the motion. */
-/* Leave transitions (#121 + #138): a row leaving its list collapses
-   instead of the rows below jumping up in one frame. max-height keyframe
-   (from a value taller than any collapsed row) rather than a measured
-   height — close enough visually, and needs no layout reads. The 60ms
-   delay lets the reason badge land before the space starts closing. */
-@keyframes row-collapse {
-  from {
-    max-height: 200px;
-  }
-  to {
-    max-height: 0;
-    opacity: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    border-width: 0;
-  }
-}
-
+/* Leave transitions (#121 + #138, measured in #141): a row leaving its
+   list collapses instead of the rows below jumping up in one frame. The
+   height is now *measured* (collapseLeavingRow in leave-transition.tsx
+   sets an inline max-height to the row's real scrollHeight, forces a
+   reflow, then drops it to 0) — a two-step transition instead of the old
+   200px keyframe guess, so tall rows no longer snap through the first
+   80px. The 120ms delay lets the reason badge land before the space
+   starts closing; timing (120ms + 340ms) is unchanged. */
 .row-leaving {
   position: relative;
   overflow: hidden;
   pointer-events: none;
-  animation: row-collapse 340ms ease 120ms both;
+  transition:
+    max-height 340ms ease 120ms,
+    opacity 340ms ease 120ms,
+    padding-top 340ms ease 120ms,
+    padding-bottom 340ms ease 120ms,
+    border-width 340ms ease 120ms;
+}
+
+/* Added one forced-reflow after mount (max-height already measured inline). */
+.row-leaving.row-collapsing {
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
 }
 
 /* The mirror: a just-added row grows in instead of blinking in. No fill
@@ -366,6 +368,165 @@ body {
   border-color: rgb(110 231 183);
 }
 
+/* ---- Motion pass (#141): modal/dialog, toasts, expand/collapse, Clarify
+   cards, banners, skeletons. All iOS-ish: 150–300ms, ease-out in /
+   ease-in out. Every class here is neutralized in the reduced-motion
+   block below. ---- */
+
+/* Modals (Quick Capture, confirm/prompt dialog): the overlay (which owns
+   the backdrop tint) fades, the panel rises ~8px from 96% scale. Exit is
+   the reverse — components hold a brief "closing" state (~180ms) so the
+   out-animation gets to play before unmount. */
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes modal-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes modal-rise-in {
+  from {
+    transform: translateY(8px) scale(0.96);
+  }
+}
+@keyframes modal-sink-out {
+  to {
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+.modal-overlay {
+  animation: modal-fade-in 200ms ease-out both;
+}
+.modal-panel {
+  animation: modal-rise-in 220ms cubic-bezier(0, 0, 0.2, 1) both;
+}
+.modal-closing {
+  animation: modal-fade-out 180ms ease-in both;
+  pointer-events: none; /* nothing is clickable mid-exit */
+}
+.modal-closing .modal-panel {
+  animation: modal-sink-out 180ms ease-in both;
+}
+
+/* Toasts: slide up + fade in; the provider marks a toast "leaving" for
+   ~180ms before actually removing it (auto-dismiss takes the same path). */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.toast-enter {
+  animation: toast-in 220ms ease-out both;
+}
+.toast-leaving {
+  animation: toast-out 180ms ease-in both;
+  pointer-events: none;
+}
+
+/* Row → edit-form swap (task/habit rows): the <li> persists across the
+   swap, so adding this class when the form mounts restarts the animation
+   — a soft fade+scale instead of a one-frame content jump. Closing the
+   form back to the row stays instant on purpose. */
+@keyframes edit-swap-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+.edit-swap-in {
+  animation: edit-swap-in 180ms ease-out;
+}
+
+/* <details> open: revealed content fades in with a small slide instead of
+   popping. Direct children only, and never the summary. Close stays
+   instant — <details> can't animate closed without JS. */
+@keyframes details-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+details[open] > *:not(summary) {
+  animation: details-reveal 200ms ease-out;
+}
+
+/* Clarify flow: cards advance like a deck — the finished card slides out
+   left (~180ms, held via a "leaving" state), the next slides in from the
+   right (keyed on the task id). */
+@keyframes clarify-card-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes clarify-card-out {
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+.clarify-card-enter {
+  animation: clarify-card-in 200ms ease-out;
+}
+.clarify-card-leave {
+  animation: clarify-card-out 180ms ease-in both;
+  pointer-events: none;
+}
+
+/* Today's nudge banners: a gentle drop-in instead of appearing fully formed. */
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+.banner-enter {
+  animation: banner-in 250ms ease-out both;
+}
+
+/* Loading skeleton: shimmering gray placeholders (Today). Reduced motion
+   gets the same shapes, statically gray. */
+:root {
+  --skeleton-base: rgba(120, 120, 128, 0.12);
+  --skeleton-highlight: rgba(120, 120, 128, 0.22);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --skeleton-base: rgba(120, 120, 128, 0.16);
+    --skeleton-highlight: rgba(120, 120, 128, 0.28);
+  }
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-base) 25%,
+    var(--skeleton-highlight) 50%,
+    var(--skeleton-base) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .project-celebrate-emoji,
   .project-celebrate-ring,
@@ -373,10 +534,25 @@ body {
     animation: none;
   }
   .row-leaving {
-    animation-duration: 1ms;
-    animation-delay: 0ms;
+    transition: none;
   }
   .row-entering {
+    animation: none;
+  }
+  /* Motion pass (#141): every new animation no-ops. Components also check
+     matchMedia so closing states unmount instantly instead of idling. */
+  .modal-overlay,
+  .modal-panel,
+  .modal-closing,
+  .modal-closing .modal-panel,
+  .toast-enter,
+  .toast-leaving,
+  .edit-swap-in,
+  details[open] > *:not(summary),
+  .clarify-card-enter,
+  .clarify-card-leave,
+  .banner-enter,
+  .skeleton {
     animation: none;
   }
   .row-leaving-trash::after,

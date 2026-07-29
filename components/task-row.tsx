@@ -3,7 +3,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
 import { describeRecurrence, type RecurrencePattern } from "@/lib/recurring-tasks/types";
-import { consumeTaskAdded, type RemovalKind } from "@/components/leave-transition";
+import {
+  collapseLeavingRow,
+  consumeTaskAdded,
+  type RemovalKind,
+} from "@/components/leave-transition";
 import { daysSince, todayLocal } from "@/lib/date";
 import { tapHaptic } from "@/lib/haptics";
 import RecurrenceFields, {
@@ -473,7 +477,10 @@ export default function TaskRow({
 
   if (editing) {
     return (
-      <li className="rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3">
+      // edit-swap-in (#141): the <li> persists across the row→form swap, so
+      // this class landing on it plays a soft fade+scale instead of a
+      // one-frame content jump.
+      <li className="edit-swap-in rounded-xl border border-[var(--hairline)] bg-[var(--surface)] px-4 py-3">
         <div className="space-y-2">
           <div className="flex items-start justify-between gap-2">
             <input
@@ -703,6 +710,9 @@ export default function TaskRow({
 
   return (
     <li
+      // Leaving snapshots measure their own height on mount, then collapse
+      // from it (#141 item 9) — see collapseLeavingRow.
+      ref={leaving ? collapseLeavingRow : undefined}
       draggable={!!dragProps}
       data-drag-id={dragProps ? task.id : undefined}
       onDragStart={dragProps ? () => dragProps.onDragStart() : undefined}

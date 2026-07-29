@@ -9,7 +9,7 @@ import {
   type HabitFrequency,
 } from "@/lib/habits/streaks";
 import { lastSevenDays } from "@/lib/date";
-import type { RemovalKind } from "@/components/leave-transition";
+import { collapseLeavingRow, type RemovalKind } from "@/components/leave-transition";
 import type { PointerDragHandleProps } from "@/lib/hooks/use-pointer-drag";
 import { tapHaptic } from "@/lib/haptics";
 
@@ -273,6 +273,24 @@ export default function HabitRow({
     if (loggedToday && pendingAdd) setPendingAdd(false);
   }
 
+  // #141 item 7: when a weekly tally box fills (from any path — ring tap,
+  // box tap, day-square back-log), the box that just filled gets a tiny
+  // scale-pop (reusing the task-check-pop keyframe) on top of its color
+  // transition. Same render-adjust pattern as wasLoggedToday above.
+  const [prevWeekCount, setPrevWeekCount] = useState(weekCount);
+  const [tallyPopIndex, setTallyPopIndex] = useState<number | null>(null);
+  if (weekCount !== prevWeekCount) {
+    setPrevWeekCount(weekCount);
+    if (weekCount > prevWeekCount) setTallyPopIndex(weekCount - 1);
+  }
+  useEffect(() => {
+    if (tallyPopIndex === null) return;
+    const timeout = setTimeout(() => setTallyPopIndex(null), 400);
+    return () => clearTimeout(timeout);
+  }, [tallyPopIndex]);
+
+  const tallyPopClass = "motion-safe:animate-[task-check-pop_300ms_ease-out]";
+
   const committedFraction =
     habit.frequency === "times_per_week"
       ? weekCount / (habit.target_count ?? 1)
@@ -334,6 +352,9 @@ export default function HabitRow({
           // the mini punch plays on this square (the main circle's big
           // celebration only knows about today).
           if (!isLogged && !isFuture) {
+            // #141 item 7: same physical tick the main ring gives on a
+            // fresh log (un-logging stays silent, mirroring the ring).
+            tapHaptic();
             setCelebratingDate(date);
             if (dayPopTimeoutRef.current) clearTimeout(dayPopTimeoutRef.current);
             dayPopTimeoutRef.current = setTimeout(
@@ -389,7 +410,9 @@ export default function HabitRow({
 
   if (editing) {
     return (
-      <li className="rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      // edit-swap-in (#141): soft fade+scale on the row→form swap — the
+      // <li> persists, so the class landing on it restarts the animation.
+      <li className="edit-swap-in rounded-md border border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <input
@@ -449,6 +472,9 @@ export default function HabitRow({
 
   return (
     <li
+      // Leaving snapshots measure their own height on mount, then collapse
+      // from it (#141 item 9) — see collapseLeavingRow.
+      ref={leaving ? collapseLeavingRow : undefined}
       draggable={!!dragProps}
       data-drag-id={dragProps ? habit.id : undefined}
       onDragStart={dragProps ? () => dragProps.onDragStart() : undefined}
@@ -525,9 +551,9 @@ export default function HabitRow({
                     onClick={() => onToggle(habit, today, loggedToday)}
                     aria-label={loggedToday ? "Unlog today" : "Log today"}
                     title={loggedToday ? "Unlog today" : "Log today"}
-                    className={`h-6 w-6 rounded sm:h-5 sm:w-5 ${
+                    className={`h-6 w-6 rounded motion-safe:transition-colors sm:h-5 sm:w-5 ${
                       i < weekCount
-                        ? "bg-emerald-500"
+                        ? `bg-emerald-500 ${i === tallyPopIndex ? tallyPopClass : ""}`
                         : "border border-zinc-300 hover:border-emerald-400 dark:border-zinc-700"
                     }`}
                   />
@@ -543,7 +569,9 @@ export default function HabitRow({
                       onClick={() => onRemoveLog(habit, today)}
                       aria-label="Remove extra credit"
                       title="Extra credit — you exceeded this week's target"
-                      className="h-6 w-6 rounded bg-emerald-500 sm:h-5 sm:w-5"
+                      className={`h-6 w-6 rounded bg-emerald-500 motion-safe:transition-colors sm:h-5 sm:w-5 ${
+                        (habit.target_count ?? 1) + i === tallyPopIndex ? tallyPopClass : ""
+                      }`}
                     />
                   ))}
                 {weekCount >= (habit.target_count ?? 1) && (

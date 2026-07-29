@@ -149,7 +149,18 @@ export default function TodayDashboard() {
   const dueHabitsDisplay = withLeaving(dueHabits, useLeaveTransition(dueHabits));
 
   if (loading || tasksLoading) {
-    return <p className="text-sm text-zinc-500">Loading...</p>;
+    // #141: skeleton placeholders shaped like the check-in card + a few
+    // task rows, instead of a bare "Loading..." line. The shimmer lives in
+    // globals.css (.skeleton); reduced motion gets the same static grays.
+    return (
+      <div role="status" aria-label="Loading today" className="space-y-4">
+        <div className="skeleton h-28 rounded-lg" />
+        <div className="skeleton h-9 rounded-md" />
+        <div className="skeleton h-16 rounded-md" />
+        <div className="skeleton h-16 rounded-md" />
+        <span className="sr-only">Loading...</span>
+      </div>
+    );
   }
 
   const dueRoutines = routines.filter(
@@ -238,7 +249,7 @@ export default function TodayDashboard() {
       {readyToRevisitCount > 0 && (
         <Link
           href="/someday"
-          className="block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+          className="banner-enter block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
         >
           🔔 {readyToRevisitCount} Someday {readyToRevisitCount === 1 ? "item" : "items"} ready to
           revisit →
@@ -246,7 +257,7 @@ export default function TodayDashboard() {
       )}
 
       {ticklerDue.length > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950">
+        <div className="banner-enter rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950">
           <p className="mb-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
             🗂️ Tickler — resurfaced today
           </p>
@@ -279,7 +290,7 @@ export default function TodayDashboard() {
       {readyToFollowUpCount > 0 && (
         <Link
           href="/waiting-for"
-          className="block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+          className="banner-enter block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
         >
           🔔 {readyToFollowUpCount} Waiting For {readyToFollowUpCount === 1 ? "item" : "items"} due
           for a follow-up →
@@ -289,7 +300,7 @@ export default function TodayDashboard() {
       {eveningShutdownNudge && (
         <Link
           href="/shutdown"
-          className="block rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="banner-enter block rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           🌙 Wrap the day — run the Shutdown ritual so nothing drifts →
         </Link>
@@ -298,7 +309,7 @@ export default function TodayDashboard() {
       {atRiskWorkouts.length > 0 && (
         <Link
           href="/training-log"
-          className="block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+          className="banner-enter block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
         >
           🏋️{" "}
           {atRiskWorkouts.length === 1
@@ -311,7 +322,7 @@ export default function TodayDashboard() {
       {reviewNudge && (
         <Link
           href="/weekly-review"
-          className="block rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800 hover:bg-cyan-100 dark:border-cyan-900 dark:bg-cyan-950 dark:text-cyan-300 dark:hover:bg-cyan-900"
+          className="banner-enter block rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800 hover:bg-cyan-100 dark:border-cyan-900 dark:bg-cyan-950 dark:text-cyan-300 dark:hover:bg-cyan-900"
         >
           🔭{" "}
           {reviewOverdueDays === null
