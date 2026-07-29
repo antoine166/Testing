@@ -264,7 +264,83 @@ body {
   opacity: 0.45;
 }
 
+/* Project completion (#125): a multi-week effort ending deserves ~3× the
+   task/habit effect — triple expanding rings + a big pop, ~1.8s total,
+   played over the project card before it flips to completed. */
+@keyframes project-celebrate-pop {
+  0% {
+    transform: scale(0) rotate(-12deg);
+    opacity: 0;
+  }
+  45% {
+    transform: scale(1.5) rotate(6deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1.1) rotate(0deg);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes project-celebrate-ring {
+  from {
+    transform: scale(0.2);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes project-celebrate-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  30% {
+    background-color: rgb(16 185 129 / 0.12);
+  }
+}
+
+.project-celebrate-card {
+  animation: project-celebrate-flash 1400ms ease-out;
+}
+
+.project-celebrate-emoji {
+  animation: project-celebrate-pop 1600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.project-celebrate-ring {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  height: 7rem;
+  width: 7rem;
+  border-radius: 9999px;
+  border: 3px solid rgb(16 185 129);
+  animation: project-celebrate-ring 1100ms ease-out both;
+}
+
+.project-celebrate-ring-2 {
+  animation-delay: 180ms;
+  border-color: rgb(52 211 153);
+}
+
+.project-celebrate-ring-3 {
+  animation-delay: 360ms;
+  border-color: rgb(110 231 183);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .project-celebrate-emoji,
+  .project-celebrate-ring,
+  .project-celebrate-card {
+    animation: none;
+  }
   .row-leaving {
     animation-duration: 1ms;
     animation-delay: 0ms;

@@ -207,6 +207,11 @@ export default function HabitRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [showDayRow, setShowDayRow] = useState(false);
+  // #123: the mini punch plays on whichever day square was tapped —
+  // back-logging Sunday from Monday celebrates on Sunday's dot, not just
+  // the main circle.
+  const [celebratingDate, setCelebratingDate] = useState<string | null>(null);
+  const dayPopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [name, setName] = useState(habit.name);
   const [frequency, setFrequency] = useState<HabitFrequency>(habit.frequency);
   const [frequencyDays, setFrequencyDays] = useState<number[]>(
@@ -304,15 +309,29 @@ export default function HabitRow({
   function renderDaySquare(date: string) {
     const isFuture = date > today;
     const isLogged = loggedDates.has(date);
+    const celebratingHere = celebratingDate === date;
     return (
       <button
         type="button"
         disabled={isFuture}
-        onClick={() => onToggle(habit, date, isLogged)}
+        onClick={() => {
+          // #123: back-logging a day should confirm where the tap landed —
+          // the mini punch plays on this square (the main circle's big
+          // celebration only knows about today).
+          if (!isLogged && !isFuture) {
+            setCelebratingDate(date);
+            if (dayPopTimeoutRef.current) clearTimeout(dayPopTimeoutRef.current);
+            dayPopTimeoutRef.current = setTimeout(
+              () => setCelebratingDate((d) => (d === date ? null : d)),
+              650,
+            );
+          }
+          onToggle(habit, date, isLogged);
+        }}
         aria-label={`${isLogged ? "Unlog" : "Log"} ${date}`}
         title={`${isLogged ? "Unlog" : "Log"} ${date}`}
-        className={`flex h-6 w-6 items-center justify-center rounded text-[10px] font-medium sm:h-5 sm:w-5 ${
-          isLogged
+        className={`relative flex h-6 w-6 items-center justify-center rounded text-[10px] font-medium sm:h-5 sm:w-5 ${
+          isLogged || celebratingHere
             ? "bg-emerald-500 text-white"
             : isFuture
               ? "cursor-default bg-zinc-100 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700"
@@ -320,6 +339,14 @@ export default function HabitRow({
         }`}
       >
         {DAY_LABELS[weekdayOf(date)][0]}
+        {celebratingHere && (
+          <>
+            <span className="habit-burst pointer-events-none absolute inset-0 m-auto rounded border-2 border-emerald-400" />
+            <span className="habit-punch pointer-events-none absolute inset-0 z-10 m-auto flex items-center justify-center text-xs leading-none">
+              👊
+            </span>
+          </>
+        )}
       </button>
     );
   }
