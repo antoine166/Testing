@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import TaskRow from "@/components/task-row";
 import { usePageData } from "@/lib/hooks/use-page-data";
 import { useTaskList } from "@/lib/hooks/use-task-list";
@@ -14,12 +14,14 @@ import { todayLocal } from "@/lib/date";
 import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import TaskCreateForm from "@/components/tasks/create-form";
+import ProjectToolbar from "@/components/project-toolbar";
 import RecurringTemplatesSection, {
   type RecurringTemplate,
 } from "@/components/tasks/recurring-templates-section";
 
 export default function TasksPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const domainFilter = searchParams.get("domain");
   const projectFilter = searchParams.get("project");
   const searchQuery = searchParams.get("q");
@@ -218,6 +220,27 @@ export default function TasksPage() {
           </Link>
         </p>
       )}
+
+      {(() => {
+        // The project's action row, on the view its ≔ button lands on —
+        // Antoine's call: the tools live where you work the project.
+        const filteredProject = projectFilter
+          ? projects.find((p) => p.id === projectFilter)
+          : undefined;
+        if (!filteredProject) return null;
+        return (
+          <div className="-mt-2 mb-4 flex items-center gap-1">
+            <ProjectToolbar
+              project={filteredProject}
+              hasSubprojects={projects.some((p) => p.parent_project_id === filteredProject.id)}
+              openCount={(filteredTasks ?? []).length}
+              onError={setError}
+              onChanged={loadAll}
+              afterDelete={() => router.push("/tasks")}
+            />
+          </div>
+        );
+      })()}
 
       <TaskCreateForm
         domains={domains}
