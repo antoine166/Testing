@@ -1,13 +1,13 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { todayLocal, daysSince } from "@/lib/date";
+import { daysSince } from "@/lib/date";
 import { isAtRisk, isHabitDueToday } from "@/lib/habits/streaks";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
 import { looksLikeTopic } from "@/lib/tasks/next-action-shape";
 import { isInInbox } from "@/lib/tasks/inbox";
 import { reviewStreakWeeks } from "@/lib/reviews/streak";
 import { pickResurfacedNote } from "@/lib/knowledge/resurface";
-import { ok, fail, type AdminClient } from "@/lib/mcp/shared";
+import { ok, fail, type AdminClient, todayHome } from "@/lib/mcp/shared";
 
 export function registerCoachingTools(server: McpServer, admin: AdminClient, userId: string) {
   // --- Coaching context ---
@@ -21,7 +21,7 @@ export function registerCoachingTools(server: McpServer, admin: AdminClient, use
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const today = todayLocal();
+      const today = todayHome();
 
       const [checkinRes, habitsRes, tasksRes, ticklerRes] = await Promise.all([
         admin.from("daily_checkins").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
@@ -125,7 +125,7 @@ export function registerCoachingTools(server: McpServer, admin: AdminClient, use
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const today = todayLocal();
+      const today = todayHome();
       const [tasksRes, projectsRes, domainsRes, logsRes, ticklerRes] = await Promise.all([
         admin.from("tasks").select("*").eq("user_id", userId).is("deleted_at", null),
         admin.from("projects").select("*").eq("user_id", userId).is("deleted_at", null),

@@ -1,8 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { todayLocal } from "@/lib/date";
 import { computeWeeklyGoalStreak, countThisWeek, isAtRisk as isWorkoutAtRisk } from "@/lib/workouts/weekly";
-import { ok, fail, WORKOUT_LOG_ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, type AdminClient } from "@/lib/mcp/shared";
+import { ok, fail, WORKOUT_LOG_ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, type AdminClient, todayHome } from "@/lib/mcp/shared";
 
 export function registerWorkoutTools(server: McpServer, admin: AdminClient, userId: string) {
   // --- Training Log ---
@@ -35,7 +34,7 @@ export function registerWorkoutTools(server: McpServer, admin: AdminClient, user
         );
       if (logsError) return fail(logsError.message);
 
-      const today = todayLocal();
+      const today = todayHome();
       const enriched = workouts.map((workout) => {
         const workoutLogs = logs.filter((l) => l.workout_id === workout.id);
         if (!workout.weekly_target) {
@@ -171,7 +170,7 @@ export function registerWorkoutTools(server: McpServer, admin: AdminClient, user
       annotations: { readOnlyHint: false, idempotentHint: false },
     },
     async ({ workout_id, date, duration_minutes, notes }) => {
-      const loggedDate = date ?? todayLocal();
+      const loggedDate = date ?? todayHome();
       const { data, error } = await admin
         .from("workout_logs")
         .insert({
@@ -202,7 +201,7 @@ export function registerWorkoutTools(server: McpServer, admin: AdminClient, user
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
     async ({ workout_id, date }) => {
-      const loggedDate = date ?? todayLocal();
+      const loggedDate = date ?? todayHome();
       const { data: mostRecent, error: findError } = await admin
         .from("workout_logs")
         .select("id")
@@ -233,7 +232,7 @@ export function registerWorkoutTools(server: McpServer, admin: AdminClient, user
       annotations: { readOnlyHint: true },
     },
     async ({ from, to }) => {
-      const toDate = to ?? todayLocal();
+      const toDate = to ?? todayHome();
       const start = from ?? new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const { data, error } = await admin
         .from("workout_logs")
