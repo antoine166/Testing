@@ -7,6 +7,7 @@ import { looksLikeTopic, TOPIC_NUDGE } from "@/lib/tasks/next-action-shape";
 import { useContexts } from "@/lib/hooks/use-contexts";
 import { TIME_BUCKETS, minutesToBucketValue } from "@/lib/tasks/context-options";
 import { PRIORITIES } from "@/lib/tasks/constants";
+import { selectableProjects } from "@/lib/projects/selectable";
 
 // GTD's clarify step as a guided flow: the workflow-map diagram made
 // interactive. One inbox item at a time, Allen's decision tree as buttons —
@@ -215,9 +216,12 @@ export default function ClarifyFlow({
 
   if (!task) return null; // render-adjust above is about to advance
 
-  const projectOptions = deferDomain
-    ? projects.filter((p) => !p.domain_id || p.domain_id === deferDomain)
-    : projects;
+  const projectOptions = selectableProjects(
+    deferDomain
+      ? projects.filter((p) => !p.domain_id || p.domain_id === deferDomain)
+      : projects,
+    deferProject,
+  );
   // Preserve a current value that isn't in the list as a selectable option.
   const locationOptions =
     deferContext && !locations.includes(deferContext)

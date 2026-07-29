@@ -15,7 +15,7 @@ export type KnowledgeItem = {
   project_id: string | null;
 };
 
-export type KnowledgeProject = { id: string; name: string };
+export type KnowledgeProject = { id: string; name: string; status?: string };
 
 export type KnowledgeFolder = { id: string; name: string; parent_id: string | null };
 

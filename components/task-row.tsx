@@ -89,6 +89,8 @@ export type TaskProject = {
   domain_id: string | null;
   status?: string;
   parent_project_id?: string | null;
+  /** When the project was completed — set by the server whenever status flips to 'completed' (Logbook sorts by it). */
+  completed_at?: string | null;
 };
 
 type Attachment = {

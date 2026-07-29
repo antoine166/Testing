@@ -33,6 +33,9 @@ export default async function ProtectedLayout({
         .from("projects")
         .select("id, name, domain_id, parent_project_id")
         .is("deleted_at", null)
+        // Completed projects live in the Logbook (and their references in
+        // the Library) — the sidebar only navigates active work.
+        .neq("status", "completed")
         .order("name"),
       // The SQL mirror of isInInbox (lib/tasks/inbox.ts) — this one has to
       // count without fetching the rows, so it can't reuse the predicate
