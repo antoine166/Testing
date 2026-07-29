@@ -77,7 +77,7 @@ export default function ReorderableHabitList({
   const pointer = usePointerDrag({ onOver: handlePointerOver, onDrop: commit });
   const flip = useRowFlip(order, pointer.draggingId);
   function handlePointerOver(dragged: string, target: string) {
-    flip.capture(orderRef.current);
+    flip.capture();
     moveInOrder(dragged, target);
   }
 

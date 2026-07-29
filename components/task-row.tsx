@@ -697,6 +697,9 @@ export default function TaskRow({
       ref={leaving ? collapseLeavingRow : undefined}
       draggable={!!dragProps}
       data-drag-id={dragProps ? task.id : undefined}
+      // Non-draggable rows (a collapsed recurring group's face row) still
+      // FLIP-glide when a drag displaces them (#154 round 2).
+      data-flip-key={!leaving ? task.id : undefined}
       onDragStart={dragProps ? () => dragProps.onDragStart() : undefined}
       onDragOver={dragProps ? (e) => dragProps.onDragOver(e) : undefined}
       onDrop={dragProps ? (e) => e.preventDefault() : undefined}

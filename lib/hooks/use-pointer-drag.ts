@@ -10,11 +10,6 @@ export type PointerDragHandleProps = {
   onPointerCancel: (e: React.PointerEvent) => void;
 };
 
-/** Find a row element by its data-drag-id tag. Ids are uuids, but escape anyway. */
-function rowById(id: string): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-drag-id="${CSS.escape(id)}"]`);
-}
-
 /**
  * Touch drag-to-reorder (#142, motion audit item 5). HTML5 drag events
  * never fire on touch, so rows' grab handles get pointer events instead:
@@ -165,28 +160,47 @@ export function usePointerDrag({
 /**
  * FLIP slides for reorder swaps (#154): when a touch drag swaps the order
  * array, the rows that got displaced glide to their new slot instead of
- * teleporting. First: the list calls `capture(ids)` just before the swap's
- * setState, recording each row's on-screen top (getBoundingClientRect, so
- * a row caught mid-glide is measured where it visually is). Last + Invert +
- * Play: after React commits the new order, the layout effect measures each
- * row's new top, applies the inverted delta as an inline transform with
- * transitions off, forces a reflow, then transitions to zero on the settle
- * spring. The dragged row is skipped — it's finger-driven. Inline
- * transition styles are cleaned up on transitionend so they can't shadow
- * other transitions (e.g. the leave-collapse) later.
+ * teleporting. First: the list calls `capture()` just before the swap's
+ * setState, recording every flippable row's on-screen top
+ * (getBoundingClientRect, so a row caught mid-glide is measured where it
+ * visually is). Last + Invert + Play: after React commits the new order,
+ * the layout effect measures each row's new top, applies the inverted
+ * delta as an inline transform with transitions off, forces a reflow,
+ * then transitions to zero on the settle spring. The dragged row is
+ * skipped — it's finger-driven. Inline transition styles are cleaned up
+ * on transitionend so they can't shadow other transitions (e.g. the
+ * leave-collapse) later.
+ *
+ * Flippable rows are found in the DOM, not from the order array
+ * (#154 round 2): anything tagged data-drag-id or data-flip-key.
+ * data-flip-key covers rows that move but aren't drag targets —
+ * a collapsed recurring group's visible row and its "+N more" stub —
+ * which used to teleport while their single-task neighbors glided.
+ * Rows from unrelated lists get measured too, but their delta is 0 so
+ * they're skipped.
  *
  * Deliberately scoped to touch drags: the HTML5 desktop path never calls
  * `capture`, so desktop behavior is unchanged. No-ops under reduced motion.
  */
+function flipTargets(): Map<string, HTMLElement> {
+  const targets = new Map<string, HTMLElement>();
+  document
+    .querySelectorAll<HTMLElement>("[data-drag-id], [data-flip-key]")
+    .forEach((el) => {
+      const key = el.dataset.flipKey ?? el.dataset.dragId;
+      if (key) targets.set(key, el);
+    });
+  return targets;
+}
+
 export function useRowFlip(order: string[], draggingId: string | null) {
   const prevTopsRef = useRef<Map<string, number> | null>(null);
 
-  const capture = useCallback((ids: string[]) => {
+  const capture = useCallback(() => {
     if (prefersReducedMotion()) return;
     const tops = new Map<string, number>();
-    for (const id of ids) {
-      const el = rowById(id);
-      if (el) tops.set(id, el.getBoundingClientRect().top);
+    for (const [key, el] of flipTargets()) {
+      tops.set(key, el.getBoundingClientRect().top);
     }
     prevTopsRef.current = tops;
   }, []);
@@ -195,9 +209,10 @@ export function useRowFlip(order: string[], draggingId: string | null) {
     const prev = prevTopsRef.current;
     if (!prev) return;
     prevTopsRef.current = null;
+    const now = flipTargets();
     for (const [id, prevTop] of prev) {
       if (id === draggingId) continue;
-      const el = rowById(id);
+      const el = now.get(id);
       if (!el) continue;
       // Measure the row's true new slot with any in-flight glide cleared.
       el.style.transition = "none";
