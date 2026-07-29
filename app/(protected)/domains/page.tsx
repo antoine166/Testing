@@ -473,7 +473,7 @@ export default function DomainsPage() {
                           (t) => t.project_id === project.id && t.status !== "done",
                         );
                         return (
-                          <details key={project.id} open className="group">
+                          <details key={project.id} className="group">
                             <summary className="flex cursor-pointer list-none items-center gap-1 text-sm text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50">
                               <span className="text-zinc-400 transition-transform group-open:rotate-90">
                                 ›
