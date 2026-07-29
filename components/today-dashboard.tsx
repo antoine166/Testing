@@ -360,11 +360,15 @@ export default function TodayDashboard() {
         </div>
       )}
 
-      {overdueTasks.length > 0 && (
+      {/* Sections gate on the *display* lists (live rows + leaving
+          snapshots), not the live ones — gating on live arrays unmounted
+          the whole section the instant its last task left, swallowing the
+          leave animation the snapshot was mounted to play. */}
+      {overdueDisplay.length > 0 && (
         <div>
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-red-600 dark:text-red-400">
-              Overdue ({overdueTasks.length})
+              Overdue ({overdueDisplay.length})
             </h2>
             {/* Bulk triage: an overdue pile invites one-by-one fiddling or,
                 worse, learned blindness. One decision for the whole pile
@@ -417,11 +421,11 @@ export default function TodayDashboard() {
           setError={setError}
           refreshTasks={refreshTasks}
         />
-        {todayTasks.length === 0 ? (
+        {appointmentsDisplay.length + plannedDisplay.length === 0 ? (
           <p className="text-sm text-zinc-500">Nothing scheduled for today.</p>
         ) : (
           <>
-            {appointmentsToday.length > 0 && (
+            {appointmentsDisplay.length > 0 && (
               <div className="mb-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   Appointments
@@ -445,9 +449,9 @@ export default function TodayDashboard() {
                 </ul>
               </div>
             )}
-            {plannedToday.length > 0 && (
+            {plannedDisplay.length > 0 && (
               <>
-                {appointmentsToday.length > 0 && (
+                {appointmentsDisplay.length > 0 && (
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                     Planned
                   </h3>
@@ -485,7 +489,7 @@ export default function TodayDashboard() {
             ⚠️ {atRiskCount} at risk of breaking a streak twice in a row — do these first
           </p>
         )}
-        {dueHabits.length === 0 ? (
+        {dueHabitsDisplay.length === 0 ? (
           <p className="text-sm text-zinc-500">No habits due today.</p>
         ) : (
           <ul className="space-y-2">

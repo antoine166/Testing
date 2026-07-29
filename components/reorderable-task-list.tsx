@@ -5,7 +5,7 @@ import TaskRow, { type Task, type TaskDomain, type TaskProject } from "@/compone
 import RecurringTaskGroup from "@/components/recurring-task-group";
 import { groupRecurringTasks } from "@/lib/recurring-tasks/group";
 import { useLeaveTransition } from "@/components/leave-transition";
-import { usePointerDrag } from "@/lib/hooks/use-pointer-drag";
+import { usePointerDrag, useRowFlip } from "@/lib/hooks/use-pointer-drag";
 import type { RecurrencePatternDraft } from "@/components/recurrence-fields";
 
 type CommonRowProps = {
@@ -94,7 +94,16 @@ export default function ReorderableTaskList({
   }
 
   // Touch/pen path — long-press the handle, move to swap, lift to commit.
-  const pointer = usePointerDrag({ onOver: moveInOrder, onDrop: () => void commitOrder() });
+  // #154: swaps capture row positions first so displaced neighbors FLIP-
+  // glide to their new slot (touch only — the HTML5 desktop path below
+  // never captures, so desktop behavior is unchanged). Recurring-group
+  // rows carry no data-drag-id, so they still reposition instantly.
+  const pointer = usePointerDrag({ onOver: handlePointerOver, onDrop: () => void commitOrder() });
+  const flip = useRowFlip(order, pointer.draggingId);
+  function handlePointerOver(dragged: string, target: string) {
+    flip.capture(orderRef.current);
+    moveInOrder(dragged, target);
+  }
 
   function handleDragOver(e: React.DragEvent, targetId: string) {
     e.preventDefault();

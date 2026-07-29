@@ -6,7 +6,7 @@ import HabitRow, {
   type HabitDomain,
   type HabitLogRow,
 } from "@/components/habit-row";
-import { usePointerDrag } from "@/lib/hooks/use-pointer-drag";
+import { usePointerDrag, useRowFlip } from "@/lib/hooks/use-pointer-drag";
 
 /**
  * One Habits-page section's rows, draggable into any order (#142). Same
@@ -72,7 +72,14 @@ export default function ReorderableHabitList({
     void onCommitOrder(orderRef.current);
   }
 
-  const pointer = usePointerDrag({ onOver: moveInOrder, onDrop: commit });
+  // #154: touch swaps capture row positions first so displaced neighbors
+  // FLIP-glide to their new slot; desktop's HTML5 path never captures.
+  const pointer = usePointerDrag({ onOver: handlePointerOver, onDrop: commit });
+  const flip = useRowFlip(order, pointer.draggingId);
+  function handlePointerOver(dragged: string, target: string) {
+    flip.capture(orderRef.current);
+    moveInOrder(dragged, target);
+  }
 
   const byId = new Map(habits.map((h) => [h.id, h]));
   const ordered = order.map((id) => byId.get(id)).filter((h): h is Habit => !!h);

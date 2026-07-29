@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { computeWeeklyGoalStreak, countThisWeek, isAtRisk } from "@/lib/workouts/weekly";
+import { tapHaptic } from "@/lib/haptics";
 
 export type Workout = {
   id: string;
@@ -218,9 +219,31 @@ export default function WorkoutRow({
   const [expanded, setExpanded] = useState(false);
   const [name, setName] = useState(workout.name);
   const [weeklyTarget, setWeeklyTarget] = useState(workout.weekly_target?.toString() ?? "");
+  // #154: logging gets its own reward (💪 flex + amber/emerald burst + row
+  // flash) on the control that was tapped. Purely visual — the save still
+  // fires immediately (the row stays mounted, unlike habits on Today), and
+  // unlogging stays silent.
+  const [celebrate, setCelebrate] = useState(false);
+  const celebrateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current);
+    };
+  }, []);
 
   const logsForDate = logs.filter((l) => l.logged_date === date);
   const checked = logsForDate.length > 0;
+
+  function handleToggleChange() {
+    if (!checked) {
+      tapHaptic();
+      setCelebrate(true);
+      if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current);
+      celebrateTimeoutRef.current = setTimeout(() => setCelebrate(false), 650);
+    }
+    onToggle();
+  }
 
   const weekCount = workout.weekly_target ? countThisWeek(logs, today) : 0;
   const { current: weekStreak } = workout.weekly_target
@@ -284,14 +307,27 @@ export default function WorkoutRow({
 
   return (
     <li
-      className={`rounded-md border ${
+      className={`rounded-md border ${celebrate ? "workout-row-flash " : ""}${
         atRisk
           ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40"
           : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
       <div className="flex items-center gap-3 px-4 py-3">
-        <input type="checkbox" checked={checked} onChange={onToggle} />
+        <span className="relative flex shrink-0 items-center justify-center">
+          <input type="checkbox" checked={checked} onChange={handleToggleChange} />
+          {celebrate && (
+            <>
+              {/* Double burst from the log control: amber leads, emerald trails. */}
+              <span className="workout-burst pointer-events-none absolute inset-0 m-auto rounded-full border-2 border-amber-400" />
+              <span className="workout-burst workout-burst-2 pointer-events-none absolute inset-0 m-auto rounded-full border-2 border-emerald-400" />
+              {/* The flex, springing in over the control that was tapped. */}
+              <span className="workout-flex pointer-events-none absolute inset-0 z-10 m-auto flex items-center justify-center text-lg leading-none">
+                💪
+              </span>
+            </>
+          )}
+        </span>
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-medium text-zinc-900 dark:text-zinc-100">
             {atRisk ? "⚠️ " : weekStreak > 0 ? "🔥 " : ""}
