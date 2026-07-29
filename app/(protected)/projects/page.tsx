@@ -174,7 +174,7 @@ export default function ProjectsPage() {
       !(await confirm({
         message: `Complete “${project.name}”?${
           openCount > 0
-            ? ` Its ${openCount} open task${openCount === 1 ? "" : "s"} will stay with the completed project.`
+            ? ` Its ${openCount} open task${openCount === 1 ? "" : "s"} will be completed with it.`
             : ""
         }`,
         confirmLabel: "Complete project",
@@ -290,8 +290,13 @@ export default function ProjectsPage() {
     await loadAll();
   }
 
+  // Completed projects leave the browsing pages — they live in the Logbook,
+  // and their reference material stays grouped in the Library. The full
+  // `projects` list still feeds edit forms and parent pickers unchanged.
+  const browsableProjects = projects.filter((p) => p.status !== "completed");
+
   const childrenByParent = new Map<string, Project[]>();
-  for (const project of projects) {
+  for (const project of browsableProjects) {
     if (!project.parent_project_id) continue;
     if (!childrenByParent.has(project.parent_project_id)) {
       childrenByParent.set(project.parent_project_id, []);
@@ -305,12 +310,15 @@ export default function ProjectsPage() {
   }
 
   const topLevelProjects = projects.filter((p) => !p.parent_project_id);
+  // Completed projects can't take new subprojects — out of the parent
+  // picker (same rule as the task pickers), though they keep rendering
+  // fine on any existing subproject.
   const parentOptions = (excludeId?: string) =>
-    topLevelProjects.filter((p) => p.id !== excludeId);
+    topLevelProjects.filter((p) => p.id !== excludeId && p.status !== "completed");
 
   const domainsById = new Map(domains.map((d) => [d.id, d]));
   const grouped = new Map<string, Project[]>();
-  for (const project of topLevelProjects) {
+  for (const project of browsableProjects.filter((p) => !p.parent_project_id)) {
     const key = project.domain_id ?? NO_DOMAIN_KEY;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(project);
@@ -393,6 +401,10 @@ export default function ProjectsPage() {
       ) : projects.length === 0 ? (
         <p className="text-sm text-zinc-500">
           No projects yet. Add your first one above.
+        </p>
+      ) : groupKeys.length === 0 ? (
+        <p className="text-sm text-zinc-500">
+          No active projects — completed projects live in the Logbook.
         </p>
       ) : (
         <div className="space-y-6">

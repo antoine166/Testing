@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { selectableProjects } from "@/lib/projects/selectable";
 
-type ProjectWithDomain = { id: string; domain_id: string | null };
+type ProjectWithDomain = { id: string; domain_id: string | null; status?: string };
 
 /**
  * Domain + project selection with GTD-style cascade, shared by every task
@@ -65,7 +66,11 @@ export function useDomainProjectCascade<P extends ProjectWithDomain>(
     setProjectIdState(newProjectId);
   }, []);
 
-  const filteredProjects = domainId ? allProjects.filter((p) => p.domain_id === domainId) : allProjects;
+  const inDomain = domainId ? allProjects.filter((p) => p.domain_id === domainId) : allProjects;
+  // Completed projects take no new tasks, so they leave every picker this
+  // hook feeds — except a task's own (current selection), which stays
+  // listed so editing an old task doesn't blank its project.
+  const filteredProjects = selectableProjects(inDomain, projectId);
 
   return { domainId, projectId, setDomainId, setProjectId, filteredProjects, reset };
 }

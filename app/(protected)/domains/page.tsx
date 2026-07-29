@@ -438,7 +438,10 @@ export default function DomainsPage() {
 
               {editingId !== domain.id &&
                 (() => {
-                  const domainProjects = projects.filter((p) => p.domain_id === domain.id);
+                  // Completed projects leave the browsing pages — Logbook has them.
+                  const domainProjects = projects.filter(
+                    (p) => p.domain_id === domain.id && p.status !== "completed",
+                  );
                   const domainTasks = tasks.filter(
                     (t) => t.domain_id === domain.id && t.status !== "done",
                   );
