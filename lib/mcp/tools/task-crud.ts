@@ -1,9 +1,8 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { todayLocal } from "@/lib/date";
 import { syncTaskCalendarEvent, syncTaskCalendarEvents } from "@/lib/google-calendar/sync";
 import { generateNextCompletionOccurrence } from "@/lib/recurring-tasks/topup";
-import { ok, fail, TASK_ENERGY_LEVELS, TASK_PRIORITIES, TASK_STATUSES, TASK_ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, type AdminClient } from "@/lib/mcp/shared";
+import { ok, fail, TASK_ENERGY_LEVELS, TASK_PRIORITIES, TASK_STATUSES, TASK_ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, type AdminClient, todayHome } from "@/lib/mcp/shared";
 
 export function registerTaskCrudTools(server: McpServer, admin: AdminClient, userId: string) {
   server.registerTool(
@@ -123,7 +122,7 @@ export function registerTaskCrudTools(server: McpServer, admin: AdminClient, use
           scheduled_time: scheduled_time || undefined,
           someday,
           waiting_for,
-          waiting_since: waiting_for === true ? todayLocal() : undefined,
+          waiting_since: waiting_for === true ? todayHome() : undefined,
           waiting_on: waiting_for === true && waiting_on ? waiting_on.trim() : undefined,
           estimated_minutes,
           energy_level: energy_required,
@@ -261,7 +260,7 @@ export function registerTaskCrudTools(server: McpServer, admin: AdminClient, use
             .select("waiting_for")
             .eq("id", id)
             .maybeSingle();
-          if (!existing?.waiting_for) updates.waiting_since = todayLocal();
+          if (!existing?.waiting_for) updates.waiting_since = todayHome();
         } else {
           // Wins over any follow_up_date/waiting_on in the same call
           // (already applied via ...rest / the block above).
@@ -284,7 +283,7 @@ export function registerTaskCrudTools(server: McpServer, admin: AdminClient, use
       // occurrence ahead of time like every other recurrence type — it's
       // spawned here, offset from the date it was actually finished.
       if (justCompleted && data.recurring_template_id) {
-        await generateNextCompletionOccurrence(admin, data.recurring_template_id, todayLocal());
+        await generateNextCompletionOccurrence(admin, data.recurring_template_id, todayHome());
       }
       await syncTaskCalendarEvent(userId, id);
       return ok(data);
@@ -311,7 +310,7 @@ export function registerTaskCrudTools(server: McpServer, admin: AdminClient, use
       if (error) return fail(error.message);
 
       if (existing?.status !== "done" && data.recurring_template_id) {
-        await generateNextCompletionOccurrence(admin, data.recurring_template_id, todayLocal());
+        await generateNextCompletionOccurrence(admin, data.recurring_template_id, todayHome());
       }
       await syncTaskCalendarEvent(userId, id);
       return ok(data);

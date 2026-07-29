@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { todayLocal, daysSince } from "@/lib/date";
 import { isAtRisk, isPendingToday } from "@/lib/habits/streaks";
+import { isAtRisk as isWorkoutAtRisk } from "@/lib/workouts/weekly";
+import { usePageData } from "@/lib/hooks/use-page-data";
 import LevelPicker from "@/components/level-picker";
 import HabitRow from "@/components/habit-row";
 import TaskRow, { type TaskPriority } from "@/components/task-row";
@@ -21,6 +24,22 @@ const PRIORITY_RANK: Record<TaskPriority, number> = {
 
 export default function TodayDashboard() {
   const today = todayLocal();
+
+  // #137: workouts + this week's logs, only to power the at-risk banner —
+  // the Training Log page keeps owning everything else about them.
+  const [workouts, setWorkouts] = useState<{ id: string; name: string; weekly_target: number | null }[]>([]);
+  const [workoutLogs, setWorkoutLogs] = useState<{ workout_id: string; logged_date: string }[]>([]);
+  usePageData(
+    async (signal) => {
+      const [workoutsRes, logsRes] = await Promise.all([
+        fetch("/api/workouts", { signal }),
+        fetch("/api/workout-logs", { signal }),
+      ]);
+      if (workoutsRes.ok) setWorkouts(await workoutsRes.json());
+      if (logsRes.ok) setWorkoutLogs(await logsRes.json());
+    },
+    { tables: ["workouts", "workout_logs"] },
+  );
 
   // Tasks/domains/projects + their CRUD come from the shared hook (this
   // component used to carry a hand-rolled copy of those handlers); the
@@ -98,6 +117,15 @@ export default function TodayDashboard() {
   const overdueTasks = [...tasks]
     .filter((t) => t.scheduled_date && t.scheduled_date < today && t.status !== "done")
     .sort((a, b) => (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? ""));
+
+  // #137: the Training Log's at-risk nudge, surfaced where the day gets
+  // planned — same quiet-until-it-matters pattern as the review banner
+  // (isAtRisk only fires once remaining days == remaining sessions).
+  const atRiskWorkouts = workouts.filter((w) => {
+    if (!w.weekly_target) return false;
+    const wLogs = workoutLogs.filter((l) => l.workout_id === w.id);
+    return isWorkoutAtRisk(wLogs, today, w.weekly_target);
+  });
 
   // Leave transitions (#121/#138) for the three plain-mapped task lists —
   // ReorderableTaskList pages get this built in; Today wires it per list.
@@ -264,6 +292,19 @@ export default function TodayDashboard() {
           className="block rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           🌙 Wrap the day — run the Shutdown ritual so nothing drifts →
+        </Link>
+      )}
+
+      {atRiskWorkouts.length > 0 && (
+        <Link
+          href="/training-log"
+          className="block rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+        >
+          🏋️{" "}
+          {atRiskWorkouts.length === 1
+            ? `${atRiskWorkouts[0].name} is running out of days to hit this week's target`
+            : `${atRiskWorkouts.length} workouts are running out of days this week`}{" "}
+          →
         </Link>
       )}
 

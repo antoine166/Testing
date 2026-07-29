@@ -41,3 +41,15 @@ export function ok(data: unknown): CallToolResult {
 export function fail(message: string): CallToolResult {
   return { isError: true, content: [{ type: "text", text: message }] };
 }
+
+/**
+ * "Today" for MCP tools. The connector runs server-side in UTC, so
+ * todayLocal() there is UTC's day — wrong for Antoine every evening
+ * (#112 item 4's known gap). Until requests carry a timezone, use his
+ * home timezone (overridable via HOME_TIMEZONE without a deploy).
+ */
+import { todayInZone } from "@/lib/date";
+
+export function todayHome(): string {
+  return todayInZone(process.env.HOME_TIMEZONE ?? "America/New_York");
+}
