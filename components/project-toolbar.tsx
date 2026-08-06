@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useConfirmDialog } from "@/components/confirm-dialog";
+import { PROJECT_CELEBRATE_MS } from "@/components/project-celebration";
 
 /**
  * The project action row (template / plan / complete / edit / delete) as a
@@ -24,6 +25,7 @@ export default function ProjectToolbar({
   onError,
   onChanged,
   afterDelete,
+  onCelebrate,
 }: {
   project: ToolbarProject;
   hasSubprojects: boolean;
@@ -34,6 +36,12 @@ export default function ProjectToolbar({
   onChanged: () => void | Promise<void>;
   /** Where to go after a successful delete. */
   afterDelete: () => void;
+  /**
+   * Host page's celebration switch (#125): flipped on when Complete is
+   * confirmed, off after PROJECT_CELEBRATE_MS (or immediately on failure).
+   * The page renders <ProjectCelebration /> over its own header while true.
+   */
+  onCelebrate?: (celebrating: boolean) => void;
 }) {
   const { confirm, prompt } = useConfirmDialog();
 
@@ -65,12 +73,18 @@ export default function ProjectToolbar({
       }))
     )
       return;
+    // Celebration first, save behind it — same as the Projects and detail
+    // pages (#125), so finishing a project feels like a milestone on every
+    // surface that can do it.
+    onCelebrate?.(true);
+    setTimeout(() => onCelebrate?.(false), PROJECT_CELEBRATE_MS);
     const res = await fetch(`/api/projects/${project.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "completed" }),
     });
     if (!res.ok) {
+      onCelebrate?.(false);
       const body = await res.json();
       onError(body.error ?? "Failed to complete project");
       return;

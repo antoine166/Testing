@@ -12,6 +12,7 @@ import ReorderableTaskList from "@/components/reorderable-task-list";
 import TaskRow from "@/components/task-row";
 import ProjectEditForm from "@/components/project-edit-form";
 import ProjectDetailHeader from "@/components/project-detail-header";
+import ProjectCelebration, { PROJECT_CELEBRATE_MS } from "@/components/project-celebration";
 import {
   type Project,
   type ProjectPriority,
@@ -192,7 +193,7 @@ export default function ProjectDetailPage() {
     // Celebration first, save behind it — finishing a project should feel
     // like a milestone (#125), same as on the Projects page.
     setCelebratingId(p.id);
-    setTimeout(() => setCelebratingId(null), 1800);
+    setTimeout(() => setCelebratingId(null), PROJECT_CELEBRATE_MS);
 
     const res = await fetch(`/api/projects/${p.id}`, {
       method: "PUT",
@@ -299,16 +300,7 @@ export default function ProjectDetailPage() {
           celebratingId === project.id ? "project-celebrate-card" : ""
         }`}
       >
-        {celebratingId === project.id && (
-          <span className="pointer-events-none absolute inset-0 z-10 overflow-visible">
-            <span className="project-celebrate-ring" />
-            <span className="project-celebrate-ring project-celebrate-ring-2" />
-            <span className="project-celebrate-ring project-celebrate-ring-3" />
-            <span className="project-celebrate-emoji absolute inset-0 flex items-center justify-center text-5xl">
-              🎉
-            </span>
-          </span>
-        )}
+        {celebratingId === project.id && <ProjectCelebration />}
         {editingId === project.id ? (
           <ProjectEditForm
             project={project}
