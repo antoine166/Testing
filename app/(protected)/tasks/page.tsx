@@ -15,6 +15,7 @@ import { renderGroupedTaskRows } from "@/components/recurring-task-group";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import TaskCreateForm from "@/components/tasks/create-form";
 import ProjectToolbar from "@/components/project-toolbar";
+import ProjectCelebration from "@/components/project-celebration";
 import RecurringTemplatesSection, {
   type RecurringTemplate,
 } from "@/components/tasks/recurring-templates-section";
@@ -45,6 +46,10 @@ export default function TasksPage() {
   } = useTaskList({ onAfterRefresh: () => loadRecurringTemplates() });
 
   const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>([]);
+
+  // #125 on this surface too: the toolbar's Complete plays the same
+  // celebration the Projects and detail pages get, over the toolbar strip.
+  const [celebratingProject, setCelebratingProject] = useState(false);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -229,7 +234,12 @@ export default function TasksPage() {
           : undefined;
         if (!filteredProject) return null;
         return (
-          <div className="-mt-2 mb-4 flex items-center gap-1">
+          <div
+            className={`relative -mt-2 mb-4 flex items-center gap-1 ${
+              celebratingProject ? "project-celebrate-card" : ""
+            }`}
+          >
+            {celebratingProject && <ProjectCelebration />}
             <ProjectToolbar
               project={filteredProject}
               hasSubprojects={projects.some((p) => p.parent_project_id === filteredProject.id)}
@@ -237,6 +247,7 @@ export default function TasksPage() {
               onError={setError}
               onChanged={loadAll}
               afterDelete={() => router.push("/tasks")}
+              onCelebrate={setCelebratingProject}
             />
           </div>
         );

@@ -4,6 +4,7 @@ import { Fragment, useState, type Dispatch, type FormEvent, type SetStateAction 
 import Link from "next/link";
 import ReorderableTaskList from "@/components/reorderable-task-list";
 import ProjectEditForm from "@/components/project-edit-form";
+import ProjectCelebration from "@/components/project-celebration";
 import { type Task, type TaskDomain } from "@/components/task-row";
 import { type RecurrencePatternDraft } from "@/components/recurrence-fields";
 import {
@@ -109,16 +110,7 @@ export default function ProjectCard(props: ProjectCardProps) {
           isSub ? "ml-6 border-l-2" : ""
         } ${celebratingId === project.id ? "project-celebrate-card" : ""}`}
       >
-        {celebratingId === project.id && (
-          <span className="pointer-events-none absolute inset-0 z-10 overflow-visible">
-            <span className="project-celebrate-ring" />
-            <span className="project-celebrate-ring project-celebrate-ring-2" />
-            <span className="project-celebrate-ring project-celebrate-ring-3" />
-            <span className="project-celebrate-emoji absolute inset-0 flex items-center justify-center text-5xl">
-              🎉
-            </span>
-          </span>
-        )}
+        {celebratingId === project.id && <ProjectCelebration />}
         {editingId === project.id ? (
           <ProjectEditForm
             project={project}

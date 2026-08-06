@@ -7,6 +7,7 @@ import { useTaskList } from "@/lib/hooks/use-task-list";
 import { findStalledProjectIds } from "@/lib/projects/stalled";
 import { useConfirmDialog } from "@/components/confirm-dialog";
 import ProjectCard from "@/components/project-card";
+import { PROJECT_CELEBRATE_MS } from "@/components/project-celebration";
 import ProjectCreateForm from "@/components/project-create-form";
 import {
   type Project,
@@ -185,7 +186,7 @@ export default function ProjectsPage() {
     // Celebration first, save behind it — finishing a project should feel
     // like a milestone (#125: ~3× the task/habit effect), not a dropdown.
     setCelebratingId(project.id);
-    setTimeout(() => setCelebratingId(null), 1800);
+    setTimeout(() => setCelebratingId(null), PROJECT_CELEBRATE_MS);
 
     const res = await fetch(`/api/projects/${project.id}`, {
       method: "PUT",

@@ -8,6 +8,7 @@ import { useContexts } from "@/lib/hooks/use-contexts";
 import { TIME_BUCKETS, minutesToBucketValue } from "@/lib/tasks/context-options";
 import { PRIORITIES } from "@/lib/tasks/constants";
 import { selectableProjects } from "@/lib/projects/selectable";
+import { shouldAutoAdvance } from "@/lib/tasks/clarify-advance";
 
 // GTD's clarify step as a guided flow: the workflow-map diagram made
 // interactive. One inbox item at a time, Allen's decision tree as buttons —
@@ -26,6 +27,8 @@ type Panel =
 const TWO_MINUTES = 120;
 /** How long the finished card's slide-out plays before the next card mounts (#141). */
 const CARD_LEAVE_MS = 180;
+const ACTION_FAILED =
+  "That didn't go through — the item is unchanged. Check your connection and try again.";
 
 type Props = {
   queue: string[]; // inbox task ids, snapshotted when the flow starts
@@ -93,7 +96,7 @@ export default function ClarifyFlow({
   const [secondsLeft, setSecondsLeft] = useState(TWO_MINUTES);
 
   const currentId = queue[index];
-  const task = currentId ? tasks.find((t) => t.id === currentId) : undefined;
+  const liveTask = currentId ? tasks.find((t) => t.id === currentId) : undefined;
   const remaining = queue.length - index;
   // Double-clicks must stay blocked through both the action AND the
   // card's exit animation window.
@@ -101,7 +104,19 @@ export default function ClarifyFlow({
 
   // The item may have been processed elsewhere (another tab, the Coach)
   // while the flow was open — adjust during render, not in an effect.
-  if (currentId && !task && index < queue.length) {
+  // Only for OUT-OF-BAND removals: the flow's own trash/convert/done
+  // actions remove the task optimistically mid-action, and advancing on
+  // those hijacked the flow — most visibly mounting the next inbox item
+  // under the post-convert "what's the next action?" panel as if it
+  // belonged to the new project. shouldAutoAdvance tells the cases apart.
+  if (
+    shouldAutoAdvance({
+      hasCurrentEntry: Boolean(currentId) && index < queue.length,
+      taskInList: Boolean(liveTask),
+      actionInFlight: blocked,
+      awaitingNextAction: panel === "project",
+    })
+  ) {
     setIndex(index + 1);
     setPanel("decide");
   }
@@ -139,10 +154,17 @@ export default function ClarifyFlow({
 
   // Seed the defer title when arriving at a new item (adjust during render).
   const [seededFor, setSeededFor] = useState<string | null>(null);
-  if (task && seededFor !== task.id) {
-    setSeededFor(task.id);
-    resetPanelState(task);
+  // Snapshot of the seeded task: the flow's own optimistic removals take it
+  // out of `tasks` mid-action, and the card must keep rendering it (for the
+  // slide-out and the post-convert "project" panel) instead of blanking.
+  const [seededTask, setSeededTask] = useState<Task | null>(null);
+  if (liveTask && seededFor !== liveTask.id) {
+    setSeededFor(liveTask.id);
+    setSeededTask(liveTask);
+    resetPanelState(liveTask);
   }
+
+  const task = liveTask ?? (seededFor === currentId ? (seededTask ?? undefined) : undefined);
 
   // #141: play the card's slide-out, then swap to the next item (whose
   // keyed wrapper slides in from the right). The save itself has already
@@ -186,7 +208,7 @@ export default function ClarifyFlow({
       // means it didn't happen: stay on the item and say so here.
       const result = await action();
       if (result === false || result === null) {
-        setActionError("That didn't go through — the item is unchanged. Check your connection and try again.");
+        setActionError(ACTION_FAILED);
         return;
       }
       advance();
@@ -687,16 +709,23 @@ export default function ClarifyFlow({
               disabled={blocked || !projectDomain}
               onClick={async () => {
                 setBusy(true);
+                setActionError(null);
                 try {
                   // File the task under the chosen domain (plus any header
                   // edits), then convert — so the new project is never
-                  // domain-less and invisible.
-                  await onUpdate(task.id, { ...edited(), domain_id: projectDomain });
-                  const project = await onConvertToProject(task.id);
-                  if (project) {
-                    setNewProject(project);
-                    setPanel("project");
+                  // domain-less and invisible. Either step failing must say
+                  // so (#118): a silent no-op left the flow stuck here.
+                  if (!(await onUpdate(task.id, { ...edited(), domain_id: projectDomain }))) {
+                    setActionError(ACTION_FAILED);
+                    return;
                   }
+                  const project = await onConvertToProject(task.id);
+                  if (!project) {
+                    setActionError(ACTION_FAILED);
+                    return;
+                  }
+                  setNewProject(project);
+                  setPanel("project");
                 } finally {
                   setBusy(false);
                 }
